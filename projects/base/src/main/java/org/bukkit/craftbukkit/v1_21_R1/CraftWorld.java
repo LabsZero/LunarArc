@@ -496,7 +496,9 @@ public class CraftWorld implements World {
 
     @Override
     public void setStorm(boolean hasStorm) {
-        world.setRaining(hasStorm);
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            data.setRaining(hasStorm);
+        }
     }
 
     @Override
@@ -518,7 +520,9 @@ public class CraftWorld implements World {
 
     @Override
     public void setThundering(boolean thundering) {
-        world.setThundering(thundering);
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            data.setThundering(thundering);
+        }
     }
 
     @Override
@@ -541,7 +545,7 @@ public class CraftWorld implements World {
 
     @Override
     public boolean getPVP() {
-        return world.pvpMode;
+        return world.getServer().isPvpAllowed();
     }
 
     @Override
