@@ -69,4 +69,5 @@ banned-players.json
 /saves/
 /stats/
 /advancements/
-/datapacks/.claude/
+/datapacks/
+.claude/
