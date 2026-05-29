@@ -58,6 +58,12 @@ public class CraftBanList<T> implements BanList<T> {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public <E extends BanEntry<? super T>> Set<E> getEntries() {
+        return (Set<E>) new HashSet<>(entries.values());
+    }
+
+    @Override
     public boolean isBanned(@NotNull T target) {
         Entry<T> e = entries.get(key(target));
         if (e == null) return false;
@@ -102,6 +108,7 @@ public class CraftBanList<T> implements BanList<T> {
         }
 
         @Override public @NotNull String getTarget() { return target == null ? "" : target.toString(); }
+        @Override public @NotNull T getBanTarget() { return target; }
         @Override public @NotNull Date getCreated() { return created; }
         @Override public void setCreated(@NotNull Date created) { this.created = created; }
         @Override public @NotNull String getSource() { return source == null ? "LunarArc" : source; }

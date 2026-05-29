@@ -34,6 +34,7 @@ public class CraftOfflinePlayer implements OfflinePlayer {
     @Override public boolean isOnline() {
         return org.bukkit.Bukkit.getPlayer(uuid) != null;
     }
+    @Override public boolean isConnected() { return isOnline(); }
     @Override public @Nullable Player getPlayer() { return org.bukkit.Bukkit.getPlayer(uuid); }
     @Override public boolean hasPlayedBefore() { return false; }
     @Override public boolean isBanned() { return false; }
