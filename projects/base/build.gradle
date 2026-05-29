@@ -9,9 +9,6 @@ architectury {
 
 loom {
     silentMojangMappingsLicense()
-    mixin {
-        defaultRefmapName = "mixins.lunararc.common.refmap.json"
-    }
 }
 
 dependencies {
