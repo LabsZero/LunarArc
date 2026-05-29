@@ -10,7 +10,7 @@ architectury {
 
 loom {
     silentMojangMappingsLicense()
-    accessWidenerPath = project(':base').file("src/main/resources/lunararc.accesswidener")
+    accessWidenerPath = project(':lunararc-common').file("src/main/resources/lunararc.accesswidener")
 }
 
 configurations {

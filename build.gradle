@@ -53,7 +53,7 @@ allprojects {
 
 // Task to generate launcher properties from libs.versions.toml
 tasks.register('generateLauncherProperties') {
-    def propsFile = project(':launcher').file('src/main/resources/lunararc-launcher.properties')
+    def propsFile = project(':installer').file('src/main/resources/lunararc-launcher.properties')
     outputs.file(propsFile)
     doLast {
         propsFile.parentFile.mkdirs()
@@ -74,7 +74,7 @@ tasks.register('generateLauncherProperties') {
     }
 }
 
-project(':launcher').tasks.named('processResources') {
+project(':installer').tasks.named('processResources') {
     dependsOn(rootProject.tasks.named('generateLauncherProperties'))
 }
 

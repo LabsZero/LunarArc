@@ -3,13 +3,13 @@ plugins {
 }
 
 dependencies {
-    implementation project(':launcher')
-    implementation project(':base')
+    implementation project(':installer')
+    implementation project(':lunararc-common')
     implementation project(':api')
-    implementation project(':core')
-    implementation project(':forge')
-    implementation project(':fabric')
-    implementation project(':quilt')
+    implementation project(':lunararc-neoforge')
+    implementation project(':lunararc-forge')
+    implementation project(':lunararc-fabric')
+    implementation project(':lunararc-quilt')
     implementation project(':i18n')
 
     implementation 'com.google.code.gson:gson:2.10.1'
@@ -74,14 +74,15 @@ def createFatJar(String platform) {
         // ASM relocation is now handled by the :libs project to avoid Shadow scanner crashes
 
         dependencies {
-            exclude(project(':launcher'))
+            exclude(project(':installer'))
             exclude(project(':api'))
-            exclude(project(':core'))
-            exclude(project(':base'))
+            exclude(project(':lunararc-neoforge'))
+            exclude(project(':lunararc-common'))
             exclude(project(':i18n'))
         }
 
-        def subprojectPath = (platform == 'neoforge') ? ":core" : ":${platform}"
+        def platformProjectMap = [neoforge: ':lunararc-neoforge', forge: ':lunararc-forge', fabric: ':lunararc-fabric', quilt: ':lunararc-quilt']
+        def subprojectPath = platformProjectMap[platform]
         def subproject = project(subprojectPath)
 
         def jarTask = subproject.tasks.findByName('remapJar')
@@ -93,7 +94,7 @@ def createFatJar(String platform) {
                 ? "transformProductionNeoForge"
                 : "transformProduction${platform.capitalize()}"
 
-        def commonJarTask = project(':base').tasks.findByName(commonTaskName)
+        def commonJarTask = project(':lunararc-common').tasks.findByName(commonTaskName)
 
         dependsOn commonJarTask
         dependsOn jarTask
@@ -114,11 +115,11 @@ def createFatJar(String platform) {
             include 'quilt.mod.json'
         }
 
-        from project(':launcher').sourceSets.main.output
+        from project(':installer').sourceSets.main.output
         from project(':api').sourceSets.main.output
         from project(':i18n').sourceSets.main.output
         from project(':libs').file('build/relocated')
-        from project(':base').sourceSets.main.resources
+        from project(':lunararc-common').sourceSets.main.resources
         from subproject.sourceSets.main.resources
         from sourceSets.main.resources
 
