@@ -501,11 +501,10 @@ public class CraftWorld implements World {
 
     @Override
     public int getWeatherDuration() {
-        try {
-            return world.getWeatherEventCooldown();
-        } catch (Throwable t) {
-            return 0;
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            return data.getRainTime();
         }
+        return 0;
     }
 
     @Override

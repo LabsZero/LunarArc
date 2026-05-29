@@ -136,17 +136,16 @@ public class CraftEventFactory {
         return event;
     }
 
-    // Player chat event
-    public static io.papermc.paper.event.player.AsyncChatEvent callAsyncChatEvent(net.minecraft.server.level.ServerPlayer player, String message) {
+    // Player chat event — use AsyncPlayerChatEvent (legacy) to avoid adventure API coupling issues
+    public static org.bukkit.event.player.AsyncPlayerChatEvent callAsyncChatEvent(
+            net.minecraft.server.level.ServerPlayer player, String message) {
         org.bukkit.entity.Player bukkitPlayer = org.bukkit.Bukkit.getPlayer(player.getUUID());
         if (bukkitPlayer == null) return null;
-        var event = new io.papermc.paper.event.player.AsyncChatEvent(
-            false, bukkitPlayer,
-            new java.util.HashSet<>(),
-            net.kyori.adventure.chat.ChatRenderer.defaultRenderer(),
-            net.kyori.adventure.text.Component.text(message),
-            net.kyori.adventure.text.Component.text(message)
-        );
+        java.util.Set<org.bukkit.entity.Player> recipients = new java.util.HashSet<>(
+                (java.util.Collection<? extends org.bukkit.entity.Player>)
+                        org.bukkit.Bukkit.getOnlinePlayers());
+        @SuppressWarnings("deprecation")
+        var event = new org.bukkit.event.player.AsyncPlayerChatEvent(false, bukkitPlayer, message, recipients);
         Bukkit.getPluginManager().callEvent(event);
         return event;
     }
