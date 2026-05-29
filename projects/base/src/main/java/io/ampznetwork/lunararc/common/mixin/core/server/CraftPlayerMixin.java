@@ -11,11 +11,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class CraftPlayerMixin {
 
     @Shadow(remap = false)
-    private net.minecraft.server.level.ServerPlayer player;
+    public abstract net.minecraft.server.level.ServerPlayer getHandle();
 
     @Inject(method = "isOp", at = @At("HEAD"), cancellable = true, remap = false)
     private void lunararc$onIsOpInit(CallbackInfoReturnable<Boolean> cir) {
-        if (this.player == null) {
+        if (this.getHandle() == null) {
             cir.setReturnValue(false);
         }
     }
