@@ -45,23 +45,10 @@ public class NeoForgeLauncher {
             }
         }
 
-        // Inject the LunarArc JAR into NeoForge's legacy classpath so that
-        // FancyModLoader's ClasspathLocator discovers neoforge.mods.toml in it
-        // without requiring any file to be placed in the mods/ folder.
-        if (selfPath != null) {
-            String selfStr = selfPath.toString();
-            boolean injected = false;
-            for (int i = 0; i < command.size(); i++) {
-                if (command.get(i).startsWith("-DlegacyClassPath=")) {
-                    command.set(i, command.get(i) + java.io.File.pathSeparator + selfStr);
-                    injected = true;
-                    break;
-                }
-            }
-            if (!injected) {
-                command.add("-DlegacyClassPath=" + selfStr);
-            }
-        }
+        // Deploy the LunarArc JAR into mods/ so FancyModLoader discovers it as a
+        // real mod and applies its mixin configs. The legacy classpath is NOT
+        // scanned for mods in production, so the mods/ folder is required here.
+        LauncherUtils.deployBridge(selfPath);
 
         command.add("--nogui");
 

@@ -46,22 +46,10 @@ public class ForgeLauncher {
             }
         }
 
-        // Inject the LunarArc JAR into Forge's legacy classpath so FML discovers it
-        // as a mod without placing anything in the mods/ folder.
-        if (selfPath != null) {
-            String selfStr = selfPath.toString();
-            boolean injected = false;
-            for (int i = 0; i < command.size(); i++) {
-                if (command.get(i).startsWith("-DlegacyClassPath=")) {
-                    command.set(i, command.get(i) + java.io.File.pathSeparator + selfStr);
-                    injected = true;
-                    break;
-                }
-            }
-            if (!injected) {
-                command.add("-DlegacyClassPath=" + selfStr);
-            }
-        }
+        // Deploy the LunarArc JAR into mods/ so FML discovers it as a real mod and
+        // applies its mixin configs. The legacy classpath is NOT scanned for mods
+        // in production, so the mods/ folder is required here.
+        LauncherUtils.deployBridge(selfPath);
 
         command.add("--nogui");
 
