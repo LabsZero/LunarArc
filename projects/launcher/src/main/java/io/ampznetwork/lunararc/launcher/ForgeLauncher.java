@@ -29,11 +29,6 @@ public class ForgeLauncher {
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
 
-        Path selfPath = null;
-        try {
-            selfPath = Paths.get(ForgeLauncher.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toAbsolutePath();
-        } catch (Exception ignored) {}
-
         // Parse win_args.txt content
         for (String line : jvmArgs) {
             line = line.trim();
