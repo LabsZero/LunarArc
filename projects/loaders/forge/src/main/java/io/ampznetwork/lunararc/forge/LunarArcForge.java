@@ -1,17 +1,26 @@
 package io.ampznetwork.lunararc.forge;
 
 import io.ampznetwork.lunararc.common.LunarArcPlatform;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 
 @Mod("lunararc")
 public class LunarArcForge {
 
-    public LunarArcForge() {
+    public LunarArcForge(IEventBus modEventBus) {
         LunarArcPlatform.registerBridge(new ForgeBridge());
-        FMLJavaModLoadingContext.get().getModEventBus().addListener(this::onCommonSetup);
+        MinecraftForge.EVENT_BUS.addListener(this::onServerStarting);
+        MinecraftForge.EVENT_BUS.addListener(this::onServerStopping);
     }
 
-    private void onCommonSetup(FMLCommonSetupEvent event) {}
+    private void onServerStarting(ServerStartingEvent event) {
+        LunarArcPlatform.getPlatformBridge().onServerStarting();
+    }
+
+    private void onServerStopping(ServerStoppingEvent event) {
+        LunarArcPlatform.getPlatformBridge().onServerStopping();
+    }
 }

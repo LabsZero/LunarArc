@@ -33,8 +33,8 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${libs.versions.fabric.loader.get()}"
 
     // Architectury transformation logic
-    common(project(path: ":base", configuration: "namedElements")) { transitive false }
-    shadowCommon(project(path: ":base", configuration: "transformProductionQuilt")) { transitive false }
+    common(project(path: ":lunararc-common", configuration: "namedElements")) { transitive false }
+    shadowCommon(project(path: ":lunararc-common", configuration: "transformProductionQuilt")) { transitive false }
 
     implementation project(':api')
     implementation libs.paper.api
