@@ -74,20 +74,15 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge {
     private void lunararc$afterServerInit(CallbackInfo ci) {
         lunararc$logger.info("Creating CraftServer bridge via platform factory...");
 
-        // Use the platform bridge factory so each platform (NeoForge, Fabric, …)
-        // provides its own CraftServer subclass.  Without this, NeoForgeServer /
-        // FabricServer are never instantiated even though they exist, causing
-        // platform-specific features to silently not function.
         org.bukkit.craftbukkit.v1_21_R1.CraftServer craftServer =
                 LunarArcPlatform.createCraftServer((MinecraftServer) (Object) this);
         LunarArcPlatform.setServer(craftServer);
 
         loadPlugins();
         enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
-    }
-
-    @Inject(method = "loadLevel", at = @At("TAIL"))
-    private void lunararc$afterLevelLoad(CallbackInfo ci) {
+        // loadLevel() is called inside initServer(), so the world is already loaded
+        // by the time this inject fires — enable POSTWORLD here rather than in a
+        // separate loadLevel() TAIL inject (which would fire before the bridge exists).
         enablePlugins(org.bukkit.plugin.PluginLoadOrder.POSTWORLD);
     }
 

@@ -361,7 +361,9 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull String getVersion() {
-        return "1.21.1-R0.1-SNAPSHOT (LunarArc)";
+        // Must match Paper's "git-Paper-NNN (MC: X.Y.Z)" format so that plugins
+        // like WorldEdit can extract the MC version via the "(MC: ...)" pattern.
+        return io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.projectVersion();
     }
 
     @Override
