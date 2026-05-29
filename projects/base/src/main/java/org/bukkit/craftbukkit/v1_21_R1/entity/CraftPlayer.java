@@ -505,8 +505,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public float getExhaustion() { return 0; }
     @Override public boolean hasCooldown(Material material) { return false; }
     @Override public void setCooldown(Material material, int ticks) {}
-    @Override public GameMode getGameMode() { return GameMode.SURVIVAL; }
-    @Override public void setGameMode(GameMode mode) {}
+    @Override public GameMode getGameMode() { return fromNMS(getHandle().gameMode.getGameModeForPlayer()); }
+    @Override public void setGameMode(GameMode mode) { getHandle().setGameMode(toNMS(mode)); }
     @Override public Entity releaseRightShoulderEntity() { return null; }
     @Override public Entity releaseLeftShoulderEntity() { return null; }
     @Override public Entity getShoulderEntityLeft() { return null; }
@@ -538,14 +538,15 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public float getAttackCooldown() { return 0; }
     @Override public int getExpToLevel() { return 0; }
     @Override public Location getPotentialBedLocation() { return null; }
-    @Override 
-    public PlayerInventory getInventory() { 
+    @Override
+    public PlayerInventory getInventory() {
+        ServerPlayer handle = getHandle();
         return (PlayerInventory) java.lang.reflect.Proxy.newProxyInstance(
             PlayerInventory.class.getClassLoader(),
             new Class<?>[] { PlayerInventory.class },
             (p, m, a) -> {
-                if (m.getName().equals("getItemInMainHand")) return new ItemStack(Material.AIR);
-                if (m.getName().equals("getItemInOffHand")) return new ItemStack(Material.AIR);
+                if (m.getName().equals("getItemInMainHand")) return CraftItemStack.asBukkitCopy(handle.getMainHandItem());
+                if (m.getName().equals("getItemInOffHand")) return CraftItemStack.asBukkitCopy(handle.getOffhandItem());
                 if (m.getName().equals("getArmorContents")) return new ItemStack[4];
                 if (m.getName().equals("getContents")) return new ItemStack[36];
                 if (m.getReturnType().equals(ItemStack.class)) return new ItemStack(Material.AIR);
@@ -553,7 +554,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
                 if (m.getReturnType().equals(int.class)) return 0;
                 return null;
             }
-        ); 
+        );
     }
     @Override public Inventory getEnderChest() { return null; }
     @Override public MainHand getMainHand() { return MainHand.RIGHT; }
@@ -729,4 +730,24 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
     @Override public int getArrowsInBody() { return 0; }
     @Override public int getNoActionTicks() { return 0; }
+
+    // Game mode mapping helpers
+    private static net.minecraft.world.level.GameType toNMS(GameMode mode) {
+        return switch (mode) {
+            case SURVIVAL -> net.minecraft.world.level.GameType.SURVIVAL;
+            case CREATIVE -> net.minecraft.world.level.GameType.CREATIVE;
+            case ADVENTURE -> net.minecraft.world.level.GameType.ADVENTURE;
+            case SPECTATOR -> net.minecraft.world.level.GameType.SPECTATOR;
+        };
+    }
+
+    private static GameMode fromNMS(net.minecraft.world.level.GameType type) {
+        return switch (type) {
+            case SURVIVAL -> GameMode.SURVIVAL;
+            case CREATIVE -> GameMode.CREATIVE;
+            case ADVENTURE -> GameMode.ADVENTURE;
+            case SPECTATOR -> GameMode.SPECTATOR;
+            default -> GameMode.SURVIVAL;
+        };
+    }
 }
