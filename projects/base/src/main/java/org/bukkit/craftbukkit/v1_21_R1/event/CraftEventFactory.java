@@ -38,8 +38,8 @@ public class CraftEventFactory {
 
         org.bukkit.entity.Entity bukkitEntity = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) entity)
                 .lunararc$getBukkitEntity();
-        EntityDamageEvent event = new EntityDamageEvent(bukkitEntity, cause, (org.bukkit.damage.DamageSource) null,
-                (double) damage);
+        @SuppressWarnings("deprecation")
+        EntityDamageEvent event = new EntityDamageEvent(bukkitEntity, cause, (double) damage);
         Bukkit.getPluginManager().callEvent(event);
         return event;
     }
@@ -163,6 +163,7 @@ public class CraftEventFactory {
     }
 
     // Entity death event
+    @SuppressWarnings("deprecation")
     public static org.bukkit.event.entity.EntityDeathEvent callEntityDeathEvent(net.minecraft.world.entity.LivingEntity entity) {
         org.bukkit.entity.Entity bukkitEntity = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity();
         if (!(bukkitEntity instanceof org.bukkit.entity.LivingEntity living)) return null;
