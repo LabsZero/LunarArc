@@ -36,6 +36,7 @@ logs/
 # Local/Secrets
 *.properties
 !lunararc-launcher.properties
+!gradle.properties
 .env
 .env.*
 
