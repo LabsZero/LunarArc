@@ -7,12 +7,11 @@ import org.jetbrains.annotations.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Minimal in-memory BanList used as a stand-in for NeoForge/Fabric environments.
@@ -54,8 +53,8 @@ public class CraftBanList<T> implements BanList<T> {
     }
 
     @Override
-    public @NotNull Set<BanEntry<T>> getBanEntries() {
-        return entries.values().stream().collect(Collectors.toSet());
+    public Set getBanEntries() {
+        return new HashSet<>(entries.values());
     }
 
     @Override
@@ -72,6 +71,11 @@ public class CraftBanList<T> implements BanList<T> {
     @Override
     public void pardon(@NotNull T target) {
         entries.remove(key(target));
+    }
+
+    @Override
+    public void pardon(@NotNull String target) {
+        entries.remove(target);
     }
 
     private String key(T target) {
@@ -92,7 +96,7 @@ public class CraftBanList<T> implements BanList<T> {
             this.source = source;
         }
 
-        @Override public @NotNull T getTarget() { return target; }
+        @Override public @NotNull String getTarget() { return target == null ? "" : target.toString(); }
         @Override public @NotNull Date getCreated() { return created; }
         @Override public @NotNull String getSource() { return source == null ? "LunarArc" : source; }
         @Override public @Nullable Date getExpiration() { return expiration; }
@@ -101,7 +105,8 @@ public class CraftBanList<T> implements BanList<T> {
         @Override public void setSource(@NotNull String source) { this.source = source; }
         @Override public void setExpiration(@Nullable Date expiration) { this.expiration = expiration; }
         @Override public void save() {}
-        @Override public @NotNull BanList.Type getType() {
+        @Override public void remove() {}
+        public @NotNull BanList.Type getType() {
             return target instanceof java.net.InetAddress ? BanList.Type.IP : BanList.Type.NAME;
         }
     }

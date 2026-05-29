@@ -8,10 +8,12 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.Statistic;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.profile.PlayerProfile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
@@ -84,7 +86,20 @@ public class CraftOfflinePlayer implements OfflinePlayer {
     }
 
     @Override
-    public @NotNull org.bukkit.profile.PlayerProfile getPlayerProfile() {
+    public @NotNull com.destroystokyo.paper.profile.PlayerProfile getPlayerProfile() {
         return new io.ampznetwork.lunararc.common.server.LunarArcPlayerProfile(uuid, name);
+    }
+
+    @Override
+    public @NotNull PersistentDataContainer getPersistentDataContainer() {
+        return (PersistentDataContainer) Proxy.newProxyInstance(
+            PersistentDataContainer.class.getClassLoader(),
+            new Class<?>[]{ PersistentDataContainer.class },
+            (proxy, method, args) -> {
+                if (method.getReturnType() == boolean.class) return false;
+                if (method.getReturnType() == int.class) return 0;
+                if (method.getName().equals("getAdapterContext")) return null;
+                return null;
+            });
     }
 }
