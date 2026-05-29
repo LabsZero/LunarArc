@@ -44,6 +44,7 @@ public class CraftOfflinePlayer implements OfflinePlayer {
     @Override public void setOp(boolean value) {}
     @Override public @Nullable Location getBedSpawnLocation() { return null; }
     @Override public @Nullable Location getRespawnLocation() { return null; }
+    public @Nullable Location getRespawnLocation(boolean loadLocationAndValidate) { return null; }
     @Override public long getFirstPlayed() { return 0; }
     @Override public long getLastPlayed() { return 0; }
     @Override public long getLastLogin() { return 0; }
