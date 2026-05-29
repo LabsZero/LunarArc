@@ -226,7 +226,17 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public boolean teleport(Location location) { return super.teleport(location); }
     @Override public Set<Player> getTrackedPlayers() { return Collections.emptySet(); }
 
-    @Override public Player.Spigot spigot() { return new Player.Spigot(); }
+    @Override
+    public Player.Spigot spigot() {
+        return new Player.Spigot() {
+            @Override
+            public void sendMessage(net.md_5.bungee.api.chat.BaseComponent... components) {
+                if (components == null || components.length == 0) return;
+                String text = new net.md_5.bungee.api.chat.TextComponent(components).toLegacyText();
+                CraftPlayer.this.sendMessage(text);
+            }
+        };
+    }
     @Override public boolean listPlayer(Player player) { return true; }
     @Override public boolean unlistPlayer(Player player) { return true; }
     @Override public boolean isListed(Player player) { return true; }

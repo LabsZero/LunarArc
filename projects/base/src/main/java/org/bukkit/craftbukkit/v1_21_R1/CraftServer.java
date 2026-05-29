@@ -902,17 +902,23 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull OfflinePlayer getOfflinePlayer(@NotNull String name) {
-        return null;
+        Player online = getPlayer(name);
+        if (online != null) return online;
+        return new org.bukkit.craftbukkit.v1_21_R1.entity.CraftOfflinePlayer(
+                UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8)), name);
     }
 
     @Override
     public @NotNull OfflinePlayer getOfflinePlayer(@NotNull UUID id) {
-        return null;
+        Player online = getPlayer(id);
+        if (online != null) return online;
+        return new org.bukkit.craftbukkit.v1_21_R1.entity.CraftOfflinePlayer(id, null);
     }
 
     @Override
     public @Nullable OfflinePlayer getOfflinePlayerIfCached(@NotNull String name) {
-        return null;
+        Player online = getPlayer(name);
+        return online;
     }
 
     @Override
@@ -942,13 +948,15 @@ public class CraftServer implements Server {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public @NotNull BanList getBanList(@NotNull BanList.Type type) {
-        return null;
+        return type == BanList.Type.IP ? CraftBanList.IP_BANS : CraftBanList.NAME_BANS;
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public @NotNull <B extends BanList<E>, E> B getBanList(@NotNull io.papermc.paper.ban.BanListType<B> type) {
-        return null;
+        return (B) CraftBanList.NAME_BANS;
     }
 
     @Override
