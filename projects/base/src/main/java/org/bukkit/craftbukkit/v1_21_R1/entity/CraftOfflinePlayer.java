@@ -8,6 +8,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.Statistic;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.profile.PlayerProfile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -66,7 +67,6 @@ public class CraftOfflinePlayer implements OfflinePlayer {
     @Override public @NotNull Map<String, Object> serialize() { return java.util.Collections.singletonMap("uuid", uuid.toString()); }
 
     @Override
-    @SuppressWarnings("deprecation")
     public @Nullable BanEntry<PlayerProfile> ban(@Nullable String reason, @Nullable Date expires, @Nullable String source) {
         return null;
     }

@@ -32,11 +32,6 @@ public class CraftBanList<T> implements BanList<T> {
     }
 
     @Override
-    public @Nullable BanEntry<T> getBanEntry(@NotNull String target) {
-        return entries.get(target);
-    }
-
-    @Override
     public @Nullable BanEntry<T> addBan(@NotNull T target, @Nullable String reason,
                                         @Nullable Date expires, @Nullable String source) {
         Entry<T> e = new Entry<>(target, reason, expires, source == null ? "LunarArc" : source);
