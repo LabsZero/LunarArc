@@ -78,6 +78,11 @@ public class CraftBanList<T> implements BanList<T> {
         entries.remove(target);
     }
 
+    @Override
+    public boolean isBanned(@NotNull String target) {
+        return isBanned((T) target);
+    }
+
     private String key(T target) {
         return target == null ? "" : target.toString();
     }
@@ -87,7 +92,7 @@ public class CraftBanList<T> implements BanList<T> {
         private String reason;
         private Date expiration;
         private String source;
-        private final Date created = new Date();
+        private Date created = new Date();
 
         Entry(T target, String reason, Date expiration, String source) {
             this.target = target;
@@ -98,6 +103,7 @@ public class CraftBanList<T> implements BanList<T> {
 
         @Override public @NotNull String getTarget() { return target == null ? "" : target.toString(); }
         @Override public @NotNull Date getCreated() { return created; }
+        @Override public void setCreated(@NotNull Date created) { this.created = created; }
         @Override public @NotNull String getSource() { return source == null ? "LunarArc" : source; }
         @Override public @Nullable Date getExpiration() { return expiration; }
         @Override public @Nullable String getReason() { return reason; }
