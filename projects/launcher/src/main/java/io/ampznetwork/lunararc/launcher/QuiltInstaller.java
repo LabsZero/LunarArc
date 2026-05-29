@@ -5,7 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class QuiltInstaller {
-    public static void install(Path workingDir, java.util.Properties versions) throws Exception {
+    public static void install(Path workingDir, java.util.Properties versions, Path selfPath) throws Exception {
         System.out.println("Installing Quilt...");
         Path quiltServerJar = workingDir.resolve("quilt-server-launch.jar");
         Path minecraftServerJar = workingDir.resolve("server.jar");
@@ -63,6 +63,6 @@ public class QuiltInstaller {
         }
 
         System.out.println("Quilt ready.");
-        QuiltLauncher.launch(workingDir);
+        QuiltLauncher.launch(workingDir, selfPath);
     }
 }

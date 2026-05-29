@@ -7,11 +7,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FabricLauncher {
-    public static void launch(Path workingDir) throws Exception {
+    public static void launch(Path workingDir, Path selfPath) throws Exception {
         System.out.println("Launching Fabric...");
-        
+
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
+
+        // Fabric Loader reads fabric.addMods as a path-separator-delimited list
+        // of extra mod JARs, avoiding the need to place anything in mods/.
+        if (selfPath != null) {
+            command.add("-Dfabric.addMods=" + selfPath.toString());
+        }
+
         command.add("-jar");
         command.add("fabric-server-launch.jar");
         command.add("--nogui");

@@ -5,7 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class ForgeInstaller {
-    public static void install(Path workingDir, java.util.Properties versions) throws Exception {
+    public static void install(Path workingDir, java.util.Properties versions, Path selfPath) throws Exception {
         System.out.println("Installing Forge...");
 
         String mcVersion = LauncherUtils.requireVersion(versions, "minecraft");
@@ -49,8 +49,6 @@ public class ForgeInstaller {
         }
 
         System.out.println("Forge libraries ready.");
-        // Forge launch logic is similar to NeoForge but might have different entry
-        // point
-        ForgeLauncher.launch(workingDir);
+        ForgeLauncher.launch(workingDir, selfPath);
     }
 }

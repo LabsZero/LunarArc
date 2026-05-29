@@ -5,7 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class FabricInstaller {
-    public static void install(Path workingDir, java.util.Properties versions) throws Exception {
+    public static void install(Path workingDir, java.util.Properties versions, Path selfPath) throws Exception {
         System.out.println("Installing Fabric...");
         Path fabricServerJar = workingDir.resolve("fabric-server-launch.jar");
         Path minecraftServerJar = workingDir.resolve("server.jar");
@@ -63,6 +63,6 @@ public class FabricInstaller {
         }
 
         System.out.println("Fabric ready.");
-        FabricLauncher.launch(workingDir);
+        FabricLauncher.launch(workingDir, selfPath);
     }
 }

@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class NeoForgeLauncher {
-    public static void launch(Path workingDir) throws Exception {
+    public static void launch(Path workingDir, Path selfPath) throws Exception {
         Path libDir = Paths.get("libraries");
         if (!Files.exists(libDir)) {
             System.err.println("[LunarArc] Error: 'libraries' folder missing. Installation may have failed.");
@@ -42,6 +42,24 @@ public class NeoForgeLauncher {
                 } else {
                     command.add(part);
                 }
+            }
+        }
+
+        // Inject the LunarArc JAR into NeoForge's legacy classpath so that
+        // FancyModLoader's ClasspathLocator discovers neoforge.mods.toml in it
+        // without requiring any file to be placed in the mods/ folder.
+        if (selfPath != null) {
+            String selfStr = selfPath.toString();
+            boolean injected = false;
+            for (int i = 0; i < command.size(); i++) {
+                if (command.get(i).startsWith("-DlegacyClassPath=")) {
+                    command.set(i, command.get(i) + java.io.File.pathSeparator + selfStr);
+                    injected = true;
+                    break;
+                }
+            }
+            if (!injected) {
+                command.add("-DlegacyClassPath=" + selfStr);
             }
         }
 

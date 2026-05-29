@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ForgeLauncher {
-    public static void launch(Path workingDir) throws Exception {
+    public static void launch(Path workingDir, Path selfPath) throws Exception {
         System.out.println("Preparing Forge launch arguments...");
 
         Path libDir = Paths.get("libraries");
@@ -48,6 +48,23 @@ public class ForgeLauncher {
                 } else {
                     command.add(part);
                 }
+            }
+        }
+
+        // Inject the LunarArc JAR into Forge's legacy classpath so FML discovers it
+        // as a mod without placing anything in the mods/ folder.
+        if (selfPath != null) {
+            String selfStr = selfPath.toString();
+            boolean injected = false;
+            for (int i = 0; i < command.size(); i++) {
+                if (command.get(i).startsWith("-DlegacyClassPath=")) {
+                    command.set(i, command.get(i) + java.io.File.pathSeparator + selfStr);
+                    injected = true;
+                    break;
+                }
+            }
+            if (!injected) {
+                command.add("-DlegacyClassPath=" + selfStr);
             }
         }
 
