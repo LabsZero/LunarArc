@@ -167,7 +167,10 @@ public class CraftEventFactory {
     public static org.bukkit.event.entity.EntityDeathEvent callEntityDeathEvent(net.minecraft.world.entity.LivingEntity entity) {
         org.bukkit.entity.Entity bukkitEntity = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity();
         if (!(bukkitEntity instanceof org.bukkit.entity.LivingEntity living)) return null;
-        var event = new org.bukkit.event.entity.EntityDeathEvent(living, new ArrayList<>());
+        org.bukkit.damage.DamageSource deathSource = org.bukkit.damage.DamageSource
+                .builder(org.bukkit.damage.DamageType.GENERIC).build();
+        var event = new org.bukkit.event.entity.EntityDeathEvent(living, deathSource,
+                new ArrayList<org.bukkit.inventory.ItemStack>());
         Bukkit.getPluginManager().callEvent(event);
         return event;
     }

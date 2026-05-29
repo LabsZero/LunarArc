@@ -40,9 +40,9 @@ public class PluginBlacklist {
             if (blacklist instanceof List<?> list) {
                 for (Object item : list) {
                     if (item instanceof Map<?, ?> map) {
-                        String name = String.valueOf(map.getOrDefault("name", ""));
+                        String name = map.containsKey("name") ? String.valueOf(map.get("name")) : "";
                         String version = map.containsKey("version") ? String.valueOf(map.get("version")) : null;
-                        String reason = String.valueOf(map.getOrDefault("reason", "Incompatible with LunarArc"));
+                        String reason = map.containsKey("reason") ? String.valueOf(map.get("reason")) : "Incompatible with LunarArc";
                         if (!name.isEmpty()) {
                             entries.add(new BlacklistEntry(name, version, reason));
                         }
