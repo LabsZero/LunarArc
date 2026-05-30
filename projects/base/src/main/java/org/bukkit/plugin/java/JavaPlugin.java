@@ -201,7 +201,7 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
         this.logger = logger;
         this.configFile = new File(dataFolder, "config.yml");
 
-        this.lifecycleManager = new io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventManager();
+        this.lifecycleManager = io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventManager.create();
         this.loader = (org.bukkit.plugin.PluginLoader) null; // Will be set by caller if needed, but init handles it
 
         PLUGIN_INSTANCES.put(this.getClass(), this);

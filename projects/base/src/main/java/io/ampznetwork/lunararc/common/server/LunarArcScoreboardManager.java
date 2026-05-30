@@ -324,9 +324,9 @@ public class LunarArcScoreboardManager implements ScoreboardManager {
                         case "canSeeFriendlyInvisibles" -> { return ts.canSeeFriendlyInvisibles; }
                         case "setCanSeeFriendlyInvisibles" -> { ts.canSeeFriendlyInvisibles = (boolean) args[0]; return null; }
                         case "getNameTagVisibility" -> { return ts.nameTagVisibility; }
-                        case "setNameTagVisibility" -> { ts.nameTagVisibility = (NameTagVisibility) args[0]; return null; }
+                        case "setNameTagVisibility" -> { ts.nameTagVisibility = (Team.NameTagVisibility) args[0]; return null; }
                         case "getCollisionRule" -> { return ts.collisionRule; }
-                        case "setCollisionRule" -> { ts.collisionRule = (CollisionRule) args[0]; return null; }
+                        case "setCollisionRule" -> { ts.collisionRule = (Team.CollisionRule) args[0]; return null; }
                         case "getColor" -> { return ts.color; }
                         case "setColor" -> { ts.color = (org.bukkit.ChatColor) args[0]; return null; }
                         case "color" -> {
@@ -362,8 +362,8 @@ public class LunarArcScoreboardManager implements ScoreboardManager {
     static class TeamState {
         String name, displayName, prefix = "", suffix = "";
         boolean allowFriendlyFire = true, canSeeFriendlyInvisibles = true, registered = true;
-        NameTagVisibility nameTagVisibility = NameTagVisibility.ALWAYS;
-        CollisionRule collisionRule = CollisionRule.ALWAYS;
+        Team.NameTagVisibility nameTagVisibility = Team.NameTagVisibility.ALWAYS;
+        Team.CollisionRule collisionRule = Team.CollisionRule.ALWAYS;
         org.bukkit.ChatColor color = org.bukkit.ChatColor.RESET;
         final Set<String> entries = new LinkedHashSet<>();
         TeamState(String name) { this.name = name; this.displayName = name; }
