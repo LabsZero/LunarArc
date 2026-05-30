@@ -193,7 +193,17 @@ public class LunarArcScoreboardManager implements ScoreboardManager {
                             return null;
                         }
                         case "getCriteria" -> { return os.criteria; }
-                        case "getTrackedCriteria" -> { return (Criteria) () -> os.criteria; }
+                        case "getTrackedCriteria" -> {
+                            return Proxy.newProxyInstance(
+                                    Criteria.class.getClassLoader(),
+                                    new Class<?>[]{ Criteria.class },
+                                    (p2, m2, a2) -> {
+                                        if ("getCriteriaName".equals(m2.getName())) return os.criteria;
+                                        if (m2.getReturnType() == boolean.class) return false;
+                                        if (m2.getReturnType() == int.class) return 0;
+                                        return null;
+                                    });
+                        }
                         case "isModifiable" -> { return true; }
                         case "getScoreboard" -> { return scoreboard; }
                         case "unregister" -> {
