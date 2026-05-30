@@ -103,6 +103,7 @@ public class LunarArcPluginMeta implements PluginMeta {
         return description.getAPIVersion();
     }
 
+    @Override
     public @NotNull List<String> getPluginLibraries() {
         return Collections.emptyList();
     }

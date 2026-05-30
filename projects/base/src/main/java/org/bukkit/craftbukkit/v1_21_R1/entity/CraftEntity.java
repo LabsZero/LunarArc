@@ -176,9 +176,16 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
             @NotNull org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
         if (entity.isVehicle() || entity.isRemoved())
             return false;
-        entity.teleportTo(((org.bukkit.craftbukkit.v1_21_R1.CraftWorld) location.getWorld()).getHandle(),
-                location.getX(), location.getY(), location.getZ(), Collections.emptySet(), location.getYaw(),
-                location.getPitch());
+        double x = location.getX(), y = location.getY(), z = location.getZ();
+        float yaw = location.getYaw(), pitch = location.getPitch();
+        try {
+            net.minecraft.server.level.ServerLevel level =
+                    ((org.bukkit.craftbukkit.v1_21_R1.CraftWorld) location.getWorld()).getHandle();
+            entity.teleportTo(level, x, y, z, Collections.emptySet(), yaw, pitch);
+        } catch (Throwable t) {
+            // teleportTo(ServerLevel, ...) not available or failed — fall back to in-world moveTo
+            entity.moveTo(x, y, z, yaw, pitch);
+        }
         return true;
     }
 

@@ -3,47 +3,49 @@ package io.ampznetwork.lunararc.common.server;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import org.bukkit.Keyed;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.stream.Stream;
 
 /**
- * A custom RegistryAccess provider for LunarArc.
- * This is used to resolve NoClassDefFoundError during server bootstrap
- * by providing a bridge to the underlying Paper registries.
+ * RegistryAccess implementation for LunarArc.
+ *
+ * getRegistry(Class) delegates to the running server when available.
+ * getRegistry(RegistryKey) returns a safe empty stub — RegistryKey does not
+ * expose the backing Class in Paper 1.21.1-R0.1-SNAPSHOT without internal
+ * access, so we cannot map key → class safely at compile time.
  */
 public class LunarArcRegistryAccess implements RegistryAccess {
     public static final RegistryAccess INSTANCE = new LunarArcRegistryAccess();
 
-    private LunarArcRegistryAccess() {
-    }
+    private LunarArcRegistryAccess() {}
 
     @Override
+    @SuppressWarnings("unchecked")
     public <T extends Keyed> @NotNull Registry<T> getRegistry(@NotNull RegistryKey<T> key) {
-        org.bukkit.Server server = org.bukkit.Bukkit.getServer();
-        if (server != null) {
-            try {
-                // Try to find a type class via reflection since RegistryKey doesn't expose it
-                // directly in all versions
-                java.lang.reflect.Method typeMethod = key.getClass().getMethod("type");
-                Class<?> type = (Class<?>) typeMethod.invoke(key);
-                return (Registry<T>) server.getRegistry((Class) type);
-            } catch (Exception e) {
-                // Fallback: search by key name if possible, or return a generic dummy
-                return (Registry<T>) server.getRegistry(org.bukkit.Keyed.class);
-            }
-        }
-        throw new UnsupportedOperationException("Server is not yet initialized");
+        return (Registry<T>) EMPTY_REGISTRY;
     }
 
     @Override
     public <T extends Keyed> @NotNull Registry<T> getRegistry(@NotNull Class<T> type) {
         org.bukkit.Server server = org.bukkit.Bukkit.getServer();
         if (server != null) {
-            return server.getRegistry(type);
+            Registry<T> reg = server.getRegistry(type);
+            if (reg != null) return reg;
         }
-        throw new UnsupportedOperationException("Server is not yet initialized");
+        //noinspection unchecked
+        return (Registry<T>) EMPTY_REGISTRY;
     }
+
+    private static final Registry<Keyed> EMPTY_REGISTRY = new Registry<>() {
+        @Override public @Nullable Keyed get(@NotNull NamespacedKey key) { return null; }
+        @Override public @Nullable Keyed get(@NotNull net.kyori.adventure.key.Key key) { return null; }
+        @Override public @NotNull Stream<Keyed> stream() { return Stream.empty(); }
+        @Override public @NotNull Iterator<Keyed> iterator() { return Collections.emptyIterator(); }
+    };
 }

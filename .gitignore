@@ -33,6 +33,9 @@ Thumbs.db
 *.log
 logs/
 
+# Temp files from javac invocations
+javac.*.args
+
 # Local/Secrets
 *.properties
 !lunararc-launcher.properties

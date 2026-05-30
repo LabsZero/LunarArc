@@ -377,7 +377,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public float getCooledAttackStrength(float adjustTicks) { return 1.0f; }
     @Override public void resetCooldown() {}
     @Override public <T> T getClientOption(com.destroystokyo.paper.ClientOption<T> option) { return null; }
-    @Override public PlayerProfile getPlayerProfile() { return null; }
+    @Override public PlayerProfile getPlayerProfile() {
+        return new io.ampznetwork.lunararc.common.server.LunarArcPlayerProfile(getUniqueId(), getName());
+    }
     @Override public void setPlayerProfile(PlayerProfile profile) {}
     @Override public boolean isAllowingServerListings() { return true; }
     @Override public void showDemoScreen() {}
@@ -550,21 +552,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public Location getPotentialBedLocation() { return null; }
     @Override
     public PlayerInventory getInventory() {
-        ServerPlayer handle = getHandle();
-        return (PlayerInventory) java.lang.reflect.Proxy.newProxyInstance(
-            PlayerInventory.class.getClassLoader(),
-            new Class<?>[] { PlayerInventory.class },
-            (p, m, a) -> {
-                if (m.getName().equals("getItemInMainHand")) return CraftItemStack.asBukkitCopy(handle.getMainHandItem());
-                if (m.getName().equals("getItemInOffHand")) return CraftItemStack.asBukkitCopy(handle.getOffhandItem());
-                if (m.getName().equals("getArmorContents")) return new ItemStack[4];
-                if (m.getName().equals("getContents")) return new ItemStack[36];
-                if (m.getReturnType().equals(ItemStack.class)) return new ItemStack(Material.AIR);
-                if (m.getReturnType().equals(ItemStack[].class)) return new ItemStack[0];
-                if (m.getReturnType().equals(int.class)) return 0;
-                return null;
-            }
-        );
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftPlayerInventory(getHandle().getInventory(), this);
     }
     @Override public Inventory getEnderChest() { return null; }
     @Override public MainHand getMainHand() { return MainHand.RIGHT; }
