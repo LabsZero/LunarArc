@@ -67,8 +67,10 @@ jar {
 
 def createFatJar(String platform) {
     return tasks.register("${platform}Jar", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+        def cleanVersion = project.version.toString().replace('-SNAPSHOT', '')
         archiveBaseName.set("${rootProject.name.toLowerCase(java.util.Locale.ROOT).replaceAll('[^a-z0-9._-]+', '-')}-${platform}")
-        archiveClassifier.set("all")
+        archiveVersion.set(cleanVersion)
+        archiveClassifier.set('')
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
         // ASM relocation is now handled by the :libs project to avoid Shadow scanner crashes

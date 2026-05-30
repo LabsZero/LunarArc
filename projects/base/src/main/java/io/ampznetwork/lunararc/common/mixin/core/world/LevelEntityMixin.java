@@ -48,7 +48,7 @@ public abstract class LevelEntityMixin {
     }
 
     @Inject(method = "tick", at = @At("HEAD"))
-    private void lunararc$onTick(java.util.function.BooleanSupplier hasTimeLeft, CallbackInfo ci) {
+    private void lunararc$onTick(CallbackInfo ci) {
         // Placeholder for future per-tick world hooks
     }
 }
