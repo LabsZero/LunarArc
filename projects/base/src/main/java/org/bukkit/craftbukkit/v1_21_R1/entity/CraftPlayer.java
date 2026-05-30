@@ -343,7 +343,6 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void giveExp(int amount, boolean applyMending) {}
     @Override public void givenEffect(@NotNull org.bukkit.potion.PotionEffect effect, @NotNull org.bukkit.entity.Entity source) {}
     @Override public @NotNull java.util.Collection<org.bukkit.entity.EnderPearl> getEnderPearls() { return java.util.Collections.emptyList(); }
-    @Override public @NotNull org.bukkit.Input getCurrentInput() { return (org.bukkit.Input) java.lang.reflect.Proxy.newProxyInstance(org.bukkit.Input.class.getClassLoader(), new Class<?>[]{ org.bukkit.Input.class }, (p, m, a) -> m.getReturnType() == boolean.class ? false : null); }
     @Override public int applyMending(int amount) { return amount; }
     @Override public void giveExpLevels(int levels) {}
     @Override public void setExp(float exp) {}
