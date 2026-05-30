@@ -816,37 +816,44 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, @NotNull InventoryType type) {
-        return null;
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(owner, type);
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, @NotNull InventoryType type,
             @NotNull String title) {
-        return null;
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(
+                owner, type.getDefaultSize(), type, net.kyori.adventure.text.Component.text(title));
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, @NotNull InventoryType type,
             @NotNull net.kyori.adventure.text.Component title) {
-        return null;
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(
+                owner, type.getDefaultSize(), type, title);
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, int size)
             throws IllegalArgumentException {
-        return null;
+        if (size <= 0 || size % 9 != 0) throw new IllegalArgumentException("size must be positive multiple of 9");
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(
+                owner, size, net.kyori.adventure.text.Component.text("Chest"));
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, int size, @NotNull String title)
             throws IllegalArgumentException {
-        return null;
+        if (size <= 0 || size % 9 != 0) throw new IllegalArgumentException("size must be positive multiple of 9");
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(
+                owner, size, net.kyori.adventure.text.Component.text(title));
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, int size,
             @NotNull net.kyori.adventure.text.Component title) throws IllegalArgumentException {
-        return null;
+        if (size <= 0 || size % 9 != 0) throw new IllegalArgumentException("size must be positive multiple of 9");
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(owner, size, title);
     }
 
     @Override
@@ -1230,7 +1237,7 @@ public class CraftServer implements Server {
     @Override
     public @NotNull com.destroystokyo.paper.profile.PlayerProfile createProfileExact(@Nullable UUID uuid,
             @Nullable String name) {
-        return null;
+        return new io.ampznetwork.lunararc.common.server.LunarArcPlayerProfile(uuid, name);
     }
 
     @Override
@@ -1440,24 +1447,44 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull BlockData createBlockData(@NotNull Material material) {
-        return null;
+        return createBlockData(material, (Consumer<? super BlockData>) null);
     }
 
     @Override
     public @NotNull BlockData createBlockData(@NotNull Material material,
             @Nullable Consumer<? super BlockData> consumer) {
-        return null;
+        net.minecraft.resources.ResourceLocation key = net.minecraft.resources.ResourceLocation.parse(
+                material.getKey().toString());
+        net.minecraft.world.level.block.Block block =
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(key);
+        net.minecraft.world.level.block.state.BlockState state = (block != null)
+                ? block.defaultBlockState()
+                : net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+        BlockData bd = org.bukkit.craftbukkit.v1_21_R1.block.data.CraftBlockData.create(state);
+        if (consumer != null) consumer.accept(bd);
+        return bd;
     }
 
     @Override
     public @NotNull BlockData createBlockData(@NotNull String data) throws IllegalArgumentException {
-        return null;
+        // Parse "minecraft:stone[waterlogged=false]" style strings
+        String blockStr = data.contains("[") ? data.substring(0, data.indexOf('[')) : data;
+        net.minecraft.resources.ResourceLocation key = net.minecraft.resources.ResourceLocation.parse(blockStr);
+        net.minecraft.world.level.block.Block block =
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(key);
+        net.minecraft.world.level.block.state.BlockState state = (block != null)
+                ? block.defaultBlockState()
+                : net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+        return org.bukkit.craftbukkit.v1_21_R1.block.data.CraftBlockData.create(state);
     }
 
     @Override
     public @NotNull BlockData createBlockData(@Nullable Material material, @Nullable String data)
             throws IllegalArgumentException {
-        return null;
+        if (material != null) return createBlockData(material);
+        if (data != null) return createBlockData(data);
+        return org.bukkit.craftbukkit.v1_21_R1.block.data.CraftBlockData.create(
+                net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
     }
 
     @Override
@@ -1467,6 +1494,16 @@ public class CraftServer implements Server {
 
     @Override
     public @Nullable Entity getEntity(@NotNull UUID uuid) {
+        // Search the player cache first (fastest path)
+        Entity cached = playerCache.get(uuid);
+        if (cached != null) return cached;
+        // Search all loaded worlds
+        for (net.minecraft.server.level.ServerLevel level : console.getAllLevels()) {
+            net.minecraft.world.entity.Entity nmsEntity = level.getEntity(uuid);
+            if (nmsEntity != null) {
+                return nmsEntity.getBukkitEntity();
+            }
+        }
         return null;
     }
 
@@ -1498,13 +1535,13 @@ public class CraftServer implements Server {
     @Override
     public @NotNull KeyedBossBar createBossBar(@NotNull NamespacedKey key, @Nullable String title,
             @NotNull BarColor color, @NotNull BarStyle style, @NotNull BarFlag... flags) {
-        return null;
+        return io.ampznetwork.lunararc.common.server.LunarArcBossBar.createKeyed(key, title, color, style, flags);
     }
 
     @Override
     public @NotNull BossBar createBossBar(@Nullable String title, @NotNull BarColor color, @NotNull BarStyle style,
             @NotNull BarFlag... flags) {
-        return null;
+        return io.ampznetwork.lunararc.common.server.LunarArcBossBar.create(title, color, style, flags);
     }
 
     @Override
@@ -1696,25 +1733,7 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull ScoreboardManager getScoreboardManager() {
-        return (ScoreboardManager) java.lang.reflect.Proxy.newProxyInstance(
-            ScoreboardManager.class.getClassLoader(),
-            new Class<?>[] { ScoreboardManager.class },
-            (p, m, a) -> {
-                if (m.getName().equals("getMainScoreboard")) {
-                    return java.lang.reflect.Proxy.newProxyInstance(
-                        org.bukkit.scoreboard.Scoreboard.class.getClassLoader(),
-                        new Class<?>[] { org.bukkit.scoreboard.Scoreboard.class },
-                        (sp, sm, sa) -> {
-                            if (sm.getName().equals("getTeams")) return Collections.emptySet();
-                            if (sm.getName().equals("getObjectives")) return Collections.emptySet();
-                            if (sm.getReturnType().equals(Set.class)) return Collections.emptySet();
-                            return null;
-                        }
-                    );
-                }
-                return null;
-            }
-        );
+        return io.ampznetwork.lunararc.common.server.LunarArcScoreboardManager.getInstance();
     }
 
     @Override
