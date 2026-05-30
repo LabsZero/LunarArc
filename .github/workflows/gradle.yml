@@ -32,6 +32,7 @@ jobs:
           path: |
             .gradle/loom-cache
             .gradle/quilt-loom-cache
+            .gradle/paper
             **/build/loom-cache
           key: loom-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
           restore-keys: |

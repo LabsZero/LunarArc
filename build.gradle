@@ -87,26 +87,36 @@ tasks.register('setupPaperServer') {
             def build = libs.versions.paper.build.get()
             def url = "https://api.papermc.io/v2/projects/paper/versions/${mcVersion}/builds/${build}/downloads/paper-${mcVersion}-${build}.jar"
             def paperBundler = project.ext.paperDir.toPath().resolve("paper-bundler.jar").toFile()
-            
-            println "Downloading Paper bundler..."
-            paperBundler.withOutputStream { out ->
-                URI.create(url).toURL().withInputStream { it.transferTo(out) }
-            }
-            
-            println "Extracting paper-server from bundler..."
-            def jar = new java.util.jar.JarFile(paperBundler)
-            def entry = jar.stream().filter({ e -> e.name.startsWith("META-INF/versions/") && e.name.endsWith(".jar") }).findFirst().orElse(null)
-            if (entry != null) {
-                project.ext.paperServerJar.withOutputStream { out ->
-                    jar.getInputStream(entry).transferTo(out)
+
+            try {
+                println "Downloading Paper bundler from ${url}..."
+                def conn = URI.create(url).toURL().openConnection()
+                conn.connectTimeout = 30_000
+                conn.readTimeout = 120_000
+                paperBundler.withOutputStream { out -> conn.inputStream.transferTo(out) }
+
+                println "Extracting paper-server from bundler..."
+                def jar = new java.util.jar.JarFile(paperBundler)
+                def entry = jar.stream()
+                        .filter({ e -> e.name.startsWith("META-INF/versions/") && e.name.endsWith(".jar") })
+                        .findFirst().orElse(null)
+                if (entry != null) {
+                    project.ext.paperServerJar.withOutputStream { out -> jar.getInputStream(entry).transferTo(out) }
+                    println "Paper server implementation ready at ${project.ext.paperServerJar}"
+                } else {
+                    Files.copy(paperBundler.toPath(), project.ext.paperServerJar.toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    println "Paper jar used directly as implementation."
                 }
-                println "Paper server implementation ready at ${project.ext.paperServerJar}"
-            } else {
-                // Fallback for non-bundled jars or different versions
-                Files.copy(paperBundler.toPath(), project.ext.paperServerJar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-                println "Paper jar used directly as implementation."
+                jar.close()
+            } catch (Exception e) {
+                println "WARNING: setupPaperServer failed (network unavailable?): ${e.message}"
+                println "The paper server JAR is only needed at runtime, not for compilation. Build continues."
+            } finally {
+                if (paperBundler.exists()) paperBundler.delete()
             }
-            paperBundler.delete()
+        } else {
+            println "Paper server JAR already present: ${project.ext.paperServerJar}"
         }
     }
 }
