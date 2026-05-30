@@ -12,7 +12,6 @@ import java.util.Set;
 import java.util.Collections;
 import java.net.InetSocketAddress;
 import net.md_5.bungee.api.chat.BaseComponent;
-import com.destroystokyo.paper.Title;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.bossbar.BossBar;
 import org.bukkit.map.MapView;
@@ -265,8 +264,6 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void sendEntityEffect(EntityEffect effect, Entity entity) {}
     @Override public void showTitle(net.kyori.adventure.title.Title title) { getHandle().sendSystemMessage(net.minecraft.network.chat.Component.literal("Title: " + title.toString())); }
     @Override public void clearTitle() {}
-    @Override public void sendTitle(com.destroystokyo.paper.Title title) {}
-    @Override public void updateTitle(com.destroystokyo.paper.Title title) {}
     @Override public void setTitleTimes(int fadeIn, int stay, int fadeOut) {}
     @Override public void setSubtitle(BaseComponent[] subtitle) {}
     @Override public void setSubtitle(BaseComponent subtitle) {}

@@ -162,20 +162,19 @@ public class CraftServer implements Server {
                 new Class<?>[] { UnsafeValues.class },
                 (proxy, method, args) -> {
                     if (method.getName().equals("getVersionFetcher")) {
-                        return new com.destroystokyo.paper.util.VersionFetcher() {
-                            @Override
-                            public long getCacheTime() {
-                                return 0;
-                            }
-
-                            @Override
-                            public @NotNull net.kyori.adventure.text.Component getVersionMessage(
-                                    @NotNull String serverVersion) {
-                                return net.kyori.adventure.text.Component.text(
-                                        io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.projectName()
-                                                + " " + serverVersion);
-                            }
-                        };
+                        // VersionFetcher was removed in Paper 1.19+; return via reflection to avoid compile-time dep
+                        try {
+                            Class<?> vfClass = Class.forName("com.destroystokyo.paper.util.VersionFetcher");
+                            return java.lang.reflect.Proxy.newProxyInstance(vfClass.getClassLoader(),
+                                new Class<?>[]{ vfClass },
+                                (vp, vm, va) -> {
+                                    if (vm.getName().equals("getCacheTime")) return 0L;
+                                    return net.kyori.adventure.text.Component.text(
+                                        io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.projectName());
+                                });
+                        } catch (ClassNotFoundException ignored) {
+                            return null;
+                        }
                     }
                     if (method.getName().equals("getDataVersion"))
                         return io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.dataVersion().orElse(0);

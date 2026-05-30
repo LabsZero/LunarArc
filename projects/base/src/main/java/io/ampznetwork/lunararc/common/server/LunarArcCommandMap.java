@@ -7,16 +7,13 @@ import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.SimpleCommandMap;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class LunarArcCommandMap extends SimpleCommandMap {
 
     // Brigadier dispatcher set by CommandsMixin once commands are initialized
     private static volatile CommandDispatcher<CommandSourceStack> dispatcher;
 
     public LunarArcCommandMap(Server server) {
-        super(server, new HashMap<>());
+        super(server);
     }
 
     public static void setDispatcher(CommandDispatcher<CommandSourceStack> d) {
