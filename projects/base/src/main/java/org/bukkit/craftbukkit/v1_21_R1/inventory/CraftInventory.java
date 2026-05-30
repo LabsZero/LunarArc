@@ -28,7 +28,7 @@ public class CraftInventory implements Inventory {
     protected int maxStackSize = 64;
 
     public CraftInventory(@Nullable InventoryHolder holder, @NotNull InventoryType type) {
-        this(holder, type.getDefaultSize(), type, net.kyori.adventure.text.Component.text(type.getDefaultTitle()));
+        this(holder, type.getDefaultSize(), type, net.kyori.adventure.text.Component.text(type.name()));
     }
 
     public CraftInventory(@Nullable InventoryHolder holder, int size, @NotNull InventoryType type,
@@ -262,7 +262,6 @@ public class CraftInventory implements Inventory {
         java.util.Arrays.fill(contents, null);
     }
 
-    @Override
     public int close() {
         return 0;
     }
@@ -282,7 +281,6 @@ public class CraftInventory implements Inventory {
         return holder;
     }
 
-    @Override
     public @Nullable InventoryHolder getHolder(boolean useSnapshot) {
         return holder;
     }

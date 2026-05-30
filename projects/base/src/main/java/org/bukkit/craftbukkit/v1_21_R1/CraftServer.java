@@ -1497,16 +1497,17 @@ public class CraftServer implements Server {
         // Search the player cache first (fastest path)
         Entity cached = playerCache.get(uuid);
         if (cached != null) return cached;
-        // Search all loaded worlds; use reflection for getBukkitEntity() since it's
-        // a Paper addition not present on the vanilla NMS Entity compile classpath.
+        // Use reflection for both getEntity(UUID) and getBukkitEntity(): the former
+        // may not be on the vanilla NMS compile classpath; the latter is Paper-specific.
         for (net.minecraft.server.level.ServerLevel level : console.getAllLevels()) {
-            net.minecraft.world.entity.Entity nmsEntity = level.getEntity(uuid);
-            if (nmsEntity != null) {
-                try {
-                    java.lang.reflect.Method m = nmsEntity.getClass().getMethod("getBukkitEntity");
-                    return (Entity) m.invoke(nmsEntity);
-                } catch (Exception ignored) {}
-            }
+            try {
+                java.lang.reflect.Method getEntity = level.getClass().getMethod("getEntity", java.util.UUID.class);
+                Object nmsEntity = getEntity.invoke(level, uuid);
+                if (nmsEntity != null) {
+                    java.lang.reflect.Method getBukkit = nmsEntity.getClass().getMethod("getBukkitEntity");
+                    return (Entity) getBukkit.invoke(nmsEntity);
+                }
+            } catch (Exception ignored) {}
         }
         return null;
     }
