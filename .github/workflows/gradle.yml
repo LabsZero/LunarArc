@@ -41,8 +41,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build with Gradle
-        run: ./gradlew setupPaperServer build collect --no-daemon --stacktrace
+      - name: Setup Paper Server
+        run: ./gradlew setupPaperServer --no-daemon --stacktrace
+
+      - name: Compile & Build
+        run: ./gradlew build --no-daemon --stacktrace
+
+      - name: Assemble JARs
+        run: ./gradlew collect --no-daemon --stacktrace
 
       - name: List Artifacts
         run: ls -R build/libs
