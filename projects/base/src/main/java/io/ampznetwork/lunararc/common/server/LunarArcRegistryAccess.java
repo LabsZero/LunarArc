@@ -10,7 +10,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.stream.Stream;
 
 /**
  * RegistryAccess implementation for LunarArc.
@@ -44,8 +43,7 @@ public class LunarArcRegistryAccess implements RegistryAccess {
 
     private static final Registry<Keyed> EMPTY_REGISTRY = new Registry<>() {
         @Override public @Nullable Keyed get(@NotNull NamespacedKey key) { return null; }
-        @Override public @Nullable Keyed get(@NotNull net.kyori.adventure.key.Key key) { return null; }
-        @Override public @NotNull Stream<Keyed> stream() { return Stream.empty(); }
+        @Override public @Nullable NamespacedKey getKey(@NotNull Keyed value) { return null; }
         @Override public @NotNull Iterator<Keyed> iterator() { return Collections.emptyIterator(); }
     };
 }

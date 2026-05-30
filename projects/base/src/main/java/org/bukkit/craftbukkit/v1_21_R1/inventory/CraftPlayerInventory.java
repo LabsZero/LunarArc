@@ -117,8 +117,45 @@ public class CraftPlayerInventory implements PlayerInventory {
 
     @Override public @Nullable Player getHolder() { return owner; }
 
-    @Override public @NotNull EquipmentSlot getEquipmentSlotForItem(@NotNull ItemStack stack) {
+    // Not @Override — may not be abstract in all 1.21.1 builds
+    public @Nullable org.bukkit.entity.HumanEntity getHolder(boolean useSnapshot) { return owner; }
+
+    public @NotNull EquipmentSlot getEquipmentSlotForItem(@NotNull ItemStack stack) {
         return EquipmentSlot.HAND;
+    }
+
+    // -----------------------------------------------------------------------
+    // PlayerInventory — extra slots (off-hand in vanilla)
+    // -----------------------------------------------------------------------
+
+    @Override public @NotNull ItemStack[] getExtraContents() {
+        return new ItemStack[]{ getItemInOffHand() };
+    }
+
+    @Override public void setExtraContents(@NotNull ItemStack[] items) {
+        if (items != null && items.length > 0) setItemInOffHand(items[0]);
+    }
+
+    @Override public @Nullable ItemStack getItem(@NotNull EquipmentSlot slot) {
+        return switch (slot) {
+            case HEAD -> getHelmet();
+            case CHEST -> getChestplate();
+            case LEGS -> getLeggings();
+            case FEET -> getBoots();
+            case OFF_HAND -> getItemInOffHand();
+            default -> getItemInMainHand();
+        };
+    }
+
+    @Override public void setItem(@NotNull EquipmentSlot slot, @Nullable ItemStack item) {
+        switch (slot) {
+            case HEAD -> setHelmet(item);
+            case CHEST -> setChestplate(item);
+            case LEGS -> setLeggings(item);
+            case FEET -> setBoots(item);
+            case OFF_HAND -> setItemInOffHand(item);
+            default -> setItemInMainHand(item);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -358,5 +395,16 @@ public class CraftPlayerInventory implements PlayerInventory {
 
     @Override public @Nullable org.bukkit.Location getLocation() {
         return owner != null ? owner.getLocation() : null;
+    }
+
+    // Paper-specific abstract methods — stubs without @Override so they compile
+    // safely whether or not they exist in the Paper 1.21.1-R0.1-SNAPSHOT API.
+
+    public @NotNull HashMap<Integer, ItemStack> removeItemAnySlot(@NotNull ItemStack... items) {
+        return removeItem(items);
+    }
+
+    public void close() {
+        // no viewers to notify for a player's personal inventory
     }
 }
