@@ -292,8 +292,6 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void setPlayerListFooter(String footer) {}
     @Override public void setPlayerListHeaderFooter(String header, String footer) {}
     @Override public String getPlayerListName() { return getName(); }
-    @Override public int getPlayerListOrder() { return 0; }
-    @Override public void setPlayerListOrder(int order) {}
     @Override public void setPlayerListName(String name) {}
     @Override public void setCompassTarget(Location loc) {}
     @Override public Firework fireworkBoost(ItemStack stack) { return null; }
@@ -341,8 +339,6 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public int getExpCooldown() { return 0; }
     @Override public void setExpCooldown(int ticks) {}
     @Override public void giveExp(int amount, boolean applyMending) {}
-    @Override public void givenEffect(@NotNull org.bukkit.potion.PotionEffect effect, @NotNull org.bukkit.entity.Entity source) {}
-    @Override public @NotNull java.util.Collection<org.bukkit.entity.EnderPearl> getEnderPearls() { return java.util.Collections.emptyList(); }
     @Override public int applyMending(int amount) { return amount; }
     @Override public void giveExpLevels(int levels) {}
     @Override public void setExp(float exp) {}
@@ -432,12 +428,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void resetTitle() {}
     @Override public void removeResourcePacks() {}
     @Override public void removeResourcePack(UUID id) {}
-    @Override public void removeResourcePacks(boolean resourcePacksInUse, @NotNull UUID id, @NotNull UUID... idsToRemove) {}
     @Override public void clearResourcePacks() {}
     @Override public void sendResourcePacks(@NotNull net.kyori.adventure.resource.ResourcePackRequest request) {}
-    @Override public @NotNull java.util.Collection<UUID> getResourcePackIds() { return java.util.Collections.emptyList(); }
-    @Override public @Nullable net.kyori.adventure.resource.ResourcePackInfo getResourcePackInfo(@NotNull UUID id) { return null; }
-    @Override public @Nullable UUID getResourcePacksHash() { return null; }
     @Override public void addResourcePack(UUID id, String url, byte[] hash, String prompt, boolean force) {}
     @Override public org.bukkit.event.player.PlayerResourcePackStatusEvent.Status getResourcePackStatus() { return org.bukkit.event.player.PlayerResourcePackStatusEvent.Status.SUCCESSFULLY_LOADED; }
     @Override public void setResourcePack(String url) {}
