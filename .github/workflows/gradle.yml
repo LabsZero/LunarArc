@@ -33,7 +33,10 @@ jobs:
             .gradle/loom-cache
             .gradle/quilt-loom-cache
             .gradle/paper
-            **/build/loom-cache
+            projects/core/.gradle
+            projects/loaders/fabric/.gradle
+            projects/loaders/forge/.gradle
+            projects/loaders/quilt/.gradle
           key: loom-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
           restore-keys: |
             loom-${{ runner.os }}-
@@ -41,14 +44,8 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Setup Paper Server
-        run: ./gradlew setupPaperServer --no-daemon --stacktrace
-
-      - name: Compile & Build
-        run: ./gradlew build --no-daemon --stacktrace
-
-      - name: Assemble JARs
-        run: ./gradlew collect --no-daemon --stacktrace
+      - name: Build & Assemble
+        run: ./gradlew setupPaperServer build collect --no-daemon --stacktrace
 
       - name: List Artifacts
         run: ls -R build/libs
