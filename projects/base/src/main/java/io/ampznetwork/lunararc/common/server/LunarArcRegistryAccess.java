@@ -43,6 +43,7 @@ public class LunarArcRegistryAccess implements RegistryAccess {
 
     private static final Registry<Keyed> EMPTY_REGISTRY = new Registry<>() {
         @Override public @Nullable Keyed get(@NotNull NamespacedKey key) { return null; }
+        @Override public @NotNull Keyed getOrThrow(@NotNull NamespacedKey key) { throw new java.util.NoSuchElementException(key.toString()); }
         @Override public @Nullable NamespacedKey getKey(@NotNull Keyed value) { return null; }
         @Override public @NotNull Iterator<Keyed> iterator() { return Collections.emptyIterator(); }
         @Override public @NotNull java.util.stream.Stream<Keyed> stream() { return java.util.stream.Stream.empty(); }

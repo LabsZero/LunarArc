@@ -80,8 +80,8 @@ public class CraftBanList<T> implements BanList<T> {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <E extends BanEntry<?>> @Nullable E addBan(@NotNull String target, @Nullable String reason,
-                                                       @Nullable Date expires, @Nullable String source) {
+    public <E extends BanEntry<? super T>> @Nullable E addBan(@NotNull String target, @Nullable String reason,
+                                                              @Nullable Date expires, @Nullable String source) {
         return (E) addBan((T) target, reason, expires, source);
     }
 
