@@ -324,9 +324,9 @@ public class LunarArcScoreboardManager implements ScoreboardManager {
                         case "canSeeFriendlyInvisibles" -> { return ts.canSeeFriendlyInvisibles; }
                         case "setCanSeeFriendlyInvisibles" -> { ts.canSeeFriendlyInvisibles = (boolean) args[0]; return null; }
                         case "getNameTagVisibility" -> { return ts.nameTagVisibility; }
-                        case "setNameTagVisibility" -> { ts.nameTagVisibility = (Team.NameTagVisibility) args[0]; return null; }
+                        case "setNameTagVisibility" -> { ts.nameTagVisibility = args[0]; return null; }
                         case "getCollisionRule" -> { return ts.collisionRule; }
-                        case "setCollisionRule" -> { ts.collisionRule = (Team.CollisionRule) args[0]; return null; }
+                        case "setCollisionRule" -> { ts.collisionRule = args[0]; return null; }
                         case "getColor" -> { return ts.color; }
                         case "setColor" -> { ts.color = (org.bukkit.ChatColor) args[0]; return null; }
                         case "color" -> {
@@ -362,10 +362,22 @@ public class LunarArcScoreboardManager implements ScoreboardManager {
     static class TeamState {
         String name, displayName, prefix = "", suffix = "";
         boolean allowFriendlyFire = true, canSeeFriendlyInvisibles = true, registered = true;
-        Team.NameTagVisibility nameTagVisibility = Team.NameTagVisibility.ALWAYS;
-        Team.CollisionRule collisionRule = Team.CollisionRule.ALWAYS;
+        // Stored as Object: NameTagVisibility is top-level in org.bukkit.scoreboard (not Team inner);
+        // CollisionRule does not exist in Paper 1.21.1 build 133 API.
+        Object nameTagVisibility = resolveTopLevelEnum("org.bukkit.scoreboard.NameTagVisibility", "ALWAYS");
+        Object collisionRule = null;
         org.bukkit.ChatColor color = org.bukkit.ChatColor.RESET;
         final Set<String> entries = new LinkedHashSet<>();
         TeamState(String name) { this.name = name; this.displayName = name; }
+    }
+
+    private static Object resolveTopLevelEnum(String className, String constantName) {
+        try {
+            Class<?> cls = Class.forName(className, true,
+                    LunarArcScoreboardManager.class.getClassLoader());
+            return cls.getField(constantName).get(null);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }
