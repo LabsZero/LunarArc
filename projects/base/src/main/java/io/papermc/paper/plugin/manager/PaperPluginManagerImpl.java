@@ -40,10 +40,11 @@ public class PaperPluginManagerImpl implements PluginManager {
 
     @Override
     public void callEvent(@NotNull org.bukkit.event.Event event) {
+        // Async events must not be fired on the primary thread; sync events may be
+        // fired from any thread in our hybrid (Mixin injections can run on server or
+        // Netty threads before the server considers itself "primary").
         if (event.isAsynchronous() && server.isPrimaryThread()) {
             throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
-        } else if (!event.isAsynchronous() && !server.isPrimaryThread()) {
-            throw new IllegalStateException(event.getEventName() + " may only be triggered synchronously.");
         }
 
         HandlerList handlers = event.getHandlers();

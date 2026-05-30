@@ -585,7 +585,30 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
 
     @Override
     public @NotNull io.papermc.paper.threadedregions.scheduler.EntityScheduler getScheduler() {
-        return null;
+        return (io.papermc.paper.threadedregions.scheduler.EntityScheduler) java.lang.reflect.Proxy.newProxyInstance(
+            io.papermc.paper.threadedregions.scheduler.EntityScheduler.class.getClassLoader(),
+            new Class<?>[]{ io.papermc.paper.threadedregions.scheduler.EntityScheduler.class },
+            (proxy, method, args) -> {
+                switch (method.getName()) {
+                    case "run", "runDelayed" -> {
+                        if (args != null) for (Object a : args) {
+                            if (a instanceof java.util.function.Consumer<?> c) {
+                                try { ((java.util.function.Consumer<Object>) c).accept(null); } catch (Throwable ignored) {}
+                                break;
+                            }
+                        }
+                        return null;
+                    }
+                    case "execute" -> {
+                        if (args != null) for (Object a : args) {
+                            if (a instanceof Runnable r) { r.run(); break; }
+                        }
+                        return null;
+                    }
+                    default -> { return null; }
+                }
+            }
+        );
     }
 
     @Override
