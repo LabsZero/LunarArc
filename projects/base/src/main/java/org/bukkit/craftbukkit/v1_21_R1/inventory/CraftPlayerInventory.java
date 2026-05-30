@@ -404,7 +404,8 @@ public class CraftPlayerInventory implements PlayerInventory {
         return removeItem(items);
     }
 
-    public void close() {
+    public int close() {
         // no viewers to notify for a player's personal inventory
+        return 0;
     }
 }

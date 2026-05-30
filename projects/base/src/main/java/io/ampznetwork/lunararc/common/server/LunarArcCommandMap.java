@@ -13,7 +13,7 @@ public class LunarArcCommandMap extends SimpleCommandMap {
     private static volatile CommandDispatcher<CommandSourceStack> dispatcher;
 
     public LunarArcCommandMap(Server server) {
-        super(server);
+        super(server, new java.util.HashMap<>());
     }
 
     public static void setDispatcher(CommandDispatcher<CommandSourceStack> d) {

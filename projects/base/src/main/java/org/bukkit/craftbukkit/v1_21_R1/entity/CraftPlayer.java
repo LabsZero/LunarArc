@@ -263,6 +263,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public net.kyori.adventure.text.Component name() { return net.kyori.adventure.text.Component.text(getName()); }
     @Override public void sendEntityEffect(EntityEffect effect, Entity entity) {}
     @Override public void showTitle(net.kyori.adventure.title.Title title) { getHandle().sendSystemMessage(net.minecraft.network.chat.Component.literal("Title: " + title.toString())); }
+    @Override public void updateTitle(@NotNull io.papermc.paper.Title title) {}
     @Override public void clearTitle() {}
     @Override public void setTitleTimes(int fadeIn, int stay, int fadeOut) {}
     @Override public void setSubtitle(BaseComponent[] subtitle) {}
