@@ -394,7 +394,7 @@ public class CraftWorld implements World {
     @Override
     public int getEntityCount() {
         int count = 0;
-        for (net.minecraft.world.entity.Entity e : world.getAllEntities()) count++;
+        for (net.minecraft.world.entity.Entity ignored : world.getAllEntities()) count++;
         return count;
     }
 

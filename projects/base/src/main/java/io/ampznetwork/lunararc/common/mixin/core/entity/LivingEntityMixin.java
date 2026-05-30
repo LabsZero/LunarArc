@@ -26,7 +26,7 @@ public abstract class LivingEntityMixin {
     }
 
     @Inject(method = "die", at = @At("HEAD"))
-    private void lunararc$onDeath(DamageSource source, CallbackInfo ci) {
+    private void lunararc$onDeath(CallbackInfo ci) {
         LivingEntity entity = (LivingEntity) (Object) this;
         try {
             CraftEventFactory.callEntityDeathEvent(entity);

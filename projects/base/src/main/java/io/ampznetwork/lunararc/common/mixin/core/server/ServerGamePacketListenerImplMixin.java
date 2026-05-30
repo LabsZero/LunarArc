@@ -53,7 +53,7 @@ public abstract class ServerGamePacketListenerImplMixin {
     }
 
     @Inject(method = "onDisconnect", at = @At("HEAD"))
-    private void lunararc$onDisconnect(net.minecraft.network.DisconnectionDetails details, CallbackInfo ci) {
+    private void lunararc$onDisconnect(CallbackInfo ci) {
         try {
             CraftEventFactory.callPlayerQuitEvent(this.player);
         } catch (Throwable ignored) {
