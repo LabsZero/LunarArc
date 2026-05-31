@@ -94,7 +94,10 @@ public class CraftPlayerInventory implements PlayerInventory {
     // -----------------------------------------------------------------------
 
     @Override public @NotNull ItemStack getItemInMainHand() {
-        return CraftItemStack.asBukkitCopy(handle.getSelected());
+        net.minecraft.world.item.ItemStack nmsItem = handle.getSelected();
+        if (nmsItem == null || nmsItem.isEmpty())
+            return new CraftItemStack(net.minecraft.world.item.ItemStack.EMPTY);
+        return CraftItemStack.asBukkitCopy(nmsItem);
     }
 
     @Override public void setItemInMainHand(@Nullable ItemStack item) {
@@ -102,7 +105,10 @@ public class CraftPlayerInventory implements PlayerInventory {
     }
 
     @Override public @NotNull ItemStack getItemInOffHand() {
-        return CraftItemStack.asBukkitCopy(nms(40));
+        net.minecraft.world.item.ItemStack nmsItem = nms(40);
+        if (nmsItem == null || nmsItem.isEmpty())
+            return new CraftItemStack(net.minecraft.world.item.ItemStack.EMPTY);
+        return CraftItemStack.asBukkitCopy(nmsItem);
     }
 
     @Override public void setItemInOffHand(@Nullable ItemStack item) {

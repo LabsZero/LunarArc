@@ -1016,18 +1016,37 @@ public class CraftServer implements Server {
                 new Class<?>[] { io.papermc.paper.threadedregions.scheduler.AsyncScheduler.class },
                 (proxy, method, args) -> {
                     if (method.getName().startsWith("run") || method.getName().startsWith("create")) {
-                        for (Object arg : args) {
-                            if (arg instanceof Runnable r) {
-                                new Thread(r).start();
-                                break;
-                            }
-                            if (arg instanceof java.util.function.Consumer c) {
-                                new Thread(() -> c.accept(null)).start();
-                                break;
+                        io.papermc.paper.threadedregions.scheduler.ScheduledTask task = makeScheduledTaskProxy();
+                        if (args != null) {
+                            for (Object arg : args) {
+                                if (arg instanceof java.util.function.Consumer c) {
+                                    new Thread(() -> c.accept(task)).start();
+                                    return task;
+                                }
+                                if (arg instanceof Runnable r) {
+                                    new Thread(r).start();
+                                    return task;
+                                }
                             }
                         }
+                        return task;
                     }
+                    if (method.getReturnType() == boolean.class) return false;
                     return null;
+                });
+    }
+
+    private static io.papermc.paper.threadedregions.scheduler.ScheduledTask makeScheduledTaskProxy() {
+        return (io.papermc.paper.threadedregions.scheduler.ScheduledTask) java.lang.reflect.Proxy.newProxyInstance(
+                io.papermc.paper.threadedregions.scheduler.ScheduledTask.class.getClassLoader(),
+                new Class<?>[] { io.papermc.paper.threadedregions.scheduler.ScheduledTask.class },
+                (p, m, a) -> switch (m.getName()) {
+                    case "isCancelled", "isRunning" -> false;
+                    case "cancel", "getOwningPlugin" -> null;
+                    case "hashCode" -> System.identityHashCode(p);
+                    case "equals" -> p == (a != null && a.length > 0 ? a[0] : null);
+                    case "toString" -> "LunarArcScheduledTask";
+                    default -> m.getReturnType() == boolean.class ? false : null;
                 });
     }
 
@@ -1038,19 +1057,24 @@ public class CraftServer implements Server {
                 new Class<?>[] { io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler.class },
                 (proxy, method, args) -> {
                     if (method.getName().startsWith("run") || method.getName().startsWith("execute")) {
-                        for (Object arg : args) {
-                            if (arg instanceof Runnable r) {
-                                ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
-                                        .lunararc$queueTask(r);
-                                break;
-                            }
-                            if (arg instanceof java.util.function.Consumer c) {
-                                ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
-                                        .lunararc$queueTask(() -> c.accept(null));
-                                break;
+                        io.papermc.paper.threadedregions.scheduler.ScheduledTask task = makeScheduledTaskProxy();
+                        if (args != null) {
+                            for (Object arg : args) {
+                                if (arg instanceof java.util.function.Consumer c) {
+                                    ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
+                                            .lunararc$queueTask(() -> c.accept(task));
+                                    return task;
+                                }
+                                if (arg instanceof Runnable r) {
+                                    ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
+                                            .lunararc$queueTask(r);
+                                    return task;
+                                }
                             }
                         }
+                        return task;
                     }
+                    if (method.getReturnType() == boolean.class) return false;
                     return null;
                 });
     }
@@ -1062,19 +1086,24 @@ public class CraftServer implements Server {
                 new Class<?>[] { io.papermc.paper.threadedregions.scheduler.RegionScheduler.class },
                 (proxy, method, args) -> {
                     if (method.getName().startsWith("run") || method.getName().startsWith("execute")) {
-                        for (Object arg : args) {
-                            if (arg instanceof Runnable r) {
-                                ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
-                                        .lunararc$queueTask(r);
-                                break;
-                            }
-                            if (arg instanceof java.util.function.Consumer c) {
-                                ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
-                                        .lunararc$queueTask(() -> c.accept(null));
-                                break;
+                        io.papermc.paper.threadedregions.scheduler.ScheduledTask task = makeScheduledTaskProxy();
+                        if (args != null) {
+                            for (Object arg : args) {
+                                if (arg instanceof java.util.function.Consumer c) {
+                                    ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
+                                            .lunararc$queueTask(() -> c.accept(task));
+                                    return task;
+                                }
+                                if (arg instanceof Runnable r) {
+                                    ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
+                                            .lunararc$queueTask(r);
+                                    return task;
+                                }
                             }
                         }
+                        return task;
                     }
+                    if (method.getReturnType() == boolean.class) return false;
                     return null;
                 });
     }
