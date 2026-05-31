@@ -262,7 +262,10 @@ public class SimplePluginManager implements PluginManager {
     }
 
     public Plugin @NotNull [] loadPlugins(@NotNull File @NotNull [] files) {
-        return paperPluginManager != null ? paperPluginManager.loadPlugins(files) : new Plugin[0];
+        if (paperPluginManager instanceof PaperPluginManagerImpl paper) {
+            return paper.loadPlugins(files);
+        }
+        return new Plugin[0];
     }
 
     @Override
