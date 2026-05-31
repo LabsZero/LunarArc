@@ -57,6 +57,11 @@ public class LunarArcLifecycleEventManager {
                             tryFireFromConfig(args[0]);
                         }
                     }
+                    // Guard primitive return types to prevent NullPointerException on unboxing
+                    Class<?> ret = method.getReturnType();
+                    if (ret == boolean.class) return false;
+                    if (ret == int.class || ret == long.class || ret == double.class
+                            || ret == float.class || ret == short.class || ret == byte.class) return 0;
                     return null;
                 });
     }
@@ -89,8 +94,8 @@ public class LunarArcLifecycleEventManager {
             Commands cmds = makeCommandsProxy(dispatcher);
             io.papermc.paper.plugin.lifecycle.event.LifecycleEvent event = makeCommandsEvent(cmds);
             handler.run(event);
-        } catch (Exception e) {
-            log.warn("[LunarArc] Could not fire COMMANDS lifecycle event: {}", e.getMessage());
+        } catch (Throwable e) {
+            log.warn("[LunarArc] Could not fire COMMANDS lifecycle event", e);
         }
     }
 
