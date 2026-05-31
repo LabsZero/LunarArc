@@ -36,7 +36,7 @@ public class LunarArcLifecycleEventManager {
                 return Class.forName(cls, true,
                         LunarArcLifecycleEventManager.class.getClassLoader())
                         .getField("COMMANDS").get(null);
-            } catch (Exception ignored) {}
+            } catch (Throwable ignored) {}
         }
         return null;
     }
