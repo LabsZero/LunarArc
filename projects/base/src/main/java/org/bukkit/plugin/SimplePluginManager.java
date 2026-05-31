@@ -261,7 +261,6 @@ public class SimplePluginManager implements PluginManager {
         return paperPluginManager != null && paperPluginManager.isTransitiveDependency(plugin, dependency);
     }
 
-    @Override
     public Plugin @NotNull [] loadPlugins(@NotNull File @NotNull [] files) {
         return paperPluginManager != null ? paperPluginManager.loadPlugins(files) : new Plugin[0];
     }

@@ -141,7 +141,6 @@ public class PaperPluginManagerImpl implements PluginManager {
         return loadPlugins(files);
     }
 
-    @Override
     public Plugin[] loadPlugins(@NotNull java.io.File[] files) {
         logger.info("[LunarArc] Loading " + files.length + " plugin jars...");
         java.util.List<Plugin> loaded = new java.util.ArrayList<>();
