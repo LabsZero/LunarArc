@@ -286,13 +286,18 @@ public class CraftInventory implements Inventory {
     }
 
     @Override
+    public @NotNull HashMap<Integer, ItemStack> removeItemAnySlot(@NotNull ItemStack... items) {
+        return removeItem(items);
+    }
+
+    @Override
     public @NotNull ListIterator<ItemStack> iterator() {
-        return new java.util.Arrays.asList(contents).listIterator();
+        return java.util.Arrays.asList(contents).listIterator();
     }
 
     @Override
     public @NotNull ListIterator<ItemStack> iterator(int index) {
-        return new java.util.Arrays.asList(contents).listIterator(index);
+        return java.util.Arrays.asList(contents).listIterator(index);
     }
 
     @Override
