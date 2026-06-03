@@ -33,17 +33,21 @@ Thumbs.db
 *.log
 logs/
 
+# Temp files from javac invocations
+javac.*.args
+
 # Local/Secrets
 *.properties
 !lunararc-launcher.properties
+!gradle.properties
 .env
 .env.*
 
-# Paper/Minecraft Runtime (If generated locally)
-run/
+# Paper/Minecraft Runtime (If generated locally — root-relative so source dirs are unaffected)
+/run/
 .gradle/paper/
 paper-server-*.jar
-cache/
+/cache/
 usercache.json
 eula.txt
 server.properties
@@ -51,21 +55,22 @@ whitelist.json
 ops.json
 banned-ips.json
 banned-players.json
-world/
-plugins/
-mods/
-config/
-defaultconfigs/
-scripts/
-kubejs/
-patchouli_books/
-logs/
-crash-reports/
-debug/
-screenshots/
-resourcepacks/
-shaderpacks/
-saves/
-stats/
-advancements/
-datapacks/
+/world/
+/plugins/
+/mods/
+/config/
+/defaultconfigs/
+/scripts/
+/kubejs/
+/patchouli_books/
+/logs/
+/crash-reports/
+/debug/
+/screenshots/
+/resourcepacks/
+/shaderpacks/
+/saves/
+/stats/
+/advancements/
+/datapacks/
+.claude/

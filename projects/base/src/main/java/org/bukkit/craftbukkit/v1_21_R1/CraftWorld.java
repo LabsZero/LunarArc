@@ -1,6 +1,7 @@
 package org.bukkit.craftbukkit.v1_21_R1;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.levelgen.Heightmap;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.craftbukkit.v1_21_R1.block.CraftBlock;
@@ -15,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import io.papermc.paper.world.MoonPhase;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -64,7 +66,7 @@ public class CraftWorld implements World {
 
     @Override
     public int getHighestBlockYAt(int x, int z) {
-        return 0;
+        return world.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
     }
 
     @Override
@@ -104,27 +106,40 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull Chunk getChunkAt(int x, int z) {
-        return null;
+        net.minecraft.world.level.chunk.LevelChunk nmsChunk = world.getChunk(x, z);
+        return (org.bukkit.Chunk) java.lang.reflect.Proxy.newProxyInstance(
+            org.bukkit.Chunk.class.getClassLoader(),
+            new Class<?>[] { org.bukkit.Chunk.class },
+            (proxy, method, args) -> {
+                if (method.getName().equals("getX")) return nmsChunk.getPos().x;
+                if (method.getName().equals("getZ")) return nmsChunk.getPos().z;
+                if (method.getName().equals("getWorld")) return CraftWorld.this;
+                if (method.getName().equals("isLoaded")) return true;
+                if (method.getReturnType().equals(boolean.class)) return false;
+                if (method.getReturnType().equals(int.class)) return 0;
+                return null;
+            }
+        );
     }
 
     @Override
     public @NotNull Chunk getChunkAt(int x, int z, boolean generate) {
-        return null;
+        return getChunkAt(x, z);
     }
 
     @Override
     public @NotNull Chunk getChunkAt(@NotNull Location location) {
-        return null;
+        return getChunkAt(location.getBlockX() >> 4, location.getBlockZ() >> 4);
     }
 
     @Override
     public @NotNull Chunk getChunkAt(@NotNull Block block) {
-        return null;
+        return getChunkAt(block.getX() >> 4, block.getZ() >> 4);
     }
 
     @Override
     public boolean isChunkLoaded(int x, int z) {
-        return false;
+        return world.hasChunk(x, z);
     }
 
     @Override
@@ -198,7 +213,14 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull List<Entity> getEntities() {
-        return Collections.emptyList();
+        List<Entity> result = new ArrayList<>();
+        for (net.minecraft.world.entity.Entity nmsEntity : world.getAllEntities()) {
+            try {
+                org.bukkit.entity.Entity bukkitEntity = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) nmsEntity).lunararc$getBukkitEntity();
+                if (bukkitEntity != null) result.add(bukkitEntity);
+            } catch (Throwable ignored) {}
+        }
+        return result;
     }
 
     @Override
@@ -325,7 +347,14 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull List<Player> getPlayers() {
-        return Collections.emptyList();
+        List<Player> result = new ArrayList<>();
+        for (net.minecraft.server.level.ServerPlayer nmsPlayer : world.players()) {
+            try {
+                Player bukkitPlayer = org.bukkit.Bukkit.getPlayer(nmsPlayer.getUUID());
+                if (bukkitPlayer != null) result.add(bukkitPlayer);
+            } catch (Throwable ignored) {}
+        }
+        return result;
     }
 
     @Override
@@ -364,7 +393,9 @@ public class CraftWorld implements World {
 
     @Override
     public int getEntityCount() {
-        return 0;
+        int count = 0;
+        for (net.minecraft.world.entity.Entity ignored : world.getAllEntities()) count++;
+        return count;
     }
 
     @Override
@@ -460,15 +491,21 @@ public class CraftWorld implements World {
 
     @Override
     public boolean hasStorm() {
-        return world.isThundering();
+        return world.isRaining();
     }
 
     @Override
     public void setStorm(boolean hasStorm) {
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            data.setRaining(hasStorm);
+        }
     }
 
     @Override
     public int getWeatherDuration() {
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            return data.getRainTime();
+        }
         return 0;
     }
 
@@ -483,6 +520,9 @@ public class CraftWorld implements World {
 
     @Override
     public void setThundering(boolean thundering) {
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            data.setThundering(thundering);
+        }
     }
 
     @Override
@@ -492,6 +532,9 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull Environment getEnvironment() {
+        String dim = world.dimension().location().toString();
+        if ("minecraft:the_nether".equals(dim)) return Environment.NETHER;
+        if ("minecraft:the_end".equals(dim)) return Environment.THE_END;
         return Environment.NORMAL;
     }
 
@@ -502,7 +545,7 @@ public class CraftWorld implements World {
 
     @Override
     public boolean getPVP() {
-        return true;
+        return world.getServer().isPvpAllowed();
     }
 
     @Override
@@ -511,7 +554,13 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull Difficulty getDifficulty() {
-        return Difficulty.NORMAL;
+        net.minecraft.world.Difficulty nmsDiff = world.getDifficulty();
+        return switch (nmsDiff) {
+            case PEACEFUL -> Difficulty.PEACEFUL;
+            case EASY -> Difficulty.EASY;
+            case HARD -> Difficulty.HARD;
+            default -> Difficulty.NORMAL;
+        };
     }
 
     @Override
@@ -520,7 +569,8 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull Location getSpawnLocation() {
-        return new Location(this, 0, 0, 0);
+        net.minecraft.core.BlockPos sp = world.getSharedSpawnPos();
+        return new Location(this, sp.getX(), sp.getY(), sp.getZ());
     }
 
     @Override
@@ -1016,11 +1066,12 @@ public class CraftWorld implements World {
 
     @Override
     public void setAutoSave(boolean value) {
+        world.noSave = !value;
     }
 
     @Override
     public boolean isAutoSave() {
-        return false;
+        return !world.noSave;
     }
 
     @Override
@@ -1232,12 +1283,12 @@ public class CraftWorld implements World {
 
     @Override
     public int getMaxHeight() {
-        return 320;
+        return world.getMaxBuildHeight();
     }
 
     @Override
     public int getMinHeight() {
-        return -64;
+        return world.getMinBuildHeight();
     }
 
     @Override
@@ -1300,7 +1351,7 @@ public class CraftWorld implements World {
 
     @Override
     public boolean isClearWeather() {
-        return false;
+        return !world.isRaining() && !world.isThundering();
     }
 
     @Override

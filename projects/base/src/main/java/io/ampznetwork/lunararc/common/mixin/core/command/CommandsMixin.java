@@ -20,6 +20,9 @@ public abstract class CommandsMixin {
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void lunararc$onCommandsInit(Commands.CommandSelection selection, net.minecraft.commands.CommandBuildContext context, CallbackInfo ci) {
+        // Store dispatcher so LunarArcCommandMap can register post-startup plugin commands
+        io.ampznetwork.lunararc.common.server.LunarArcCommandMap.setDispatcher(this.dispatcher);
+
         if (LunarArcPlatform.getServer() == null) return;
 
         org.bukkit.command.CommandMap commandMap = LunarArcPlatform.getServer().getCommandMap();

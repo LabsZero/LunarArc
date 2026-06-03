@@ -1,10 +1,12 @@
 package io.ampznetwork.lunararc.quilt;
 
+import io.ampznetwork.lunararc.common.LunarArcPlatform;
 import net.fabricmc.api.ModInitializer;
 
 public class LunarArcQuilt implements ModInitializer {
+
     @Override
     public void onInitialize() {
-        System.out.println("[LunarArc] Quilt Mod Initialized");
+        LunarArcPlatform.registerBridge(new QuiltBridge());
     }
 }

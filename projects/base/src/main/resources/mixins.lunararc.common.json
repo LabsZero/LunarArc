@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "refmap": "mixins.lunararc.common.refmap.json",
   "mixins": [
+    "core.server.CraftPlayerMixin",
     "core.server.MinecraftServerMixin",
     "core.server.MinecraftServerAccessor",
     "core.server.PlayerListAccessor",

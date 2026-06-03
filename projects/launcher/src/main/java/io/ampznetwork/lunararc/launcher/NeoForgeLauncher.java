@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class NeoForgeLauncher {
-    public static void launch(Path workingDir) throws Exception {
+    public static void launch(Path workingDir, Path selfPath) throws Exception {
         Path libDir = Paths.get("libraries");
         if (!Files.exists(libDir)) {
             System.err.println("[LunarArc] Error: 'libraries' folder missing. Installation may have failed.");
@@ -44,6 +44,11 @@ public class NeoForgeLauncher {
                 }
             }
         }
+
+        // Deploy the LunarArc JAR into mods/ so FancyModLoader discovers it as a
+        // real mod and applies its mixin configs. The legacy classpath is NOT
+        // scanned for mods in production, so the mods/ folder is required here.
+        LauncherUtils.deployBridge(selfPath);
 
         command.add("--nogui");
 

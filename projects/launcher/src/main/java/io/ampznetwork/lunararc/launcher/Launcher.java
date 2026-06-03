@@ -36,87 +36,72 @@ public class Launcher {
                 Files.createDirectories(lunararcDir);
             }
 
-            // Platform persistence logic
-            Path configPath = workingDir.resolve("lunararc.conf");
-            Properties config = new Properties();
-            String choice = "";
-            
-            if (Files.exists(configPath)) {
-                try (InputStream in = Files.newInputStream(configPath)) {
-                    config.load(in);
-                    choice = config.getProperty("platform", "");
-                }
-            }
+            // Platform selection. Each platform-specific jar bakes a
+            // "LunarArc-Platform" manifest attribute, so when the user runs e.g.
+            // the NeoForge jar we launch it directly without prompting. Only a
+            // universal/unmarked jar falls back to the persisted/prompted choice.
+            String choice = platformChoiceFromManifest();
 
             if (choice == null || choice.isEmpty()) {
-                System.out.println(TranslationManager.get("platform.select_header"));
-                System.out.println(TranslationManager.get("platform.neoforge", minecraftVersion));
-                System.out.println(TranslationManager.get("platform.forge", minecraftVersion));
-                System.out.println(TranslationManager.get("platform.fabric", minecraftVersion));
-                System.out.println(TranslationManager.get("platform.quilt", minecraftVersion));
-                System.out.println();
-                System.out.print(TranslationManager.get("platform.select_prompt"));
+                Path configPath = workingDir.resolve("lunararc.conf");
+                Properties config = new Properties();
 
-                Scanner scanner = new Scanner(System.in);
-                choice = scanner.nextLine();
-                
-                config.setProperty("platform", choice);
-                try (java.io.OutputStream out = Files.newOutputStream(configPath)) {
-                    config.store(out, "LunarArc Server Configuration");
+                if (Files.exists(configPath)) {
+                    try (InputStream in = Files.newInputStream(configPath)) {
+                        config.load(in);
+                        choice = config.getProperty("platform", "");
+                    }
                 }
-            } else {
-                ConsoleUI.printStep("step.auto_selecting", choice, configPath.getFileName());
+
+                if (choice == null || choice.isEmpty()) {
+                    System.out.println(TranslationManager.get("platform.select_header"));
+                    System.out.println(TranslationManager.get("platform.neoforge", minecraftVersion));
+                    System.out.println(TranslationManager.get("platform.forge", minecraftVersion));
+                    System.out.println(TranslationManager.get("platform.fabric", minecraftVersion));
+                    System.out.println(TranslationManager.get("platform.quilt", minecraftVersion));
+                    System.out.println();
+                    System.out.print(TranslationManager.get("platform.select_prompt"));
+
+                    Scanner scanner = new Scanner(System.in);
+                    choice = scanner.nextLine();
+
+                    config.setProperty("platform", choice);
+                    try (java.io.OutputStream out = Files.newOutputStream(configPath)) {
+                        config.store(out, "LunarArc Server Configuration");
+                    }
+                } else {
+                    ConsoleUI.printStep("step.auto_selecting", choice, configPath.getFileName());
+                }
             }
 
-            // Clean mod folder logic (Baked-in strategy)
+            // Clean up any legacy bridge files we may have left in mods/ in older versions
             Path modsDir = Paths.get("mods");
             if (Files.exists(modsDir)) {
-                ConsoleUI.printStep("step.cleaning_mods");
                 Files.list(modsDir)
                         .filter(p -> p.getFileName().toString().toLowerCase().contains("lunararc"))
-                        .forEach(p -> {
-                            try {
-                                Files.delete(p);
-                            } catch (Exception ignored) {
-                            }
-                        });
-            }
-            if (!Files.exists(modsDir))
-                Files.createDirectories(modsDir);
-
-            // Stealth copy the current jar to mods as a platform mod
-            Path selfPath = Paths.get(Launcher.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            String platformName = "";
-            switch (choice) {
-                case "1": platformName = "neoforge"; break;
-                case "2": platformName = "forge"; break;
-                case "3": platformName = "fabric"; break;
-                case "4": platformName = "quilt"; break;
+                        .forEach(p -> { try { Files.delete(p); } catch (Exception ignored) {} });
             }
 
-            if (!platformName.isEmpty()) {
-                ConsoleUI.printStep("step.deploying_bridge", platformName);
-                Path destPath = modsDir.resolve(".lunararc-" + platformName + ".jar");
-                Files.copy(selfPath, destPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                destPath.toFile().deleteOnExit();
-            }
+            // Resolve the self-JAR path once; platform launchers use it for classpath injection
+            Path selfPath = Paths.get(Launcher.class.getProtectionDomain().getCodeSource().getLocation().toURI())
+                    .toAbsolutePath();
 
             switch (choice) {
                 case "1":
                     ConsoleUI.printHeader("NeoForge Boot Sequence");
-                    NeoForgeInstaller.install(lunararcDir, versions);
+                    NeoForgeInstaller.install(lunararcDir, versions, selfPath);
                     break;
                 case "2":
                     ConsoleUI.printHeader("Forge Boot Sequence");
-                    ForgeInstaller.install(lunararcDir, versions);
+                    ForgeInstaller.install(lunararcDir, versions, selfPath);
                     break;
                 case "3":
                     ConsoleUI.printHeader("Fabric Boot Sequence");
-                    FabricInstaller.install(lunararcDir, versions);
+                    FabricInstaller.install(lunararcDir, versions, selfPath);
                     break;
                 case "4":
                     ConsoleUI.printHeader("Quilt Boot Sequence");
-                    QuiltInstaller.install(lunararcDir, versions);
+                    QuiltInstaller.install(lunararcDir, versions, selfPath);
                     break;
                 default:
                     ConsoleUI.printError("error.invalid_selection");
@@ -126,6 +111,41 @@ public class Launcher {
         } catch (Exception e) {
             ConsoleUI.printError("error.critical_failure");
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Resolves the boot platform from this jar's {@code LunarArc-Platform}
+     * manifest attribute, mapping it to the numeric menu choice. Returns
+     * {@code null} for a universal/unmarked jar so the caller falls back to the
+     * persisted/prompted selection.
+     */
+    private static String platformChoiceFromManifest() {
+        try {
+            Path self = Paths.get(
+                    Launcher.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            if (!Files.isRegularFile(self)) {
+                return null;
+            }
+            try (java.util.jar.JarFile jar = new java.util.jar.JarFile(self.toFile())) {
+                java.util.jar.Manifest manifest = jar.getManifest();
+                if (manifest == null) {
+                    return null;
+                }
+                String platform = manifest.getMainAttributes().getValue("LunarArc-Platform");
+                if (platform == null) {
+                    return null;
+                }
+                switch (platform.trim().toLowerCase()) {
+                    case "neoforge": return "1";
+                    case "forge":    return "2";
+                    case "fabric":   return "3";
+                    case "quilt":    return "4";
+                    default:         return null;
+                }
+            }
+        } catch (Exception ignored) {
+            return null;
         }
     }
 

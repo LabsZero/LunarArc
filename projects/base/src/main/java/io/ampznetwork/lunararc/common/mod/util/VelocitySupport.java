@@ -24,7 +24,7 @@ public class VelocitySupport {
         return new VelocityForwardQuery(buf);
     }
 
-    public static boolean checkIntegrity(final FriendlyByteBuf buf, String secret) {
+    public static boolean checkIntegrity(final FriendlyByteBuf buf, byte[] secret) {
         final byte[] signature = new byte[32];
         buf.readBytes(signature);
 
@@ -33,7 +33,7 @@ public class VelocitySupport {
 
         try {
             final Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret.getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
+            mac.init(new SecretKeySpec(secret, "HmacSHA256"));
             final byte[] mySignature = mac.doFinal(data);
             return MessageDigest.isEqual(signature, mySignature);
         } catch (final InvalidKeyException | NoSuchAlgorithmException e) {

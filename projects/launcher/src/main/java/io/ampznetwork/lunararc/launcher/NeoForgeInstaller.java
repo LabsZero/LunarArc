@@ -5,7 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class NeoForgeInstaller {
-    public static void install(Path workingDir, java.util.Properties versions) throws Exception {
+    public static void install(Path workingDir, java.util.Properties versions, Path selfPath) throws Exception {
         ConsoleUI.printStep("Checking NeoForge installation...");
 
         String mcVersion = LauncherUtils.requireVersion(versions, "minecraft");
@@ -51,6 +51,6 @@ public class NeoForgeInstaller {
         }
 
         ConsoleUI.printSuccess("NeoForge environment ready.");
-        NeoForgeLauncher.launch(workingDir);
+        NeoForgeLauncher.launch(workingDir, selfPath);
     }
 }

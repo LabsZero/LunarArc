@@ -12,16 +12,39 @@ public class CraftItemStack extends ItemStack {
         this.handle = handle;
     }
 
+    @Override
+    public @NotNull Material getType() {
+        if (handle == null || handle.isEmpty()) return Material.AIR;
+        try {
+            net.minecraft.resources.ResourceLocation key =
+                    net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(handle.getItem());
+            return Material.valueOf(key.getPath().toUpperCase(java.util.Locale.ROOT));
+        } catch (Exception ignored) {
+            return Material.AIR;
+        }
+    }
+
+    @Override
+    public int getAmount() {
+        return handle != null ? handle.getCount() : 0;
+    }
+
     public static ItemStack asBukkitCopy(net.minecraft.world.item.ItemStack stack) {
         if (stack == null || stack.isEmpty()) return null;
-        
+
         Material material = Material.AIR;
         try {
             net.minecraft.resources.ResourceLocation key = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
             material = Material.valueOf(key.getPath().toUpperCase(java.util.Locale.ROOT));
         } catch (Exception ignored) {}
-        
-        return new ItemStack(material, stack.getCount());
+
+        try {
+            return new ItemStack(material, stack.getCount());
+        } catch (IllegalArgumentException ignored) {
+            // Material doesn't pass isItem() check in this Paper build (e.g. block-only materials);
+            // wrap the NMS stack directly so callers get correct type/amount via overrides.
+            return new CraftItemStack(stack.copy());
+        }
     }
 
     public static net.minecraft.world.item.ItemStack asNMSCopy(@Nullable ItemStack stack) {

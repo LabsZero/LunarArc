@@ -2,6 +2,7 @@ package io.ampznetwork.lunararc.common.mixin.core.server;
 
 import io.ampznetwork.lunararc.common.LunarArcPlatform;
 import org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer;
+import org.bukkit.craftbukkit.v1_21_R1.event.CraftEventFactory;
 import net.minecraft.network.protocol.game.ServerboundChatPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -47,6 +48,14 @@ public abstract class ServerGamePacketListenerImplMixin {
             if (isCancelled) {
                 ci.cancel();
             }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    @Inject(method = "onDisconnect", at = @At("HEAD"))
+    private void lunararc$onDisconnect(CallbackInfo ci) {
+        try {
+            CraftEventFactory.callPlayerQuitEvent(this.player);
         } catch (Throwable ignored) {
         }
     }

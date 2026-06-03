@@ -72,18 +72,17 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge {
 
     @Inject(method = "runServer", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;initServer()Z", shift = At.Shift.AFTER))
     private void lunararc$afterServerInit(CallbackInfo ci) {
-        lunararc$logger.info("Creating CraftServer bridge...");
-        PlayerList playerList = ((MinecraftServerAccessor) this).getPlayerList();
-        org.bukkit.craftbukkit.v1_21_R1.CraftServer craftServer = new org.bukkit.craftbukkit.v1_21_R1.CraftServer(
-                (MinecraftServer) (Object) this, playerList);
+        lunararc$logger.info("Creating CraftServer bridge via platform factory...");
+
+        org.bukkit.craftbukkit.v1_21_R1.CraftServer craftServer =
+                LunarArcPlatform.createCraftServer((MinecraftServer) (Object) this);
         LunarArcPlatform.setServer(craftServer);
 
         loadPlugins();
         enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
-    }
-
-    @Inject(method = "loadLevel", at = @At("TAIL"))
-    private void lunararc$afterLevelLoad(CallbackInfo ci) {
+        // loadLevel() is called inside initServer(), so the world is already loaded
+        // by the time this inject fires — enable POSTWORLD here rather than in a
+        // separate loadLevel() TAIL inject (which would fire before the bridge exists).
         enablePlugins(org.bukkit.plugin.PluginLoadOrder.POSTWORLD);
     }
 

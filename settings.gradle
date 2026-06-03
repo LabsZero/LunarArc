@@ -11,29 +11,38 @@ pluginManagement {
 
 rootProject.name = 'LunarArc'
 
+// Shared API surface
 include 'api'
 project(':api').projectDir = file('projects/api')
 
-include 'base'
-project(':base').projectDir = file('projects/base')
+// Common hybrid-server implementation (mixins, bridges, Paper stubs, remapper)
+// Analogous to arclight-common / io.ampznetwork.lunararc.common.*
+include 'lunararc-common'
+project(':lunararc-common').projectDir = file('projects/base')
 
-include 'core'
-project(':core').projectDir = file('projects/core')
+// Platform-specific implementations
+// Analogous to arclight-neoforge / arclight-forge / arclight-fabric
+include 'lunararc-neoforge'
+project(':lunararc-neoforge').projectDir = file('projects/core')
 
-include 'launcher'
-project(':launcher').projectDir = file('projects/launcher')
+include 'lunararc-forge'
+project(':lunararc-forge').projectDir = file('projects/loaders/forge')
 
+include 'lunararc-fabric'
+project(':lunararc-fabric').projectDir = file('projects/loaders/fabric')
+
+include 'lunararc-quilt'
+project(':lunararc-quilt').projectDir = file('projects/loaders/quilt')
+
+// Installer — installs mod loaders automatically at runtime (analogous to installer subproject)
+include 'installer'
+project(':installer').projectDir = file('projects/launcher')
+
+// Internationalisation (analogous to i18n-config)
 include 'i18n'
 project(':i18n').projectDir = file('projects/i18n')
 
+// Bootstrap fat-jar assembly and relocated dependency library
 include 'bootstrap'
 include 'libs'
 project(':libs').projectDir = file('projects/libs')
-
-// Platform Loaders
-include 'forge'
-project(':forge').projectDir = file('projects/loaders/forge')
-include 'fabric'
-project(':fabric').projectDir = file('projects/loaders/fabric')
-include 'quilt'
-project(':quilt').projectDir = file('projects/loaders/quilt')

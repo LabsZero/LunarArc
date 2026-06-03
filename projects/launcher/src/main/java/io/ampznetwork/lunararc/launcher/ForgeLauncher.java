@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ForgeLauncher {
-    public static void launch(Path workingDir) throws Exception {
+    public static void launch(Path workingDir, Path selfPath) throws Exception {
         System.out.println("Preparing Forge launch arguments...");
 
         Path libDir = Paths.get("libraries");
@@ -29,11 +29,6 @@ public class ForgeLauncher {
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
 
-        Path selfPath = null;
-        try {
-            selfPath = Paths.get(ForgeLauncher.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toAbsolutePath();
-        } catch (Exception ignored) {}
-
         // Parse win_args.txt content
         for (String line : jvmArgs) {
             line = line.trim();
@@ -50,6 +45,11 @@ public class ForgeLauncher {
                 }
             }
         }
+
+        // Deploy the LunarArc JAR into mods/ so FML discovers it as a real mod and
+        // applies its mixin configs. The legacy classpath is NOT scanned for mods
+        // in production, so the mods/ folder is required here.
+        LauncherUtils.deployBridge(selfPath);
 
         command.add("--nogui");
 

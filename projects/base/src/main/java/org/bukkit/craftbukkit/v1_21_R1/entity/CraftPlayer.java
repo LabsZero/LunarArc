@@ -12,7 +12,6 @@ import java.util.Set;
 import java.util.Collections;
 import java.net.InetSocketAddress;
 import net.md_5.bungee.api.chat.BaseComponent;
-import com.destroystokyo.paper.Title;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.bossbar.BossBar;
 import org.bukkit.map.MapView;
@@ -226,7 +225,17 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public boolean teleport(Location location) { return super.teleport(location); }
     @Override public Set<Player> getTrackedPlayers() { return Collections.emptySet(); }
 
-    @Override public Player.Spigot spigot() { return new Player.Spigot(); }
+    @Override
+    public Player.Spigot spigot() {
+        return new Player.Spigot() {
+            @Override
+            public void sendMessage(net.md_5.bungee.api.chat.BaseComponent... components) {
+                if (components == null || components.length == 0) return;
+                String text = new net.md_5.bungee.api.chat.TextComponent(components).toLegacyText();
+                CraftPlayer.this.sendMessage(text);
+            }
+        };
+    }
     @Override public boolean listPlayer(Player player) { return true; }
     @Override public boolean unlistPlayer(Player player) { return true; }
     @Override public boolean isListed(Player player) { return true; }
@@ -254,9 +263,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public net.kyori.adventure.text.Component name() { return net.kyori.adventure.text.Component.text(getName()); }
     @Override public void sendEntityEffect(EntityEffect effect, Entity entity) {}
     @Override public void showTitle(net.kyori.adventure.title.Title title) { getHandle().sendSystemMessage(net.minecraft.network.chat.Component.literal("Title: " + title.toString())); }
+    @Override public void updateTitle(@NotNull com.destroystokyo.paper.Title title) {}
     @Override public void clearTitle() {}
-    @Override public void sendTitle(com.destroystokyo.paper.Title title) {}
-    @Override public void updateTitle(com.destroystokyo.paper.Title title) {}
     @Override public void setTitleTimes(int fadeIn, int stay, int fadeOut) {}
     @Override public void setSubtitle(BaseComponent[] subtitle) {}
     @Override public void setSubtitle(BaseComponent subtitle) {}
@@ -367,7 +375,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public float getCooledAttackStrength(float adjustTicks) { return 1.0f; }
     @Override public void resetCooldown() {}
     @Override public <T> T getClientOption(com.destroystokyo.paper.ClientOption<T> option) { return null; }
-    @Override public PlayerProfile getPlayerProfile() { return null; }
+    @Override public PlayerProfile getPlayerProfile() {
+        return new io.ampznetwork.lunararc.common.server.LunarArcPlayerProfile(getUniqueId(), getName());
+    }
     @Override public void setPlayerProfile(PlayerProfile profile) {}
     @Override public boolean isAllowingServerListings() { return true; }
     @Override public void showDemoScreen() {}
@@ -412,11 +422,14 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public double getHealthScale() { return 20.0; }
     @Override public Entity getSpectatorTarget() { return null; }
     @Override public void setSpectatorTarget(Entity entity) {}
+    @Override public void sendTitle(@NotNull com.destroystokyo.paper.Title title) {}
     @Override public void sendTitle(String title, String subtitle) {}
     @Override public void sendTitle(String title, String subtitle, int fadeIn, int stay, int fadeOut) {}
     @Override public void resetTitle() {}
     @Override public void removeResourcePacks() {}
     @Override public void removeResourcePack(UUID id) {}
+    @Override public void clearResourcePacks() {}
+    @Override public void sendResourcePacks(@NotNull net.kyori.adventure.resource.ResourcePackRequest request) {}
     @Override public void addResourcePack(UUID id, String url, byte[] hash, String prompt, boolean force) {}
     @Override public org.bukkit.event.player.PlayerResourcePackStatusEvent.Status getResourcePackStatus() { return org.bukkit.event.player.PlayerResourcePackStatusEvent.Status.SUCCESSFULLY_LOADED; }
     @Override public void setResourcePack(String url) {}
@@ -505,8 +518,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public float getExhaustion() { return 0; }
     @Override public boolean hasCooldown(Material material) { return false; }
     @Override public void setCooldown(Material material, int ticks) {}
-    @Override public GameMode getGameMode() { return GameMode.SURVIVAL; }
-    @Override public void setGameMode(GameMode mode) {}
+    @Override public GameMode getGameMode() { return fromNMS(getHandle().gameMode.getGameModeForPlayer()); }
+    @Override public void setGameMode(GameMode mode) { getHandle().setGameMode(toNMS(mode)); }
     @Override public Entity releaseRightShoulderEntity() { return null; }
     @Override public Entity releaseLeftShoulderEntity() { return null; }
     @Override public Entity getShoulderEntityLeft() { return null; }
@@ -538,22 +551,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public float getAttackCooldown() { return 0; }
     @Override public int getExpToLevel() { return 0; }
     @Override public Location getPotentialBedLocation() { return null; }
-    @Override 
-    public PlayerInventory getInventory() { 
-        return (PlayerInventory) java.lang.reflect.Proxy.newProxyInstance(
-            PlayerInventory.class.getClassLoader(),
-            new Class<?>[] { PlayerInventory.class },
-            (p, m, a) -> {
-                if (m.getName().equals("getItemInMainHand")) return new ItemStack(Material.AIR);
-                if (m.getName().equals("getItemInOffHand")) return new ItemStack(Material.AIR);
-                if (m.getName().equals("getArmorContents")) return new ItemStack[4];
-                if (m.getName().equals("getContents")) return new ItemStack[36];
-                if (m.getReturnType().equals(ItemStack.class)) return new ItemStack(Material.AIR);
-                if (m.getReturnType().equals(ItemStack[].class)) return new ItemStack[0];
-                if (m.getReturnType().equals(int.class)) return 0;
-                return null;
-            }
-        ); 
+    @Override
+    public PlayerInventory getInventory() {
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftPlayerInventory(getHandle().getInventory(), this);
     }
     @Override public Inventory getEnderChest() { return null; }
     @Override public MainHand getMainHand() { return MainHand.RIGHT; }
@@ -729,4 +729,24 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
     @Override public int getArrowsInBody() { return 0; }
     @Override public int getNoActionTicks() { return 0; }
+
+    // Game mode mapping helpers
+    private static net.minecraft.world.level.GameType toNMS(GameMode mode) {
+        return switch (mode) {
+            case SURVIVAL -> net.minecraft.world.level.GameType.SURVIVAL;
+            case CREATIVE -> net.minecraft.world.level.GameType.CREATIVE;
+            case ADVENTURE -> net.minecraft.world.level.GameType.ADVENTURE;
+            case SPECTATOR -> net.minecraft.world.level.GameType.SPECTATOR;
+        };
+    }
+
+    private static GameMode fromNMS(net.minecraft.world.level.GameType type) {
+        return switch (type) {
+            case SURVIVAL -> GameMode.SURVIVAL;
+            case CREATIVE -> GameMode.CREATIVE;
+            case ADVENTURE -> GameMode.ADVENTURE;
+            case SPECTATOR -> GameMode.SPECTATOR;
+            default -> GameMode.SURVIVAL;
+        };
+    }
 }

@@ -7,11 +7,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class QuiltLauncher {
-    public static void launch(Path workingDir) throws Exception {
+    public static void launch(Path workingDir, Path selfPath) throws Exception {
         System.out.println("Launching Quilt...");
-        
+
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
+
+        // Quilt Loader inherits Fabric Loader's fabric.addMods discovery mechanism.
+        if (selfPath != null) {
+            command.add("-Dfabric.addMods=" + selfPath.toString());
+        }
+
         command.add("-jar");
         command.add("quilt-server-launch.jar");
         command.add("--nogui");

@@ -162,20 +162,19 @@ public class CraftServer implements Server {
                 new Class<?>[] { UnsafeValues.class },
                 (proxy, method, args) -> {
                     if (method.getName().equals("getVersionFetcher")) {
-                        return new com.destroystokyo.paper.util.VersionFetcher() {
-                            @Override
-                            public long getCacheTime() {
-                                return 0;
-                            }
-
-                            @Override
-                            public @NotNull net.kyori.adventure.text.Component getVersionMessage(
-                                    @NotNull String serverVersion) {
-                                return net.kyori.adventure.text.Component.text(
-                                        io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.projectName()
-                                                + " " + serverVersion);
-                            }
-                        };
+                        // VersionFetcher was removed in Paper 1.19+; return via reflection to avoid compile-time dep
+                        try {
+                            Class<?> vfClass = Class.forName("com.destroystokyo.paper.util.VersionFetcher");
+                            return java.lang.reflect.Proxy.newProxyInstance(vfClass.getClassLoader(),
+                                new Class<?>[]{ vfClass },
+                                (vp, vm, va) -> {
+                                    if (vm.getName().equals("getCacheTime")) return 0L;
+                                    return net.kyori.adventure.text.Component.text(
+                                        io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.projectName());
+                                });
+                        } catch (ClassNotFoundException ignored) {
+                            return null;
+                        }
                     }
                     if (method.getName().equals("getDataVersion"))
                         return io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.dataVersion().orElse(0);
@@ -361,7 +360,9 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull String getVersion() {
-        return "1.21.1-R0.1-SNAPSHOT (LunarArc)";
+        // Must match Paper's "git-Paper-NNN (MC: X.Y.Z)" format so that plugins
+        // like WorldEdit can extract the MC version via the "(MC: ...)" pattern.
+        return io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.projectVersion();
     }
 
     @Override
@@ -815,37 +816,44 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, @NotNull InventoryType type) {
-        return null;
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(owner, type);
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, @NotNull InventoryType type,
             @NotNull String title) {
-        return null;
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(
+                owner, type.getDefaultSize(), type, net.kyori.adventure.text.Component.text(title));
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, @NotNull InventoryType type,
             @NotNull net.kyori.adventure.text.Component title) {
-        return null;
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(
+                owner, type.getDefaultSize(), type, title);
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, int size)
             throws IllegalArgumentException {
-        return null;
+        if (size <= 0 || size % 9 != 0) throw new IllegalArgumentException("size must be positive multiple of 9");
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(
+                owner, size, net.kyori.adventure.text.Component.text("Chest"));
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, int size, @NotNull String title)
             throws IllegalArgumentException {
-        return null;
+        if (size <= 0 || size % 9 != 0) throw new IllegalArgumentException("size must be positive multiple of 9");
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(
+                owner, size, net.kyori.adventure.text.Component.text(title));
     }
 
     @Override
     public @NotNull Inventory createInventory(@Nullable InventoryHolder owner, int size,
             @NotNull net.kyori.adventure.text.Component title) throws IllegalArgumentException {
-        return null;
+        if (size <= 0 || size % 9 != 0) throw new IllegalArgumentException("size must be positive multiple of 9");
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftInventory(owner, size, title);
     }
 
     @Override
@@ -900,17 +908,23 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull OfflinePlayer getOfflinePlayer(@NotNull String name) {
-        return null;
+        Player online = getPlayer(name);
+        if (online != null) return online;
+        return new org.bukkit.craftbukkit.v1_21_R1.entity.CraftOfflinePlayer(
+                UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8)), name);
     }
 
     @Override
     public @NotNull OfflinePlayer getOfflinePlayer(@NotNull UUID id) {
-        return null;
+        Player online = getPlayer(id);
+        if (online != null) return online;
+        return new org.bukkit.craftbukkit.v1_21_R1.entity.CraftOfflinePlayer(id, null);
     }
 
     @Override
     public @Nullable OfflinePlayer getOfflinePlayerIfCached(@NotNull String name) {
-        return null;
+        Player online = getPlayer(name);
+        return online;
     }
 
     @Override
@@ -940,13 +954,15 @@ public class CraftServer implements Server {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public @NotNull BanList getBanList(@NotNull BanList.Type type) {
-        return null;
+        return type == BanList.Type.IP ? CraftBanList.IP_BANS : CraftBanList.NAME_BANS;
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public @NotNull <B extends BanList<E>, E> B getBanList(@NotNull io.papermc.paper.ban.BanListType<B> type) {
-        return null;
+        return (B) CraftBanList.NAME_BANS;
     }
 
     @Override
@@ -1000,18 +1016,37 @@ public class CraftServer implements Server {
                 new Class<?>[] { io.papermc.paper.threadedregions.scheduler.AsyncScheduler.class },
                 (proxy, method, args) -> {
                     if (method.getName().startsWith("run") || method.getName().startsWith("create")) {
-                        for (Object arg : args) {
-                            if (arg instanceof Runnable r) {
-                                new Thread(r).start();
-                                break;
-                            }
-                            if (arg instanceof java.util.function.Consumer c) {
-                                new Thread(() -> c.accept(null)).start();
-                                break;
+                        io.papermc.paper.threadedregions.scheduler.ScheduledTask task = makeScheduledTaskProxy();
+                        if (args != null) {
+                            for (Object arg : args) {
+                                if (arg instanceof java.util.function.Consumer c) {
+                                    new Thread(() -> c.accept(task)).start();
+                                    return task;
+                                }
+                                if (arg instanceof Runnable r) {
+                                    new Thread(r).start();
+                                    return task;
+                                }
                             }
                         }
+                        return task;
                     }
+                    if (method.getReturnType() == boolean.class) return false;
                     return null;
+                });
+    }
+
+    private static io.papermc.paper.threadedregions.scheduler.ScheduledTask makeScheduledTaskProxy() {
+        return (io.papermc.paper.threadedregions.scheduler.ScheduledTask) java.lang.reflect.Proxy.newProxyInstance(
+                io.papermc.paper.threadedregions.scheduler.ScheduledTask.class.getClassLoader(),
+                new Class<?>[] { io.papermc.paper.threadedregions.scheduler.ScheduledTask.class },
+                (p, m, a) -> switch (m.getName()) {
+                    case "isCancelled", "isRunning" -> false;
+                    case "cancel", "getOwningPlugin" -> null;
+                    case "hashCode" -> System.identityHashCode(p);
+                    case "equals" -> p == (a != null && a.length > 0 ? a[0] : null);
+                    case "toString" -> "LunarArcScheduledTask";
+                    default -> m.getReturnType() == boolean.class ? false : null;
                 });
     }
 
@@ -1022,19 +1057,24 @@ public class CraftServer implements Server {
                 new Class<?>[] { io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler.class },
                 (proxy, method, args) -> {
                     if (method.getName().startsWith("run") || method.getName().startsWith("execute")) {
-                        for (Object arg : args) {
-                            if (arg instanceof Runnable r) {
-                                ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
-                                        .lunararc$queueTask(r);
-                                break;
-                            }
-                            if (arg instanceof java.util.function.Consumer c) {
-                                ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
-                                        .lunararc$queueTask(() -> c.accept(null));
-                                break;
+                        io.papermc.paper.threadedregions.scheduler.ScheduledTask task = makeScheduledTaskProxy();
+                        if (args != null) {
+                            for (Object arg : args) {
+                                if (arg instanceof java.util.function.Consumer c) {
+                                    ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
+                                            .lunararc$queueTask(() -> c.accept(task));
+                                    return task;
+                                }
+                                if (arg instanceof Runnable r) {
+                                    ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
+                                            .lunararc$queueTask(r);
+                                    return task;
+                                }
                             }
                         }
+                        return task;
                     }
+                    if (method.getReturnType() == boolean.class) return false;
                     return null;
                 });
     }
@@ -1046,19 +1086,24 @@ public class CraftServer implements Server {
                 new Class<?>[] { io.papermc.paper.threadedregions.scheduler.RegionScheduler.class },
                 (proxy, method, args) -> {
                     if (method.getName().startsWith("run") || method.getName().startsWith("execute")) {
-                        for (Object arg : args) {
-                            if (arg instanceof Runnable r) {
-                                ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
-                                        .lunararc$queueTask(r);
-                                break;
-                            }
-                            if (arg instanceof java.util.function.Consumer c) {
-                                ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
-                                        .lunararc$queueTask(() -> c.accept(null));
-                                break;
+                        io.papermc.paper.threadedregions.scheduler.ScheduledTask task = makeScheduledTaskProxy();
+                        if (args != null) {
+                            for (Object arg : args) {
+                                if (arg instanceof java.util.function.Consumer c) {
+                                    ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
+                                            .lunararc$queueTask(() -> c.accept(task));
+                                    return task;
+                                }
+                                if (arg instanceof Runnable r) {
+                                    ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) console)
+                                            .lunararc$queueTask(r);
+                                    return task;
+                                }
                             }
                         }
+                        return task;
                     }
+                    if (method.getReturnType() == boolean.class) return false;
                     return null;
                 });
     }
@@ -1221,7 +1266,7 @@ public class CraftServer implements Server {
     @Override
     public @NotNull com.destroystokyo.paper.profile.PlayerProfile createProfileExact(@Nullable UUID uuid,
             @Nullable String name) {
-        return null;
+        return new io.ampznetwork.lunararc.common.server.LunarArcPlayerProfile(uuid, name);
     }
 
     @Override
@@ -1431,24 +1476,44 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull BlockData createBlockData(@NotNull Material material) {
-        return null;
+        return createBlockData(material, (Consumer<? super BlockData>) null);
     }
 
     @Override
     public @NotNull BlockData createBlockData(@NotNull Material material,
             @Nullable Consumer<? super BlockData> consumer) {
-        return null;
+        net.minecraft.resources.ResourceLocation key = net.minecraft.resources.ResourceLocation.parse(
+                material.getKey().toString());
+        net.minecraft.world.level.block.Block block =
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(key);
+        net.minecraft.world.level.block.state.BlockState state = (block != null)
+                ? block.defaultBlockState()
+                : net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+        BlockData bd = org.bukkit.craftbukkit.v1_21_R1.block.data.CraftBlockData.create(state);
+        if (consumer != null) consumer.accept(bd);
+        return bd;
     }
 
     @Override
     public @NotNull BlockData createBlockData(@NotNull String data) throws IllegalArgumentException {
-        return null;
+        // Parse "minecraft:stone[waterlogged=false]" style strings
+        String blockStr = data.contains("[") ? data.substring(0, data.indexOf('[')) : data;
+        net.minecraft.resources.ResourceLocation key = net.minecraft.resources.ResourceLocation.parse(blockStr);
+        net.minecraft.world.level.block.Block block =
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(key);
+        net.minecraft.world.level.block.state.BlockState state = (block != null)
+                ? block.defaultBlockState()
+                : net.minecraft.world.level.block.Blocks.STONE.defaultBlockState();
+        return org.bukkit.craftbukkit.v1_21_R1.block.data.CraftBlockData.create(state);
     }
 
     @Override
     public @NotNull BlockData createBlockData(@Nullable Material material, @Nullable String data)
             throws IllegalArgumentException {
-        return null;
+        if (material != null) return createBlockData(material);
+        if (data != null) return createBlockData(data);
+        return org.bukkit.craftbukkit.v1_21_R1.block.data.CraftBlockData.create(
+                net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
     }
 
     @Override
@@ -1458,6 +1523,21 @@ public class CraftServer implements Server {
 
     @Override
     public @Nullable Entity getEntity(@NotNull UUID uuid) {
+        // Search the player cache first (fastest path)
+        Entity cached = playerCache.get(uuid);
+        if (cached != null) return cached;
+        // Use reflection for both getEntity(UUID) and getBukkitEntity(): the former
+        // may not be on the vanilla NMS compile classpath; the latter is Paper-specific.
+        for (net.minecraft.server.level.ServerLevel level : console.getAllLevels()) {
+            try {
+                java.lang.reflect.Method getEntity = level.getClass().getMethod("getEntity", java.util.UUID.class);
+                Object nmsEntity = getEntity.invoke(level, uuid);
+                if (nmsEntity != null) {
+                    java.lang.reflect.Method getBukkit = nmsEntity.getClass().getMethod("getBukkitEntity");
+                    return (Entity) getBukkit.invoke(nmsEntity);
+                }
+            } catch (Exception ignored) {}
+        }
         return null;
     }
 
@@ -1489,13 +1569,13 @@ public class CraftServer implements Server {
     @Override
     public @NotNull KeyedBossBar createBossBar(@NotNull NamespacedKey key, @Nullable String title,
             @NotNull BarColor color, @NotNull BarStyle style, @NotNull BarFlag... flags) {
-        return null;
+        return io.ampznetwork.lunararc.common.server.LunarArcBossBar.createKeyed(key, title, color, style, flags);
     }
 
     @Override
     public @NotNull BossBar createBossBar(@Nullable String title, @NotNull BarColor color, @NotNull BarStyle style,
             @NotNull BarFlag... flags) {
-        return null;
+        return io.ampznetwork.lunararc.common.server.LunarArcBossBar.create(title, color, style, flags);
     }
 
     @Override
@@ -1687,25 +1767,7 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull ScoreboardManager getScoreboardManager() {
-        return (ScoreboardManager) java.lang.reflect.Proxy.newProxyInstance(
-            ScoreboardManager.class.getClassLoader(),
-            new Class<?>[] { ScoreboardManager.class },
-            (p, m, a) -> {
-                if (m.getName().equals("getMainScoreboard")) {
-                    return java.lang.reflect.Proxy.newProxyInstance(
-                        org.bukkit.scoreboard.Scoreboard.class.getClassLoader(),
-                        new Class<?>[] { org.bukkit.scoreboard.Scoreboard.class },
-                        (sp, sm, sa) -> {
-                            if (sm.getName().equals("getTeams")) return Collections.emptySet();
-                            if (sm.getName().equals("getObjectives")) return Collections.emptySet();
-                            if (sm.getReturnType().equals(Set.class)) return Collections.emptySet();
-                            return null;
-                        }
-                    );
-                }
-                return null;
-            }
-        );
+        return io.ampznetwork.lunararc.common.server.LunarArcScoreboardManager.getInstance();
     }
 
     @Override
