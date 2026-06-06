@@ -96,14 +96,6 @@ public class Launcher {
                 }
             }
 
-            // Clean up any legacy bridge files we may have left in mods/ in older versions
-            Path modsDir = Paths.get("mods");
-            if (Files.exists(modsDir)) {
-                Files.list(modsDir)
-                        .filter(p -> p.getFileName().toString().toLowerCase().contains("lunararc"))
-                        .forEach(p -> { try { Files.delete(p); } catch (Exception ignored) {} });
-            }
-
             // Resolve the self-JAR path once; platform launchers use it for classpath injection
             Path selfPath = Paths.get(Launcher.class.getProtectionDomain().getCodeSource().getLocation().toURI())
                     .toAbsolutePath();

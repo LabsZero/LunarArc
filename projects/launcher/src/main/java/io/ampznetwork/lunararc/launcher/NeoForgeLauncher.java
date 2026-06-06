@@ -20,15 +20,9 @@ public class NeoForgeLauncher {
             return;
         }
 
-        // Deploy LunarArc to .lunararc/mods/ (hidden from users) instead of mods/
-        Path bridgeModsDir = deployBridgeToHiddenDir(selfPath);
-
-        // Tell FML to scan our hidden mods dir instead of (or in addition to) mods/
-        if (bridgeModsDir != null) {
-            String modsPath = bridgeModsDir.toAbsolutePath().toString();
-            System.setProperty("fml.modsDir", modsPath);
-            System.setProperty("fml.modFolder", modsPath);
-        }
+        // Deploy bridge to mods/ so FML's built-in ModsFolderLocator can discover it.
+        // FMLPaths.MODSDIR is always ./mods/ — there is no system-property override in FML 4.x.
+        deployBridgeToModsDir(selfPath);
 
         // Find args file
         Path argsFile = findArgsFile(libDir);
@@ -44,19 +38,17 @@ public class NeoForgeLauncher {
         }
     }
 
-    private static Path deployBridgeToHiddenDir(Path selfPath) {
+    private static void deployBridgeToModsDir(Path selfPath) {
         try {
-            Path modsDir = Paths.get(".lunararc", "mods");
+            Path modsDir = Paths.get("mods");
             Files.createDirectories(modsDir);
             if (selfPath != null && Files.exists(selfPath)) {
                 Path target = modsDir.resolve("lunararc-bridge.jar");
                 Files.copy(selfPath, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 System.out.println("[LunarArc] Bridge deployed to " + target.toAbsolutePath());
             }
-            return modsDir;
         } catch (Exception e) {
-            System.err.println("[LunarArc] Warning: could not deploy bridge to .lunararc/mods/: " + e.getMessage());
-            return null;
+            System.err.println("[LunarArc] Warning: could not deploy bridge to mods/: " + e.getMessage());
         }
     }
 
@@ -206,12 +198,6 @@ public class NeoForgeLauncher {
         List<String> jvmArgs = Files.readAllLines(argsFile);
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
-
-        // Propagate the bridge mods dir so FML finds lunararc-bridge.jar in the child JVM.
-        String modsDir = System.getProperty("fml.modsDir");
-        if (modsDir != null) command.add("-Dfml.modsDir=" + modsDir);
-        String modFolder = System.getProperty("fml.modFolder");
-        if (modFolder != null) command.add("-Dfml.modFolder=" + modFolder);
 
         for (String line : jvmArgs) {
             line = line.trim();
