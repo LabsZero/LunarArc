@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import net.minecraft.server.players.PlayerList;
 
-@Mixin(value = MinecraftServer.class, priority = 2000)
+@Mixin(value = MinecraftServer.class, priority = Integer.MAX_VALUE)
 public abstract class MinecraftServerMixin implements MinecraftServerBridge {
 
     @Unique
