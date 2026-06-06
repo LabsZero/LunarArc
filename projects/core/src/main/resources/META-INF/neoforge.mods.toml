@@ -4,8 +4,8 @@ license="Apache-3.0"
 
 [[mods]]
 modId="lunararc"
-version="$${file.jarVersion}"
-displayName="${project_name}"
+version="${file.jarVersion}"
+displayName="LunarArc"
 authors="Ampz Network"
 description="LunarArc Hybrid Server Core"
 
