@@ -32,8 +32,12 @@ public abstract class CommandSourceStackMixin
     }
 
     @Override
-    public CommandSender getExecutor() {
-        return getSender();
+    public org.bukkit.entity.Entity getExecutor() {
+        net.minecraft.world.entity.Entity entity = getEntity();
+        if (entity instanceof ServerPlayer sp) {
+            return ((EntityBridge) sp).lunararc$getBukkitEntity();
+        }
+        return null;
     }
 
     @Override

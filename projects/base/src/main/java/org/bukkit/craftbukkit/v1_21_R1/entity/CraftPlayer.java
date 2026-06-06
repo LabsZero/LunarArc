@@ -171,8 +171,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public boolean performCommand(String command) {
         try {
             String cmd = command.startsWith("/") ? command.substring(1) : command;
-            return getHandle().getServer().getCommands()
-                    .performPrefixedCommand(getHandle().createCommandSourceStack(), cmd) > 0;
+            getHandle().getServer().getCommands()
+                    .performPrefixedCommand(getHandle().createCommandSourceStack(), cmd);
+            return true;
         } catch (Throwable t) {
             return false;
         }
