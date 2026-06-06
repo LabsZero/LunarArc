@@ -76,48 +76,52 @@ public class NeoForgeLauncher {
     private static void sameJvmLaunch(Path selfPath, Path argsFile) throws Exception {
         System.out.println("[LunarArc] Launching NeoForge in-process (Arclight-style)...");
 
-        List<String> rawLines = Files.readAllLines(argsFile);
-        List<String> gameArgs = new ArrayList<>();
-        String mainClass = null;
-
-        for (String raw : rawLines) {
-            for (String token : raw.trim().split("\\s+")) {
-                if (token.isEmpty() || token.startsWith("#")) continue;
-
-                if (token.startsWith("-D")) {
-                    String kv = token.substring(2);
-                    int eq = kv.indexOf('=');
-                    if (eq > 0) {
-                        String key = kv.substring(0, eq);
-                        // Don't override the modsDir we already set
-                        if (!key.equals("fml.modsDir") && !key.equals("fml.modFolder")) {
-                            System.setProperty(key, kv.substring(eq + 1));
-                        }
-                    } else {
-                        System.setProperty(kv, "");
-                    }
-                } else if (token.startsWith("-X") || token.startsWith("-ea") || token.startsWith("-da")
-                        || token.startsWith("--add-") || token.startsWith("--module-path")
-                        || token.equals("-p") || token.startsWith("-javaagent")) {
-                    // JVM structural args — skip (cannot apply post-startup)
-                } else if (token.contains(File.separator) && (token.endsWith(".jar") || token.endsWith(".zip"))) {
-                    // Classpath JAR entry — inject into system classloader
-                    try {
-                        Path jar = Paths.get(token);
-                        if (Files.exists(jar)) {
-                            LunarArcAgent.instrumentation.appendToSystemClassLoaderSearch(new JarFile(jar.toFile()));
-                        }
-                    } catch (Exception ignored) {}
-                } else if (token.matches("[a-zA-Z][\\w.]+\\.[A-Z][\\w]*") && mainClass == null) {
-                    // Looks like a qualified main class name
-                    mainClass = token;
-                } else {
-                    gameArgs.add(token);
-                }
+        // Flatten all lines into one token list so index-based look-ahead works across lines.
+        List<String> tokens = new ArrayList<>();
+        for (String raw : Files.readAllLines(argsFile)) {
+            for (String tok : raw.trim().split("\\s+")) {
+                if (!tok.isEmpty() && !tok.startsWith("#")) tokens.add(tok);
             }
         }
 
-        // Inject LunarArc JAR so FML ServiceLoader can find IModLocatorService (future)
+        List<String> gameArgs = new ArrayList<>();
+        String mainClass = null;
+        int i = 0;
+        while (i < tokens.size()) {
+            String token = tokens.get(i++);
+
+            if (token.startsWith("-D")) {
+                String kv = token.substring(2);
+                int eq = kv.indexOf('=');
+                if (eq > 0) {
+                    String key = kv.substring(0, eq);
+                    if (!key.equals("fml.modsDir") && !key.equals("fml.modFolder"))
+                        System.setProperty(key, kv.substring(eq + 1));
+                } else {
+                    System.setProperty(kv, "");
+                }
+            } else if (token.equals("-p") || token.equals("--module-path")
+                    || token.equals("-cp") || token.equals("-classpath") || token.equals("--classpath")) {
+                // Two-part flag: consume the next token as the path list.
+                if (i < tokens.size()) addPathEntriesToClassLoader(tokens.get(i++));
+            } else if (token.startsWith("--module-path=")) {
+                addPathEntriesToClassLoader(token.substring("--module-path=".length()));
+            } else if (token.startsWith("--classpath=") || token.startsWith("-classpath=")) {
+                addPathEntriesToClassLoader(token.substring(token.indexOf('=') + 1));
+            } else if (token.startsWith("-X") || token.startsWith("-ea") || token.startsWith("-da")
+                    || token.startsWith("--add-") || token.startsWith("-javaagent")) {
+                // Other JVM-only args that cannot be applied post-startup — skip.
+            } else if (token.contains(File.separator) && (token.endsWith(".jar") || token.endsWith(".zip"))) {
+                // Bare JAR path (uncommon but possible in some args files).
+                addJarToClassLoader(Paths.get(token));
+            } else if (token.matches("[a-zA-Z][\\w.]+\\.[A-Z][\\w]*") && mainClass == null) {
+                mainClass = token;
+            } else {
+                gameArgs.add(token);
+            }
+        }
+
+        // Always inject the LunarArc JAR itself so FML's ServiceLoader sees LunarArcModLocator.
         if (selfPath != null && Files.exists(selfPath)) {
             LunarArcAgent.instrumentation.appendToSystemClassLoaderSearch(new JarFile(selfPath.toFile()));
         }
@@ -130,9 +134,31 @@ public class NeoForgeLauncher {
 
         gameArgs.add("--nogui");
         System.out.println("[LunarArc] Invoking NeoForge main: " + mainClass);
-        Method main = Class.forName(mainClass, true, ClassLoader.getSystemClassLoader())
-                .getMethod("main", String[].class);
-        main.invoke(null, (Object) gameArgs.toArray(new String[0]));
+        try {
+            Method main = Class.forName(mainClass, true, ClassLoader.getSystemClassLoader())
+                    .getMethod("main", String[].class);
+            main.invoke(null, (Object) gameArgs.toArray(new String[0]));
+        } catch (ClassNotFoundException e) {
+            System.err.println("[LunarArc] Same-JVM launch failed (" + e.getMessage() + "); falling back to child process.");
+            legacyLaunch(argsFile);
+        }
+    }
+
+    private static void addPathEntriesToClassLoader(String pathList) {
+        for (String entry : pathList.split(File.pathSeparator)) {
+            if (!entry.isEmpty()) addJarToClassLoader(Paths.get(entry));
+        }
+    }
+
+    private static void addJarToClassLoader(Path jar) {
+        String name = jar.toString();
+        if (!name.endsWith(".jar") && !name.endsWith(".zip")) return;
+        if (!Files.exists(jar)) return;
+        try {
+            LunarArcAgent.instrumentation.appendToSystemClassLoaderSearch(new JarFile(jar.toFile()));
+        } catch (Exception e) {
+            System.err.println("[LunarArc] Warning: could not inject " + jar.getFileName() + ": " + e.getMessage());
+        }
     }
 
     private static void legacyLaunch(Path argsFile) throws Exception {
