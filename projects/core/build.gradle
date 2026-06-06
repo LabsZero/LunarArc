@@ -35,4 +35,10 @@ processResources {
                 project_name: rootProject.name
         )
     }
+    filesMatching("META-INF/mods.toml") {
+        expand(
+                version: project.version,
+                project_name: rootProject.name
+        )
+    }
 }

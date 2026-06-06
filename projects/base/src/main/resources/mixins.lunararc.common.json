@@ -16,6 +16,7 @@
     "core.network.ConnectionAccessor",
     "core.command.CommandsMixin",
     "core.command.CommandsAccessor",
+    "core.command.CommandSourceStackMixin",
     "core.world.LevelMixin",
     "core.world.LevelEntityMixin",
     "core.entity.EntityMixin",

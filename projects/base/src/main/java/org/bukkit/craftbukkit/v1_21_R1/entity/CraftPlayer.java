@@ -168,7 +168,15 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public org.bukkit.BanEntry<java.net.InetAddress> banIp(String reason, Duration duration, String source, boolean kickPlayer) { return null; }
 
     @Override public void chat(String msg) {}
-    @Override public boolean performCommand(String command) { return false; }
+    @Override public boolean performCommand(String command) {
+        try {
+            String cmd = command.startsWith("/") ? command.substring(1) : command;
+            return getHandle().getServer().getCommands()
+                    .performPrefixedCommand(getHandle().createCommandSourceStack(), cmd) > 0;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
     
     @Override public boolean isOnGround() { return getHandle().onGround(); }
     @Override public boolean isSneaking() { return getHandle().isShiftKeyDown(); }

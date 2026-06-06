@@ -8,55 +8,46 @@ import java.util.List;
 
 public class ForgeLauncher {
     public static void launch(Path workingDir, Path selfPath) throws Exception {
-        System.out.println("Preparing Forge launch arguments...");
+        System.out.println("[LunarArc] Preparing Forge launch arguments...");
 
         Path libDir = Paths.get("libraries");
         Path argsFile = null;
         try (var stream = Files.walk(libDir)) {
-            argsFile = stream.filter(p -> p.getFileName().toString().equals("win_args.txt"))
-                             .findFirst()
-                             .orElse(null);
+            String preferred = System.getProperty("os.name", "").toLowerCase().contains("win")
+                    ? "win_args.txt" : "unix_args.txt";
+            argsFile = stream.filter(p -> p.getFileName().toString().equals(preferred))
+                    .findFirst().orElse(null);
         }
-
         if (argsFile == null) {
-            System.err.println("Could not find win_args.txt! Forge installation might be corrupt.");
+            System.err.println("[LunarArc] Error: Could not find Forge args file.");
             return;
         }
 
-        System.out.println("Using args file: " + argsFile);
+        // Deploy to hidden .lunararc/mods/ (keeps user mods/ folder clean)
+        Path bridgeModsDir = Paths.get(".lunararc", "mods");
+        Files.createDirectories(bridgeModsDir);
+        if (selfPath != null && Files.exists(selfPath)) {
+            Path target = bridgeModsDir.resolve("lunararc-bridge.jar");
+            Files.copy(selfPath, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            System.out.println("[LunarArc] Bridge deployed to " + target.toAbsolutePath());
+        }
+
         List<String> jvmArgs = Files.readAllLines(argsFile);
-        
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
 
-        // Parse win_args.txt content
         for (String line : jvmArgs) {
             line = line.trim();
             if (line.isEmpty() || line.startsWith("#")) continue;
-
-            String[] parts = line.split(" ");
-            for (String part : parts) {
-                if (part.isEmpty()) continue;
-                
-                if (part.contains("/") && !part.contains("=")) {
-                    command.add(part.replace("/", "\\"));
-                } else {
-                    command.add(part);
-                }
+            for (String part : line.split(" ")) {
+                if (!part.isEmpty()) command.add(part);
             }
         }
 
-        // Deploy the LunarArc JAR into mods/ so FML discovers it as a real mod and
-        // applies its mixin configs. The legacy classpath is NOT scanned for mods
-        // in production, so the mods/ folder is required here.
-        LauncherUtils.deployBridge(selfPath);
-
+        command.add("-Dfml.modsDir=" + bridgeModsDir.toAbsolutePath());
         command.add("--nogui");
 
-        System.out.println("========================================");
-        System.out.println("   " + System.getProperty("lunararc.name", "LunarArc") + " is now launching Forge...");
-        System.out.println("========================================");
-
+        System.out.println("[LunarArc] Booting Forge...");
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.inheritIO();
         Process process = pb.start();

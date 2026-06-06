@@ -15,6 +15,28 @@ import java.util.Scanner;
  */
 public class Launcher {
     public static void main(String[] args) {
+        // Arclight-style agent bootstrap: re-launch with -javaagent:self so premain()
+        // gives us Instrumentation, allowing same-JVM mod loader injection without mods/.
+        if (LunarArcAgent.instrumentation == null) {
+            try {
+                Path self = Paths.get(Launcher.class.getProtectionDomain()
+                        .getCodeSource().getLocation().toURI()).toAbsolutePath();
+                if (java.nio.file.Files.isRegularFile(self)) {
+                    java.util.List<String> cmd = new java.util.ArrayList<>();
+                    cmd.add(LauncherUtils.getJavaExecutable());
+                    cmd.add("-javaagent:" + self);
+                    cmd.add("-jar");
+                    cmd.add(self.toString());
+                    java.util.Collections.addAll(cmd, args);
+                    ProcessBuilder pb = new ProcessBuilder(cmd);
+                    pb.inheritIO();
+                    System.exit(pb.start().waitFor());
+                }
+            } catch (Exception e) {
+                // Fall through: agent unavailable, continue without Instrumentation
+            }
+        }
+
         try {
             Properties versions = loadProperties("lunararc-launcher.properties");
             String minecraftVersion = versions.getProperty("minecraft", "unknown");

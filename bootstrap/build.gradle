@@ -60,7 +60,10 @@ processResources.dependsOn("generateVersions")
 jar {
     manifest {
         attributes(
-                'Main-Class': 'io.ampznetwork.lunararc.launcher.Launcher'
+                'Main-Class': 'io.ampznetwork.lunararc.launcher.Launcher',
+                'Premain-Class': 'io.ampznetwork.lunararc.launcher.LunarArcAgent',
+                'Can-Retransform-Classes': 'true',
+                'Can-Append-To-Class-Path': 'true'
         )
     }
 }
@@ -192,6 +195,9 @@ def createFatJar(String platform) {
         manifest {
             attributes(
                     'Main-Class': 'io.ampznetwork.lunararc.launcher.Launcher',
+                    'Premain-Class': 'io.ampznetwork.lunararc.launcher.LunarArcAgent',
+                    'Can-Retransform-Classes': 'true',
+                    'Can-Append-To-Class-Path': 'true',
                     'LunarArc-Platform': platform
             )
         }
