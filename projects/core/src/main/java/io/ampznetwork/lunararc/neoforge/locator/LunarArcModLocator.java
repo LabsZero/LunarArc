@@ -46,10 +46,8 @@ public class LunarArcModLocator implements IModLocator {
             Object mfoe = buildModFileOrException(modFile);
             if (mfoe == null) return List.of();
 
-            @SuppressWarnings("unchecked")
-            List<ModFileOrException> result = (List<ModFileOrException>) List.of(mfoe);
             System.out.println("[LunarArc] ModLocator: self-registered from " + selfJar);
-            return result;
+            return List.of((ModFileOrException) mfoe);
         } catch (Throwable t) {
             System.err.println("[LunarArc] ModLocator scanMods failed (bridge JAR fallback): " + t);
             return List.of();
