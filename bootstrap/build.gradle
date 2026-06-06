@@ -198,7 +198,8 @@ def createFatJar(String platform) {
                     'Premain-Class': 'io.ampznetwork.lunararc.launcher.LunarArcAgent',
                     'Can-Retransform-Classes': 'true',
                     'Can-Append-To-Class-Path': 'true',
-                    'LunarArc-Platform': platform
+                    'LunarArc-Platform': platform,
+                    'Implementation-Version': project.version
             )
         }
     }
