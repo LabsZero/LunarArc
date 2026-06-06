@@ -20,10 +20,6 @@ public class NeoForgeLauncher {
             return;
         }
 
-        // Deploy bridge to mods/ so FML's built-in ModsFolderLocator can discover it.
-        // FMLPaths.MODSDIR is always ./mods/ — there is no system-property override in FML 4.x.
-        deployBridgeToModsDir(selfPath);
-
         // Find args file
         Path argsFile = findArgsFile(libDir);
         if (argsFile == null) {
@@ -34,6 +30,8 @@ public class NeoForgeLauncher {
         if (LunarArcAgent.instrumentation != null) {
             sameJvmLaunch(selfPath, argsFile);
         } else {
+            // Legacy child-process launch: FML classes not yet on classpath, must deploy bridge.
+            deployBridgeToModsDir(selfPath);
             legacyLaunch(argsFile);
         }
     }
@@ -127,8 +125,18 @@ public class NeoForgeLauncher {
             LunarArcAgent.instrumentation.appendToSystemClassLoaderSearch(new JarFile(selfPath.toFile()));
         }
 
+        // Decide whether to rely on LunarArcModLocator.scanMods() (no mods/ copy needed)
+        // or fall back to the traditional bridge-in-mods/ approach.
+        if (!fmlClassesAvailable()) {
+            System.out.println("[LunarArc] FML internals not detectable; deploying bridge to mods/ as fallback.");
+            deployBridgeToModsDir(selfPath);
+        } else {
+            System.out.println("[LunarArc] LunarArcModLocator will self-register; skipping mods/ bridge deployment.");
+        }
+
         if (mainClass == null) {
             System.err.println("[LunarArc] Could not determine NeoForge main class. Falling back to legacy launch.");
+            deployBridgeToModsDir(selfPath); // ensure bridge is present for child process
             legacyLaunch(argsFile);
             return;
         }
@@ -144,6 +152,20 @@ public class NeoForgeLauncher {
             System.err.println("[LunarArc] Same-JVM launch failed (" + cause.getClass().getSimpleName()
                     + ": " + cause.getMessage() + "); falling back to child process.");
             legacyLaunch(argsFile);
+        }
+    }
+
+    /**
+     * Returns true if FML internal classes are available on the system classloader,
+     * meaning LunarArcModLocator.scanMods() should be able to self-register via reflection.
+     */
+    private static boolean fmlClassesAvailable() {
+        try {
+            Class.forName("cpw.mods.jarhandling.SecureJar", false, ClassLoader.getSystemClassLoader());
+            Class.forName("net.neoforged.fml.loading.moddiscovery.ModFile", false, ClassLoader.getSystemClassLoader());
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
         }
     }
 

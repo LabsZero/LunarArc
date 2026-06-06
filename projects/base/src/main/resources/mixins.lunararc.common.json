@@ -7,7 +7,6 @@
   "mixins": [
     "core.server.CraftPlayerMixin",
     "core.server.MinecraftServerMixin",
-    "core.server.DedicatedServerMixin",
     "core.server.MinecraftServerAccessor",
     "core.server.PlayerListAccessor",
     "core.server.ServerLoginPacketListenerMixin",

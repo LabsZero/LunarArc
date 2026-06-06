@@ -5,6 +5,7 @@ import io.ampznetwork.lunararc.common.config.LunarArcConfig;
 import io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge;
 import net.minecraft.server.MinecraftServer;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -116,9 +117,13 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge {
         }
     }
 
-    @Inject(method = "getServerModName", at = @At("HEAD"), cancellable = true)
-    private void lunararc$getServerModName(CallbackInfoReturnable<String> cir) {
-        cir.setReturnValue("paper");
+    /**
+     * @author LunarArc
+     * @reason Override NeoForge/vanilla mod name so plugins see "paper" as the server brand.
+     */
+    @Overwrite
+    public String getServerModName() {
+        return "paper";
     }
 
     @Inject(method = "stopServer", at = @At("HEAD"))
