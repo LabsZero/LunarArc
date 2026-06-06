@@ -368,10 +368,19 @@ public class LunarArcPluginLoader implements PluginLoader {
     public void enablePlugin(Plugin plugin) {
         if (!plugin.isEnabled()) {
             try {
-                // JavaPlugin.setEnabled is protected, so we use reflection if needed,
-                // but Plugin.setEnabled is actually what we want if we have the instance.
-                // However, Plugin interface doesn't have setEnabled. JavaPlugin does.
                 if (plugin instanceof org.bukkit.plugin.java.JavaPlugin jp) {
+                    // Set lifecycleEventManager before calling setEnabled so plugins can safely
+                    // call getLifecycleManager() inside onEnable() without getting a NPE.
+                    try {
+                        java.lang.reflect.Field lcField = org.bukkit.plugin.java.JavaPlugin.class
+                                .getDeclaredField("lifecycleEventManager");
+                        lcField.setAccessible(true);
+                        if (lcField.get(jp) == null) {
+                            lcField.set(jp, LunarArcLifecycleEventManager.create());
+                        }
+                    } catch (NoSuchFieldException ignored) {
+                        // Field absent in this build of Paper API — safe to skip
+                    }
                     var method = org.bukkit.plugin.java.JavaPlugin.class.getDeclaredMethod("setEnabled", boolean.class);
                     method.setAccessible(true);
                     method.invoke(jp, true);

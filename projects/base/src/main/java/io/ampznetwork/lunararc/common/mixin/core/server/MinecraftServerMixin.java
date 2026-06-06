@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -113,6 +114,11 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge {
         } catch (Throwable t) {
             lunararc$logger.error("Error syncing Bukkit commands", t);
         }
+    }
+
+    @Inject(method = "getServerModName", at = @At("HEAD"), cancellable = true)
+    private void lunararc$getServerModName(CallbackInfoReturnable<String> cir) {
+        cir.setReturnValue("paper");
     }
 
     @Inject(method = "stopServer", at = @At("HEAD"))

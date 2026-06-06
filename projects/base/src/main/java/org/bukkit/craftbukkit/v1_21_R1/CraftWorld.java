@@ -41,7 +41,7 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull String getName() {
-        return world.dimension().location().toString();
+        return world.dimension().location().getPath();
     }
 
     @Override
@@ -51,7 +51,7 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull NamespacedKey getKey() {
-        return NamespacedKey.minecraft(getName().toLowerCase().replace("minecraft:", ""));
+        return NamespacedKey.minecraft(getName().toLowerCase());
     }
 
     @Override

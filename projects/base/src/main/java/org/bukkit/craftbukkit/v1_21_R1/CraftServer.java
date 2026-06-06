@@ -411,7 +411,7 @@ public class CraftServer implements Server {
     public @NotNull List<World> getWorlds() {
         List<World> worlds = new ArrayList<>();
         for (net.minecraft.server.level.ServerLevel level : console.getAllLevels()) {
-            World world = getWorld(level.dimension().location().toString());
+            World world = getWorld(level.dimension().location().getPath());
             if (world != null)
                 worlds.add(world);
         }
@@ -713,7 +713,8 @@ public class CraftServer implements Server {
 
     @Override
     public @Nullable World getWorld(@NotNull String name) {
-        net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.tryParse(name);
+        String qualified = name.contains(":") ? name : "minecraft:" + name;
+        net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.tryParse(qualified);
         if (rl == null)
             return null;
 
