@@ -169,7 +169,14 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
                 onEnable();
             } else {
                 logger.info("Disabling " + getDescription().getFullName());
-                onDisable();
+                try {
+                    onDisable();
+                } catch (Throwable t) {
+                    // Guard: onDisable() must never propagate — a crash here would
+                    // mask the original onEnable() exception (e.g. handleCrash pattern).
+                    logger.log(java.util.logging.Level.SEVERE,
+                            "Error in onDisable() for " + getDescription().getFullName(), t);
+                }
             }
         }
     }

@@ -369,21 +369,16 @@ public class LunarArcPluginLoader implements PluginLoader {
         if (!plugin.isEnabled()) {
             try {
                 if (plugin instanceof org.bukkit.plugin.java.JavaPlugin jp) {
-                    // Set lifecycleEventManager before calling setEnabled so plugins can safely
-                    // call getLifecycleManager() inside onEnable() without getting a NPE.
-                    try {
-                        java.lang.reflect.Field lcField = org.bukkit.plugin.java.JavaPlugin.class
-                                .getDeclaredField("lifecycleEventManager");
-                        lcField.setAccessible(true);
-                        if (lcField.get(jp) == null) {
-                            lcField.set(jp, LunarArcLifecycleEventManager.create());
-                        }
-                    } catch (NoSuchFieldException ignored) {
-                        // Field absent in this build of Paper API — safe to skip
-                    }
                     var method = org.bukkit.plugin.java.JavaPlugin.class.getDeclaredMethod("setEnabled", boolean.class);
                     method.setAccessible(true);
                     method.invoke(jp, true);
+                    // setEnabled(true) calls onEnable(); if the plugin's handleCrash() pattern
+                    // ran (e.g. EssentialsX), isEnabled() will be false even though no exception
+                    // escaped — log it so the user can see the original error in the plugin's log.
+                    if (!jp.isEnabled()) {
+                        server.getLogger().severe("[LunarArc] Plugin " + plugin.getName()
+                                + " failed to enable (check its log above for the root cause).");
+                    }
                 }
             } catch (Exception e) {
                 Throwable cause = e;
