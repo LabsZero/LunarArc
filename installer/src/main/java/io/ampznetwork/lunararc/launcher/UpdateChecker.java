@@ -24,22 +24,22 @@ public class UpdateChecker {
     public static void check(String currentVersion, String buildName) {
         Path configPath = Paths.get("lunararc.conf");
         Properties props = new Properties();
-        boolean enableUpdates = false;
+        boolean enableUpdates = true;
 
         try {
             if (Files.exists(configPath)) {
                 try (java.io.InputStream in = Files.newInputStream(configPath)) {
                     props.load(in);
                     if (!props.containsKey("enable_updates")) {
-                        props.setProperty("enable_updates", "false");
+                        props.setProperty("enable_updates", "true");
                         try (java.io.OutputStream out = Files.newOutputStream(configPath)) {
                             props.store(out, "LunarArc Server Configuration");
                         }
                     }
-                    enableUpdates = Boolean.parseBoolean(props.getProperty("enable_updates", "false"));
+                    enableUpdates = Boolean.parseBoolean(props.getProperty("enable_updates", "true"));
                 }
             } else {
-                props.setProperty("enable_updates", "false");
+                props.setProperty("enable_updates", "true");
                 try (java.io.OutputStream out = Files.newOutputStream(configPath)) {
                     props.store(out, "LunarArc Server Configuration");
                 }

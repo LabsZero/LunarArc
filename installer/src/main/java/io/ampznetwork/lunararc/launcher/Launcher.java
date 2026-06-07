@@ -41,7 +41,7 @@ public class Launcher {
             Properties versions = loadProperties("lunararc-launcher.properties");
             String minecraftVersion = versions.getProperty("minecraft", "unknown");
             String projectVersion = versions.getProperty("version", "unknown");
-            String buildName = versions.getProperty("buildname", "unknown");
+            String buildName = versions.getProperty("buildName", "unknown");
             
             ConsoleUI.printLogo(minecraftVersion);
             
