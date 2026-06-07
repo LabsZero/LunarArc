@@ -90,7 +90,7 @@ public class BlockMedicReporter {
                 if (content == null || content.isEmpty()) return;
                 doUpload(content, context, logPath);
             } catch (Exception e) {
-                LOGGER.debug("[BlockMedic] Log upload failed: {}", e.getMessage());
+                LOGGER.warn("[BlockMedic] Auto-upload failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
             }
         });
     }
@@ -103,11 +103,18 @@ public class BlockMedicReporter {
         if (!LunarArcConfig.isBlockMedicEnabled()) return null;
         try {
             Path logPath = findLogPath();
+            if (logPath == null) {
+                LOGGER.warn("[BlockMedic] No log file found. Tried logs/latest.log relative to user.dir={}. "
+                        + "Falling back to console capture.", System.getProperty("user.dir", "?"));
+            }
             String content = logPath != null ? readFile(logPath) : getConsoleCapture();
-            if (content == null || content.isEmpty()) return null;
+            if (content == null || content.isEmpty()) {
+                LOGGER.warn("[BlockMedic] Nothing to upload — log file is empty and console capture is empty.");
+                return null;
+            }
             return doUpload(content, context, logPath);
         } catch (Exception e) {
-            LOGGER.debug("[BlockMedic] Manual upload failed: {}", e.getMessage());
+            LOGGER.warn("[BlockMedic] Upload failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
             return null;
         }
     }
@@ -230,9 +237,18 @@ public class BlockMedicReporter {
         try (OutputStream out = conn.getOutputStream()) {
             out.write(body);
         }
-        try (InputStream in = conn.getInputStream()) {
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        int status = conn.getResponseCode();
+        if (status >= 200 && status < 300) {
+            try (InputStream in = conn.getInputStream()) {
+                return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
         }
+        // Read error body so callers can log it
+        String errorBody = "";
+        try (InputStream err = conn.getErrorStream()) {
+            if (err != null) errorBody = new String(err.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception ignored) {}
+        throw new Exception("HTTP " + status + ": " + errorBody);
     }
 
     private static String extract(String json, String key) {
