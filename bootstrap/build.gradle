@@ -73,10 +73,11 @@ jar {
 
 // ── Per-platform shadow JAR factory ───────────────────────────────────────────
 def createFatJar(String platform) {
-    // Load ShadowJar at runtime (after plugins {} is applied) to avoid Groovy
-    // compile-time class resolution failures when the plugin JAR isn't yet on
-    // the script compile classpath in Gradle 9.5.
-    def ShadowJar = getClass().classLoader.loadClass('com.gradleup.shadow.tasks.ShadowJar')
+    // Obtain the ShadowJar task type from the auto-registered 'shadowJar' task.
+    // This avoids both compile-time import resolution failures (ScriptClassLoader
+    // does not include plugin classes) and Groovy property-chain misparse of
+    // fully-qualified class literals without an import.
+    def ShadowJar = tasks.named('shadowJar').type
     tasks.register("${platform}Jar", ShadowJar) {
         def cleanVersion = project.version.toString().replace('-SNAPSHOT', '')
         archiveBaseName.set("${rootProject.name.toLowerCase(Locale.ROOT).replaceAll('[^a-z0-9._-]+', '-')}-${platform}")
