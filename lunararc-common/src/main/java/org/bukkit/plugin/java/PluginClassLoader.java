@@ -4,6 +4,9 @@ import org.bukkit.plugin.PluginDescriptionFile;
 import io.ampznetwork.lunararc.common.LunarArcPlatform;
 import io.ampznetwork.lunararc.common.mod.LunarArcRemapper;
 import io.ampznetwork.lunararc.common.server.LunarArcPluginLoader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 
 import java.io.File;
 import java.io.IOException;
@@ -36,6 +39,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *     Delegating here lets plugins call into mod APIs at runtime, fixing the
  *     "plugins show as loaded but don't function in-game" symptom.
  *  6. Parent class loader as final fallback.
+ *  7. Inline ASM-generated stubs — for well-known library packages (e.g.
+ *     org.json.simple) that NeoForge's TransformingClassLoader excludes from
+ *     its search path but plugins such as Vault expect to be present.
  */
 public final class PluginClassLoader extends URLClassLoader {
 
@@ -130,7 +136,108 @@ public final class PluginClassLoader extends URLClassLoader {
         //    loader's parent knows about that we haven't already tried).
         try { return getParent().loadClass(name); } catch (ClassNotFoundException ignored) {}
 
+        // 7. ASM-generated inline stubs for well-known packages that NeoForge's
+        //    TransformingClassLoader excludes from its search path.  Generating
+        //    the bytes directly here means we never depend on the classloader
+        //    hierarchy to provide these classes.
+        result = generateInlineStub(name);
+        if (result != null) {
+            classes.put(name, result);
+            return result;
+        }
+
         throw new ClassNotFoundException(name);
+    }
+
+    /**
+     * Generates a minimal stub class using ASM for known missing packages.
+     * Returns null if this class name is not handled.
+     */
+    private Class<?> generateInlineStub(String name) {
+        if (!name.startsWith("org.json.simple.") && !name.equals("org.json.simple.parser.JSONParser")) return null;
+        try {
+            String internalName = name.replace('.', '/');
+
+            String superName;
+            if (name.endsWith("JSONObject")) superName = "java/util/HashMap";
+            else if (name.endsWith("JSONArray")) superName = "java/util/ArrayList";
+            else superName = "java/lang/Object";
+
+            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            cw.visit(Opcodes.V11, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, internalName, null, superName, null);
+
+            // Default no-arg constructor
+            MethodVisitor init = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+            init.visitCode();
+            init.visitVarInsn(Opcodes.ALOAD, 0);
+            init.visitMethodInsn(Opcodes.INVOKESPECIAL, superName, "<init>", "()V", false);
+            init.visitInsn(Opcodes.RETURN);
+            init.visitMaxs(0, 0);
+            init.visitEnd();
+
+            if (name.equals("org.json.simple.JSONValue")) {
+                // public static Object parse(String s) { return null; }
+                MethodVisitor parse = cw.visitMethod(
+                        Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "parse",
+                        "(Ljava/lang/String;)Ljava/lang/Object;", null, null);
+                parse.visitCode();
+                parse.visitInsn(Opcodes.ACONST_NULL);
+                parse.visitInsn(Opcodes.ARETURN);
+                parse.visitMaxs(0, 0);
+                parse.visitEnd();
+
+                // public static Object parseWithException(String s) { return null; }
+                MethodVisitor parseEx = cw.visitMethod(
+                        Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "parseWithException",
+                        "(Ljava/lang/String;)Ljava/lang/Object;", null, null);
+                parseEx.visitCode();
+                parseEx.visitInsn(Opcodes.ACONST_NULL);
+                parseEx.visitInsn(Opcodes.ARETURN);
+                parseEx.visitMaxs(0, 0);
+                parseEx.visitEnd();
+
+                // public static String toJSONString(Object value) { return "null"; }
+                MethodVisitor toJson = cw.visitMethod(
+                        Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "toJSONString",
+                        "(Ljava/lang/Object;)Ljava/lang/String;", null, null);
+                toJson.visitCode();
+                toJson.visitLdcInsn("null");
+                toJson.visitInsn(Opcodes.ARETURN);
+                toJson.visitMaxs(0, 0);
+                toJson.visitEnd();
+            }
+
+            if (name.equals("org.json.simple.parser.JSONParser")) {
+                // public Object parse(String s) { return null; }
+                MethodVisitor parse = cw.visitMethod(Opcodes.ACC_PUBLIC, "parse",
+                        "(Ljava/lang/String;)Ljava/lang/Object;", null, null);
+                parse.visitCode();
+                parse.visitInsn(Opcodes.ACONST_NULL);
+                parse.visitInsn(Opcodes.ARETURN);
+                parse.visitMaxs(0, 0);
+                parse.visitEnd();
+
+                // public Object parse(Reader r) { return null; }
+                MethodVisitor parseR = cw.visitMethod(Opcodes.ACC_PUBLIC, "parse",
+                        "(Ljava/io/Reader;)Ljava/lang/Object;", null, null);
+                parseR.visitCode();
+                parseR.visitInsn(Opcodes.ACONST_NULL);
+                parseR.visitInsn(Opcodes.ARETURN);
+                parseR.visitMaxs(0, 0);
+                parseR.visitEnd();
+            }
+
+            cw.visitEnd();
+            byte[] bytes = cw.toByteArray();
+
+            String pkg = name.contains(".") ? name.substring(0, name.lastIndexOf('.')) : null;
+            if (pkg != null && getDefinedPackage(pkg) == null)
+                definePackage(pkg, null, null, null, null, null, null, null);
+
+            return defineClass(name, bytes, 0, bytes.length);
+        } catch (Throwable e) {
+            return null;
+        }
     }
 
     /** Returns true for classes that should be loaded from the platform (Paper/Bukkit API). */

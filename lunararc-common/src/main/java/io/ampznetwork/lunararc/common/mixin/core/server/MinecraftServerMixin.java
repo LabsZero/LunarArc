@@ -67,6 +67,9 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge {
     private void lunararc$onInit(CallbackInfo ci) {
         lunararc$logger.info("Initializing Hybrid Bridge...");
 
+        // Start capturing console output early so BlockMedic can always upload something.
+        io.ampznetwork.lunararc.common.telemetry.BlockMedicReporter.startConsoleCapture();
+
         LunarArcConfig.load();
         io.ampznetwork.lunararc.common.config.PluginBlacklist.load();
         io.ampznetwork.lunararc.api.LunarArcServer.init();

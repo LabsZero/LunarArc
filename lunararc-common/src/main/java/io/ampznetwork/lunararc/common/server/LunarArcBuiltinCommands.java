@@ -71,9 +71,10 @@ public final class LunarArcBuiltinCommands {
             Thread.ofVirtual().name("lunararc-blockmedic-cmd").start(() -> {
                 String url = BlockMedicReporter.uploadLogNow("manual-upload");
                 if (url != null) {
-                    sender.sendMessage("§a[BlockMedic] Log uploaded successfully. View at: §f" + url);
+                    sender.sendMessage("§a[BlockMedic] Log uploaded. View at: §f" + url);
                 } else {
-                    sender.sendMessage("§c[BlockMedic] Upload failed or log is empty. Check console for details.");
+                    sender.sendMessage("§c[BlockMedic] Upload failed — no log file found or upload error. "
+                            + "Check console for details (debug log shows paths tried).");
                 }
             });
             return true;

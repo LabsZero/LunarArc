@@ -7,6 +7,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintStream;
+import java.io.ByteArrayOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -29,6 +31,43 @@ public class BlockMedicReporter {
 
     /** Minimum millis between any two uploads (2 s keeps well within 60 req/min). */
     private static final long MIN_UPLOAD_INTERVAL_MS = 2_000;
+
+    /** Rolling console-capture buffer — populated when no log file exists yet. */
+    private static final java.util.Deque<String> consoleBuffer = new java.util.concurrent.ConcurrentLinkedDeque<>();
+    private static volatile boolean consoleCapturing = false;
+
+    /**
+     * Installs a tee on System.out / System.err so we have a fallback copy of console
+     * output for upload even before logs/latest.log is created.
+     * Safe to call multiple times — installs at most once.
+     */
+    public static synchronized void startConsoleCapture() {
+        if (consoleCapturing) return;
+        consoleCapturing = true;
+        installTee(System.out, true);
+        installTee(System.err, false);
+    }
+
+    private static void installTee(PrintStream original, boolean isOut) {
+        PrintStream tee = new PrintStream(original, true, StandardCharsets.UTF_8) {
+            @Override public void write(byte[] b, int off, int len) {
+                super.write(b, off, len);
+                String line = new String(b, off, len, StandardCharsets.UTF_8);
+                consoleBuffer.addLast(line);
+                // Keep at most ~5 000 lines (≈ a few MB) to avoid OOM
+                while (consoleBuffer.size() > 5_000) consoleBuffer.pollFirst();
+            }
+        };
+        if (isOut) System.setOut(tee);
+        else System.setErr(tee);
+    }
+
+    private static String getConsoleCapture() {
+        if (consoleBuffer.isEmpty()) return null;
+        StringBuilder sb = new StringBuilder();
+        for (String line : consoleBuffer) sb.append(line);
+        return sb.toString();
+    }
 
     public static void uploadLog(String context) {
         if (!LunarArcConfig.isBlockMedicEnabled()) return;
@@ -127,16 +166,30 @@ public class BlockMedicReporter {
     }
 
     static Path findLogPath() {
-        for (String candidate : new String[]{"logs/latest.log", "latest.log"}) {
+        // Try relative paths first, then absolute paths anchored to user.dir
+        String userDir = System.getProperty("user.dir", ".");
+        String[] candidates = {
+            "logs/latest.log",
+            "latest.log",
+            userDir + "/logs/latest.log",
+            userDir + "/latest.log",
+            // NeoForge sometimes runs from a sub-directory
+            "../logs/latest.log",
+        };
+        for (String candidate : candidates) {
             Path p = Paths.get(candidate);
             if (Files.exists(p)) return p;
         }
+        LOGGER.debug("[BlockMedic] No log file found (user.dir={}, tried {} paths)", userDir, candidates.length);
         return null;
     }
 
     private static String readLatestLog() {
         Path p = findLogPath();
-        if (p == null) return null;
+        if (p == null) {
+            // No log file yet — fall back to captured console output
+            return getConsoleCapture();
+        }
         try {
             long size = Files.size(p);
             if (size > MAX_LOG_BYTES) {
