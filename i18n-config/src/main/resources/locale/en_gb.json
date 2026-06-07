@@ -17,5 +17,22 @@
   "update.download": "\u001B[34mDownload at: \u001B[36m\u001B[4m{0}\u001B[0m",
   "update.chat_msg": "§aA new version of LunarArc is available (§f{0}§a -> §b{1}§a) get at: §n{2}",
   "error.invalid_selection": "Invalid selection. Aborting.",
-  "error.critical_failure": "Critical failure in boot sequence:"
+  "error.critical_failure": "Critical failure in boot sequence:",
+
+  "blockmedic.disabled": "§c[BlockMedic] Log upload is disabled. Set §fenable_blockmedic=true §cin §flunararc.conf §cto enable it.",
+  "blockmedic.declined": "§c[BlockMedic] You previously declined the terms. To re-enable, set §fblockmedic_consent=accepted §cin §flunararc.conf§c.",
+  "blockmedic.consent.title": "[BlockMedic] First-time upload consent",
+  "blockmedic.consent.body": "§7Your server log will be uploaded to BlockMedic (blockmedic.ampznetwork.com). It may contain sensitive information such as IP addresses, plugin configurations, and error details.",
+  "blockmedic.consent.prompt": "§eDo you agree to upload? §aType §f{0} yes §ato accept, or §c{0} no §eto decline.",
+  "blockmedic.consent.invalid": "§c[BlockMedic] Please type §fyes §cor §fno§c.",
+  "blockmedic.consent.accepted": "§a[BlockMedic] Terms accepted. Proceeding with upload...",
+  "blockmedic.consent.rejected": "§c[BlockMedic] Upload declined. Your preference has been saved to lunararc.conf.",
+  "blockmedic.upload.no_crash": "§e[BlockMedic] No crash report found in crash-reports/. Use §f/lunararc upload log §eto upload latest.log instead.",
+  "blockmedic.upload.uploading_crash": "§7[BlockMedic] Uploading crash report §f{0}§7...",
+  "blockmedic.upload.uploading_log": "§7[BlockMedic] Uploading latest.log...",
+  "blockmedic.upload.crash_success": "[BlockMedic] Crash report uploaded. View at: ",
+  "blockmedic.upload.log_success": "[BlockMedic] Log uploaded. View at: ",
+  "blockmedic.upload.crash_failed": "§c[BlockMedic] Upload failed. Check console for details.",
+  "blockmedic.upload.log_failed": "§c[BlockMedic] Upload failed — no log file found or upload error. Check console for details.",
+  "blockmedic.hover.open_browser": "Click to open in browser"
 }

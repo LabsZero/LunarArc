@@ -2,6 +2,11 @@ package io.ampznetwork.lunararc.common.server;
 
 import io.ampznetwork.lunararc.common.config.LunarArcConfig;
 import io.ampznetwork.lunararc.common.telemetry.BlockMedicReporter;
+import io.ampznetwork.lunararc.i18n.TranslationManager;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 
@@ -34,7 +39,8 @@ public final class LunarArcBuiltinCommands {
         }
 
         private static final List<String> SUB_COMMANDS = List.of("upload");
-        private static final List<String> UPLOAD_MODES  = List.of("crash", "log");
+        private static final List<String> UPLOAD_MODES = List.of("crash", "log");
+        private static final List<String> CONSENT_ARGS = List.of("yes", "no");
 
         @Override
         public List<String> tabComplete(CommandSender sender, String alias, String[] args) {
@@ -48,6 +54,12 @@ public final class LunarArcBuiltinCommands {
             } else if (args.length == 2 && args[0].equalsIgnoreCase("upload")) {
                 String partial = args[1].toLowerCase();
                 for (String s : UPLOAD_MODES) {
+                    if (s.startsWith(partial)) completions.add(s);
+                }
+            } else if (args.length == 3 && args[0].equalsIgnoreCase("upload")
+                    && LunarArcConfig.getBlockMedicConsent().equals("unset")) {
+                String partial = args[2].toLowerCase();
+                for (String s : CONSENT_ARGS) {
                     if (s.startsWith(partial)) completions.add(s);
                 }
             }
@@ -77,9 +89,41 @@ public final class LunarArcBuiltinCommands {
 
         private boolean handleUpload(CommandSender sender, String[] args) {
             if (!LunarArcConfig.isBlockMedicEnabled()) {
-                sender.sendMessage("§c[BlockMedic] Log upload is disabled. "
-                        + "Set §fenable_blockmedic=true §cin §flunararc.conf §cto enable it.");
+                sender.sendMessage(TranslationManager.get("blockmedic.disabled"));
                 return true;
+            }
+
+            // Consent gate — required on first use.
+            String consent = LunarArcConfig.getBlockMedicConsent();
+            if ("declined".equals(consent)) {
+                sender.sendMessage(TranslationManager.get("blockmedic.declined"));
+                return true;
+            }
+            if ("unset".equals(consent)) {
+                if (args.length >= 3) {
+                    String answer = args[2].toLowerCase();
+                    if (answer.equals("yes")) {
+                        LunarArcConfig.setBlockMedicConsent("accepted");
+                        sender.sendMessage(TranslationManager.get("blockmedic.consent.accepted"));
+                        // Fall through to upload logic below
+                    } else if (answer.equals("no")) {
+                        LunarArcConfig.setBlockMedicConsent("declined");
+                        sender.sendMessage(TranslationManager.get("blockmedic.consent.rejected"));
+                        return true;
+                    } else {
+                        sender.sendMessage(TranslationManager.get("blockmedic.consent.invalid"));
+                        return true;
+                    }
+                } else {
+                    String mode = args.length >= 2 ? args[1] : "crash";
+                    String consentCmd = "/lunararc upload " + mode;
+                    sender.sendMessage(Component
+                            .text(TranslationManager.get("blockmedic.consent.title"))
+                            .color(NamedTextColor.GOLD));
+                    sender.sendMessage(TranslationManager.get("blockmedic.consent.body"));
+                    sender.sendMessage(TranslationManager.get("blockmedic.consent.prompt", consentCmd));
+                    return true;
+                }
             }
 
             // Default: upload crash report; explicit "log" uploads latest.log
@@ -88,43 +132,40 @@ public final class LunarArcBuiltinCommands {
             if (uploadCrash) {
                 Path crash = BlockMedicReporter.findCrashReport();
                 if (crash == null) {
-                    sender.sendMessage("§e[BlockMedic] No crash report found in crash-reports/. "
-                            + "Use §f/lunararc upload log §eto upload latest.log instead.");
+                    sender.sendMessage(TranslationManager.get("blockmedic.upload.no_crash"));
                     return true;
                 }
-                sender.sendMessage("§7[BlockMedic] Uploading crash report §f" + crash.getFileName() + "§7...");
+                sender.sendMessage(TranslationManager.get("blockmedic.upload.uploading_crash", crash.getFileName()));
                 Thread.ofVirtual().name("lunararc-blockmedic-cmd").start(() -> {
                     String url = BlockMedicReporter.uploadFileNow(crash, "manual-crash-upload");
                     if (url != null) {
-                        sender.sendMessage(net.kyori.adventure.text.Component
-                                .text("[BlockMedic] Crash report uploaded. View at: ")
-                                .color(net.kyori.adventure.text.format.NamedTextColor.GREEN)
-                                .append(net.kyori.adventure.text.Component.text(url)
-                                        .color(net.kyori.adventure.text.format.NamedTextColor.AQUA)
-                                        .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(url))
-                                        .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(
-                                                net.kyori.adventure.text.Component.text("Click to open in browser")))));
+                        sender.sendMessage(Component
+                                .text(TranslationManager.get("blockmedic.upload.crash_success"))
+                                .color(NamedTextColor.GREEN)
+                                .append(Component.text(url)
+                                        .color(NamedTextColor.AQUA)
+                                        .clickEvent(ClickEvent.openUrl(url))
+                                        .hoverEvent(HoverEvent.showText(
+                                                Component.text(TranslationManager.get("blockmedic.hover.open_browser"))))));
                     } else {
-                        sender.sendMessage("§c[BlockMedic] Upload failed. Check console for details.");
+                        sender.sendMessage(TranslationManager.get("blockmedic.upload.crash_failed"));
                     }
                 });
             } else {
-                // Explicit "log" mode
-                sender.sendMessage("§7[BlockMedic] Uploading latest.log...");
+                sender.sendMessage(TranslationManager.get("blockmedic.upload.uploading_log"));
                 Thread.ofVirtual().name("lunararc-blockmedic-cmd").start(() -> {
                     String url = BlockMedicReporter.uploadLogNow("manual-log-upload");
                     if (url != null) {
-                        sender.sendMessage(net.kyori.adventure.text.Component
-                                .text("[BlockMedic] Log uploaded. View at: ")
-                                .color(net.kyori.adventure.text.format.NamedTextColor.GREEN)
-                                .append(net.kyori.adventure.text.Component.text(url)
-                                        .color(net.kyori.adventure.text.format.NamedTextColor.AQUA)
-                                        .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(url))
-                                        .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(
-                                                net.kyori.adventure.text.Component.text("Click to open in browser")))));
+                        sender.sendMessage(Component
+                                .text(TranslationManager.get("blockmedic.upload.log_success"))
+                                .color(NamedTextColor.GREEN)
+                                .append(Component.text(url)
+                                        .color(NamedTextColor.AQUA)
+                                        .clickEvent(ClickEvent.openUrl(url))
+                                        .hoverEvent(HoverEvent.showText(
+                                                Component.text(TranslationManager.get("blockmedic.hover.open_browser"))))));
                     } else {
-                        sender.sendMessage("§c[BlockMedic] Upload failed — no log file found or upload error. "
-                                + "Check console for details.");
+                        sender.sendMessage(TranslationManager.get("blockmedic.upload.log_failed"));
                     }
                 });
             }
