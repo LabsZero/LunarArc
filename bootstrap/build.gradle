@@ -90,7 +90,6 @@ def createFatJar(String platform) {
         // Gson IS bundled (needed before any mod loader is active) and relocated to avoid
         // conflicts with Minecraft's own com.google.gson copy once the mod loader starts.
         relocate 'net.kyori',               'io.ampznetwork.lunararc.libs.adventure'
-        relocate 'org.yaml.snakeyaml',      'io.ampznetwork.lunararc.libs.snakeyaml'
         relocate 'com.google.gson',         'io.ampznetwork.lunararc.libs.gson'
 
         // ── Determine which platform JARs to include ───────────────────────

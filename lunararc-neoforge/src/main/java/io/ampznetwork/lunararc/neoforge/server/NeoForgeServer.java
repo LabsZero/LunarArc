@@ -16,7 +16,7 @@ public class NeoForgeServer extends LunarArcServer {
 
     @Override
     public String getName() {
-        return "LunarArc-NeoForge";
+        return "Paper";
     }
 
     @SubscribeEvent

@@ -51,9 +51,6 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         CLASS_MAP.put("net/minecraft/network/chat/IChatBaseComponent",
                 "net/minecraft/network/chat/Component");
 
-        // Relocated library stubs.
-        CLASS_MAP.put("org/json/simple", "io/ampznetwork/lunararc/libs/json/simple");
-
         // Unversioned legacy CraftBukkit references.
         CLASS_MAP.put("org/bukkit/craftbukkit/CraftServer",
                 "org/bukkit/craftbukkit/v1_21_R1/CraftServer");
