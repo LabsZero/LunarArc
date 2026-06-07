@@ -2,74 +2,72 @@ package io.ampznetwork.lunararc.common.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.yaml.snakeyaml.Yaml;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Properties;
 
 public class LunarArcConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc");
-    private static final String CONFIG_FILE = "lunararc.yml";
+    private static final Path CONFIG_PATH = Paths.get("lunararc.conf");
 
     private static boolean velocityEnabled = false;
     private static byte[] velocitySecret = new byte[0];
+    private static boolean blockMedicEnabled = true;
 
     public static void load() {
-        File file = new File(CONFIG_FILE);
-        if (!file.exists()) {
-            writeDefaults(file);
+        Properties props = readProps();
+
+        boolean changed = false;
+        if (!props.containsKey("proxy.velocity.enabled")) {
+            props.setProperty("proxy.velocity.enabled", "false");
+            changed = true;
         }
+        if (!props.containsKey("proxy.velocity.secret")) {
+            props.setProperty("proxy.velocity.secret", "");
+            changed = true;
+        }
+        if (!props.containsKey("enable_blockmedic")) {
+            props.setProperty("enable_blockmedic", "true");
+            changed = true;
+        }
+        if (changed) writeProps(props);
 
-        try (FileInputStream in = new FileInputStream(file)) {
-            Yaml yaml = new Yaml();
-            Map<String, Object> root = yaml.load(in);
-            if (root == null) return;
+        velocityEnabled = Boolean.parseBoolean(props.getProperty("proxy.velocity.enabled", "false"));
+        String secret = props.getProperty("proxy.velocity.secret", "");
+        velocitySecret = secret.isEmpty() ? new byte[0] : secret.getBytes(StandardCharsets.UTF_8);
+        blockMedicEnabled = Boolean.parseBoolean(props.getProperty("enable_blockmedic", "true"));
 
-            Object proxy = root.get("proxy");
-            if (proxy instanceof Map<?, ?> proxyMap) {
-                Object velocity = proxyMap.get("velocity");
-                if (velocity instanceof Map<?, ?> velocityMap) {
-                    Object enabled = velocityMap.get("enabled");
-                    velocityEnabled = Boolean.TRUE.equals(enabled);
-                    Object secret = velocityMap.get("secret");
-                    if (secret instanceof String s && !s.isEmpty()) {
-                        velocitySecret = s.getBytes(StandardCharsets.UTF_8);
-                    }
-                }
+        LOGGER.info("[LunarArc] Config loaded (velocity={}, blockmedic={}).", velocityEnabled, blockMedicEnabled);
+    }
+
+    static Properties readProps() {
+        Properties props = new Properties();
+        if (Files.exists(CONFIG_PATH)) {
+            try (InputStream in = Files.newInputStream(CONFIG_PATH)) {
+                props.load(in);
+            } catch (Exception e) {
+                LOGGER.error("[LunarArc] Failed to read lunararc.conf — using defaults.", e);
             }
-
-            LOGGER.info("[LunarArc] Config loaded (velocity={}).", velocityEnabled);
-        } catch (Exception e) {
-            LOGGER.error("[LunarArc] Failed to load lunararc.yml — using defaults.", e);
         }
+        return props;
     }
 
-    private static void writeDefaults(File file) {
-        String defaults = """
-                # LunarArc configuration
-                proxy:
-                  velocity:
-                    # Set to true and provide the forwarding secret if using Velocity
-                    enabled: false
-                    secret: ""
-                """;
-        try (FileWriter writer = new FileWriter(file)) {
-            writer.write(defaults);
+    static void writeProps(Properties props) {
+        try (OutputStream out = Files.newOutputStream(CONFIG_PATH)) {
+            props.store(out, "LunarArc Server Configuration");
         } catch (IOException e) {
-            LOGGER.error("[LunarArc] Could not write default lunararc.yml", e);
+            LOGGER.error("[LunarArc] Could not write lunararc.conf", e);
         }
     }
 
-    public static boolean isVelocityEnabled() {
-        return velocityEnabled;
-    }
-
-    public static byte[] getVelocitySecret() {
-        return velocitySecret;
-    }
+    public static boolean isVelocityEnabled() { return velocityEnabled; }
+    public static byte[] getVelocitySecret() { return velocitySecret; }
+    public static boolean isBlockMedicEnabled() { return blockMedicEnabled; }
 }

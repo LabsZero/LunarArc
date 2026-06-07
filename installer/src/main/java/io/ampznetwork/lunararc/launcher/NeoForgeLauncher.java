@@ -66,7 +66,7 @@ public class NeoForgeLauncher {
     }
 
     private static void sameJvmLaunch(Path selfPath, Path argsFile) throws Exception {
-        System.out.println("[LunarArc] Launching NeoForge in-process (Arclight-style)...");
+        System.out.println("[LunarArc] Launching NeoForge in-process...");
 
         // Flatten all lines into one token list so index-based look-ahead works across lines.
         List<String> tokens = new ArrayList<>();
