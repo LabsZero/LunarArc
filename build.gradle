@@ -3,7 +3,7 @@ import java.nio.file.Files
 plugins {
     alias(libs.plugins.architectury) apply false
     alias(libs.plugins.loom) apply false
-    id 'com.gradleup.shadow' version '8.3.5' apply false
+    id 'com.gradleup.shadow' version '9.0.0' apply false
 }
 
 allprojects {

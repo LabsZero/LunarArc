@@ -73,7 +73,7 @@ jar {
 
 // ── Per-platform shadow JAR factory ───────────────────────────────────────────
 def createFatJar(String platform) {
-    tasks.register("${platform}Jar", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    tasks.register("${platform}Jar", com.gradleup.shadow.tasks.ShadowJar) {
         def cleanVersion = project.version.toString().replace('-SNAPSHOT', '')
         archiveBaseName.set("${rootProject.name.toLowerCase(Locale.ROOT).replaceAll('[^a-z0-9._-]+', '-')}-${platform}")
         archiveVersion.set(cleanVersion)
@@ -81,11 +81,9 @@ def createFatJar(String platform) {
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
         // Relocate shaded libraries to avoid classpath conflicts with the mod loader.
-        // Gson is intentionally NOT relocated — it is provided by Minecraft/Paper at runtime.
-        relocate 'org.objectweb.asm',      'io.ampznetwork.lunararc.libs.asm'
+        // ASM, Gson, and Log4j are NOT relocated — they are provided by the mod loader / Minecraft at runtime.
         relocate 'net.kyori',               'io.ampznetwork.lunararc.libs.adventure'
         relocate 'org.yaml.snakeyaml',      'io.ampznetwork.lunararc.libs.snakeyaml'
-        relocate 'org.apache.logging.log4j','io.ampznetwork.lunararc.libs.log4j'
 
         // ── Determine which platform JARs to include ───────────────────────
         def platformProjectMap = [
