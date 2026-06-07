@@ -7,7 +7,7 @@ An experimental PaperMC server bridge built to unify the modding ecosystem. Whil
 
 |        Release        |  Forge  | NeoForge |  Fabric  |  QuiltMC  | Status |                                                                                                                                              Build                                                           
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Trial Zenith (1.21.1) | 52.1.14 |21.1.228 |  0.19.2  |  2.29.3  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
+| Trial Zenith (1.21.1) | 52.1.14 |21.1.233 |  0.19.3  |  2.29.2  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
 
 ## Installing
 
