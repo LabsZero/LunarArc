@@ -6,6 +6,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /** Registers LunarArc's built-in server commands into the Bukkit command map. */
@@ -30,6 +31,27 @@ public final class LunarArcBuiltinCommands {
                     "/lunararc upload <crash|log>",
                     List.of());
             setPermission("lunararc.admin");
+        }
+
+        private static final List<String> SUB_COMMANDS = List.of("upload");
+        private static final List<String> UPLOAD_MODES  = List.of("crash", "log");
+
+        @Override
+        public List<String> tabComplete(CommandSender sender, String alias, String[] args) {
+            if (!sender.isOp()) return List.of();
+            List<String> completions = new ArrayList<>();
+            if (args.length == 1) {
+                String partial = args[0].toLowerCase();
+                for (String s : SUB_COMMANDS) {
+                    if (s.startsWith(partial)) completions.add(s);
+                }
+            } else if (args.length == 2 && args[0].equalsIgnoreCase("upload")) {
+                String partial = args[1].toLowerCase();
+                for (String s : UPLOAD_MODES) {
+                    if (s.startsWith(partial)) completions.add(s);
+                }
+            }
+            return completions;
         }
 
         @Override
