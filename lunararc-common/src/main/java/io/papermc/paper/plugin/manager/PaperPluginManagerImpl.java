@@ -219,8 +219,8 @@ public class PaperPluginManagerImpl implements PluginManager {
                         changed = true;
                     } catch (Throwable e) {
                         logger.error("[LunarArc] Error enabling {}", plugin.getDescription().getFullName(), e);
-                        io.ampznetwork.lunararc.common.telemetry.BlockMedicReporter.reportCrash(
-                                "plugin:" + plugin.getDescription().getFullName(), e);
+                        io.ampznetwork.lunararc.common.telemetry.BlockMedicReporter.uploadLog(
+                                "plugin-enable-failure:" + plugin.getDescription().getFullName());
                         it.remove();
                         changed = true;
                     }
