@@ -96,7 +96,14 @@ public final class LunarArcBuiltinCommands {
                 Thread.ofVirtual().name("lunararc-blockmedic-cmd").start(() -> {
                     String url = BlockMedicReporter.uploadFileNow(crash, "manual-crash-upload");
                     if (url != null) {
-                        sender.sendMessage("§a[BlockMedic] Crash report uploaded. View at: §f" + url);
+                        sender.sendMessage(net.kyori.adventure.text.Component
+                                .text("[BlockMedic] Crash report uploaded. View at: ")
+                                .color(net.kyori.adventure.text.format.NamedTextColor.GREEN)
+                                .append(net.kyori.adventure.text.Component.text(url)
+                                        .color(net.kyori.adventure.text.format.NamedTextColor.AQUA)
+                                        .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(url))
+                                        .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(
+                                                net.kyori.adventure.text.Component.text("Click to open in browser")))));
                     } else {
                         sender.sendMessage("§c[BlockMedic] Upload failed. Check console for details.");
                     }
@@ -107,7 +114,14 @@ public final class LunarArcBuiltinCommands {
                 Thread.ofVirtual().name("lunararc-blockmedic-cmd").start(() -> {
                     String url = BlockMedicReporter.uploadLogNow("manual-log-upload");
                     if (url != null) {
-                        sender.sendMessage("§a[BlockMedic] Log uploaded. View at: §f" + url);
+                        sender.sendMessage(net.kyori.adventure.text.Component
+                                .text("[BlockMedic] Log uploaded. View at: ")
+                                .color(net.kyori.adventure.text.format.NamedTextColor.GREEN)
+                                .append(net.kyori.adventure.text.Component.text(url)
+                                        .color(net.kyori.adventure.text.format.NamedTextColor.AQUA)
+                                        .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(url))
+                                        .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(
+                                                net.kyori.adventure.text.Component.text("Click to open in browser")))));
                     } else {
                         sender.sendMessage("§c[BlockMedic] Upload failed — no log file found or upload error. "
                                 + "Check console for details.");
