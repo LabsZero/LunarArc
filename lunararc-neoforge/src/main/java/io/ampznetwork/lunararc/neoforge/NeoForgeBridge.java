@@ -1,7 +1,6 @@
 package io.ampznetwork.lunararc.neoforge;
 
 import io.ampznetwork.lunararc.common.PlatformBridge;
-import io.ampznetwork.lunararc.neoforge.server.NeoForgeServer;
 import net.minecraft.server.MinecraftServer;
 import org.bukkit.craftbukkit.v1_21_R1.CraftServer;
 import org.slf4j.Logger;
@@ -40,6 +39,6 @@ public class NeoForgeBridge implements PlatformBridge {
 
     @Override
     public CraftServer createCraftServer(MinecraftServer server) {
-        return new NeoForgeServer(server);
+        return new CraftServer(server, server.getPlayerList());
     }
 }

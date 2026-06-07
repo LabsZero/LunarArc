@@ -1,7 +1,6 @@
 package io.ampznetwork.lunararc.forge;
 
 import io.ampznetwork.lunararc.common.PlatformBridge;
-import io.ampznetwork.lunararc.forge.server.ForgeServer;
 import net.minecraft.server.MinecraftServer;
 import org.bukkit.craftbukkit.v1_21_R1.CraftServer;
 import org.slf4j.Logger;
@@ -34,6 +33,6 @@ public class ForgeBridge implements PlatformBridge {
 
     @Override
     public CraftServer createCraftServer(MinecraftServer server) {
-        return new ForgeServer(server);
+        return new CraftServer(server, server.getPlayerList());
     }
 }
