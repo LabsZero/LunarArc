@@ -17,8 +17,11 @@ public abstract class MaterialMixin {
 
     @Inject(method = "getKey", at = @At("HEAD"), cancellable = true, remap = false)
     private void lunararc$onGetKey(CallbackInfoReturnable<NamespacedKey> cir) {
-        if (isLegacy()) {
+        String enumName = ((Enum<?>) (Object) this).name();
+        if (enumName.startsWith("LEGACY_")) {
             cir.setReturnValue(NamespacedKey.minecraft("air"));
+        } else {
+            cir.setReturnValue(NamespacedKey.minecraft(enumName.toLowerCase(Locale.ROOT)));
         }
     }
 

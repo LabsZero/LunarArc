@@ -56,6 +56,16 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 "org/bukkit/craftbukkit/v1_21_R1/CraftServer");
         CLASS_MAP.put("org/bukkit/craftbukkit/entity/CraftPlayer",
                 "org/bukkit/craftbukkit/v1_21_R1/entity/CraftPlayer");
+
+        // NMS inner-class renames: obfuscated single-letter nested types → Mojang-mapped names.
+        // TAB and similar plugins may reference the obfuscated $a name; NeoForge ships the
+        // Mojang-mapped variant ($Entry).
+        CLASS_MAP.put(
+                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$a",
+                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$Entry");
+        CLASS_MAP.put(
+                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$b",
+                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$Action");
     }
 
     @Override

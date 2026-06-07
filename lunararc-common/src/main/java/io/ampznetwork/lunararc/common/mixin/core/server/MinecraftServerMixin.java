@@ -80,6 +80,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge {
                 LunarArcPlatform.createCraftServer((MinecraftServer) (Object) this);
         LunarArcPlatform.setServer(craftServer);
 
+        io.ampznetwork.lunararc.common.server.LunarArcBuiltinCommands.register(craftServer);
         loadPlugins();
         enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
         // loadLevel() is called inside initServer(), so the world is already loaded
