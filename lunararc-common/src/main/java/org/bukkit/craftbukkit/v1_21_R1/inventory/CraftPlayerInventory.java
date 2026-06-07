@@ -54,12 +54,24 @@ public class CraftPlayerInventory implements PlayerInventory {
 
     private void setNms(int slot, net.minecraft.world.item.ItemStack item) {
         if (item == null) item = net.minecraft.world.item.ItemStack.EMPTY;
-        if (slot < 36) { handle.items.set(slot, item); return; }
-        if (slot == 36) { handle.armor.set(0, item); return; }
-        if (slot == 37) { handle.armor.set(1, item); return; }
-        if (slot == 38) { handle.armor.set(2, item); return; }
-        if (slot == 39) { handle.armor.set(3, item); return; }
-        if (slot == 40) { handle.offhand.set(0, item); }
+        if (slot < 36) { handle.items.set(slot, item); }
+        else if (slot == 36) { handle.armor.set(0, item); }
+        else if (slot == 37) { handle.armor.set(1, item); }
+        else if (slot == 38) { handle.armor.set(2, item); }
+        else if (slot == 39) { handle.armor.set(3, item); }
+        else if (slot == 40) { handle.offhand.set(0, item); }
+        handle.setChanged();
+        syncToClient();
+    }
+
+    /** Sends the full inventory state to the client so changes appear immediately. */
+    private void syncToClient() {
+        try {
+            if (owner instanceof org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer cp) {
+                net.minecraft.server.level.ServerPlayer sp = cp.getHandle();
+                sp.inventoryMenu.broadcastChanges();
+            }
+        } catch (Throwable ignored) {}
     }
 
     // -----------------------------------------------------------------------
