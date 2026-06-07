@@ -201,6 +201,61 @@ public class CraftServer implements Server {
                             }
                         }
                     }
+                    if (method.getName().equals("isItem")) {
+                        if (args != null && args.length > 0 && args[0] instanceof Material mat) {
+                            if (mat.name().startsWith("LEGACY_")) return false;
+                            try {
+                                net.minecraft.resources.ResourceLocation rl =
+                                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                                        mat.getKey().getNamespace(), mat.getKey().getKey());
+                                return net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(rl);
+                            } catch (Exception e) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                    if (method.getName().equals("isBlock")) {
+                        if (args != null && args.length > 0 && args[0] instanceof Material mat) {
+                            if (mat.name().startsWith("LEGACY_")) return false;
+                            try {
+                                net.minecraft.resources.ResourceLocation rl =
+                                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                                        mat.getKey().getNamespace(), mat.getKey().getKey());
+                                return net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(rl);
+                            } catch (Exception e) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                    if (method.getName().equals("createDamageSourceBuilder")) {
+                        final org.bukkit.damage.DamageType dmgType = (args != null && args.length > 0
+                            && args[0] instanceof org.bukkit.damage.DamageType dt) ? dt : null;
+                        try {
+                            Class<?> builderClass = Class.forName("org.bukkit.damage.DamageSource$Builder");
+                            org.bukkit.damage.DamageSource sourceProxy = (org.bukkit.damage.DamageSource)
+                                java.lang.reflect.Proxy.newProxyInstance(
+                                    org.bukkit.damage.DamageSource.class.getClassLoader(),
+                                    new Class<?>[] { org.bukkit.damage.DamageSource.class },
+                                    (p2, m2, a2) -> {
+                                        if (m2.getName().equals("getDamageType")) return dmgType;
+                                        if (m2.getReturnType().equals(boolean.class)) return false;
+                                        if (m2.getReturnType().equals(float.class)) return 0.0f;
+                                        return null;
+                                    });
+                            return java.lang.reflect.Proxy.newProxyInstance(
+                                builderClass.getClassLoader(),
+                                new Class<?>[] { builderClass },
+                                (p2, m2, a2) -> {
+                                    if (m2.getName().equals("build")) return sourceProxy;
+                                    if (builderClass.isAssignableFrom(m2.getReturnType())) return p2;
+                                    return null;
+                                });
+                        } catch (Exception e) {
+                            return null;
+                        }
+                    }
                     if (method.getReturnType().equals(boolean.class))
                         return false;
                     if (method.getReturnType().equals(int.class))
