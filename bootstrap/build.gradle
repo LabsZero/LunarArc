@@ -1,8 +1,6 @@
 // Bootstrap — assembles all subprojects into one per-platform server JAR.
 // Analogous to Arclight's bootstrap subproject.
 // PaperMC is used as the Bukkit API implementation instead of Spigot.
-import com.gradleup.shadow.tasks.ShadowJar
-
 plugins {
     id 'com.gradleup.shadow'
 }
@@ -75,6 +73,10 @@ jar {
 
 // ── Per-platform shadow JAR factory ───────────────────────────────────────────
 def createFatJar(String platform) {
+    // Load ShadowJar at runtime (after plugins {} is applied) to avoid Groovy
+    // compile-time class resolution failures when the plugin JAR isn't yet on
+    // the script compile classpath in Gradle 9.5.
+    def ShadowJar = getClass().classLoader.loadClass('com.gradleup.shadow.tasks.ShadowJar')
     tasks.register("${platform}Jar", ShadowJar) {
         def cleanVersion = project.version.toString().replace('-SNAPSHOT', '')
         archiveBaseName.set("${rootProject.name.toLowerCase(Locale.ROOT).replaceAll('[^a-z0-9._-]+', '-')}-${platform}")
