@@ -106,7 +106,7 @@ def createFatJar(String platform) {
             : "transformProduction${platform.capitalize()}"
         def commonJarTask = project(':lunararc-common').tasks.findByName(commonTaskName)
 
-        dependsOn commonJarTask, platformJarTask
+        dependsOn commonJarTask, platformJarTask, 'generateVersions'
 
         // Common hybrid-server classes (mixins, bridges, Paper stubs)
         from(zipTree(commonJarTask.outputs.files.singleFile)) {
