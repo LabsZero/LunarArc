@@ -1,8 +1,8 @@
 package io.ampznetwork.lunararc.common.mod;
 
-import io.ampznetwork.lunararc.libs.asm.ClassReader;
-import io.ampznetwork.lunararc.libs.asm.ClassWriter;
-import io.ampznetwork.lunararc.libs.asm.commons.ClassRemapper;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.commons.ClassRemapper;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,7 +23,7 @@ import java.util.Map;
  *  - Downgrade bytecode class-file version when a plugin was compiled on a newer
  *    JVM than the one running the server (prevents UnsupportedClassVersionError).
  */
-public class LunarArcRemapper extends io.ampznetwork.lunararc.libs.asm.commons.Remapper {
+public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
 
     private static final Map<String, String> CLASS_MAP = new HashMap<>();
 
