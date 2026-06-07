@@ -88,32 +88,7 @@ public class BlockMedicReporter {
             try {
                 String content = readLatestLog();
                 if (content == null || content.isEmpty()) return;
-
-                String metadata = "["
-                        + metaEntry("version", LunarArcVersionInfo.projectVersion(), "LunarArc Version", true) + ","
-                        + metaEntry("minecraft", LunarArcVersionInfo.minecraftVersion(), "Minecraft Version", true) + ","
-                        + metaEntry("context", context, "Context", true)
-                        + "]";
-
-                String payload = "{"
-                        + "\"content\":" + jsonStr(content) + ","
-                        + "\"source\":\"LunarArc\","
-                        + "\"metadata\":" + metadata
-                        + "}";
-
-                String response = post(payload);
-                String url = extract(response, "url");
-                String errorCount = extract(response, "errors");
-                LOGGER.info("[BlockMedic] Log uploaded ({} errors detected). View at: {}",
-                        errorCount.isEmpty() ? "?" : errorCount, url);
-
-                // Record that this version of the log was uploaded.
-                lastUploadTime = System.currentTimeMillis();
-                if (logPath != null) {
-                    try {
-                        lastUploadedModified = Files.getLastModifiedTime(logPath).toMillis();
-                    } catch (Exception ignored) {}
-                }
+                doUpload(content, context, logPath);
             } catch (Exception e) {
                 LOGGER.debug("[BlockMedic] Log upload failed: {}", e.getMessage());
             }
@@ -127,53 +102,63 @@ public class BlockMedicReporter {
     public static String uploadLogNow(String context) {
         if (!LunarArcConfig.isBlockMedicEnabled()) return null;
         try {
-            String content = readLatestLog();
-            if (content == null || content.isEmpty()) return null;
-
-            String metadata = "["
-                    + metaEntry("version", LunarArcVersionInfo.projectVersion(), "LunarArc Version", true) + ","
-                    + metaEntry("minecraft", LunarArcVersionInfo.minecraftVersion(), "Minecraft Version", true) + ","
-                    + metaEntry("context", context, "Context", true)
-                    + "]";
-
-            String payload = "{"
-                    + "\"content\":" + jsonStr(content) + ","
-                    + "\"source\":\"LunarArc\","
-                    + "\"metadata\":" + metadata
-                    + "}";
-
-            String response = post(payload);
-            String url = extract(response, "url");
-            String errorCount = extract(response, "errors");
-            if (!url.isEmpty()) {
-                LOGGER.info("[BlockMedic] Log uploaded ({} errors detected). View at: {}",
-                        errorCount.isEmpty() ? "?" : errorCount, url);
-            }
-
-            // Update the dedup and rate-limit markers.
-            lastUploadTime = System.currentTimeMillis();
             Path logPath = findLogPath();
-            if (logPath != null) {
-                try { lastUploadedModified = Files.getLastModifiedTime(logPath).toMillis(); }
-                catch (Exception ignored) {}
-            }
-
-            return url.isEmpty() ? null : url;
+            String content = logPath != null ? readFile(logPath) : getConsoleCapture();
+            if (content == null || content.isEmpty()) return null;
+            return doUpload(content, context, logPath);
         } catch (Exception e) {
             LOGGER.debug("[BlockMedic] Manual upload failed: {}", e.getMessage());
             return null;
         }
     }
 
+    /**
+     * Finds the most recent crash report in the crash-reports/ directory.
+     * Returns null if none exist.
+     */
+    public static Path findCrashReport() {
+        String userDir = System.getProperty("user.dir", ".");
+        String[] dirs = {"crash-reports", userDir + "/crash-reports", "../crash-reports"};
+        Path latest = null;
+        long latestTime = 0;
+        for (String dir : dirs) {
+            Path d = Paths.get(dir);
+            if (!Files.isDirectory(d)) continue;
+            try (var stream = Files.list(d)) {
+                for (Path p : stream.toList()) {
+                    String name = p.getFileName().toString().toLowerCase();
+                    if (!name.endsWith(".txt") && !name.endsWith(".log")) continue;
+                    long mod = Files.getLastModifiedTime(p).toMillis();
+                    if (mod > latestTime) { latestTime = mod; latest = p; }
+                }
+            } catch (Exception ignored) {}
+        }
+        return latest;
+    }
+
+    /**
+     * Uploads a specific file path to BlockMedic synchronously.
+     * Returns the view URL or null on failure.
+     */
+    public static String uploadFileNow(Path filePath, String context) {
+        if (!LunarArcConfig.isBlockMedicEnabled()) return null;
+        try {
+            String content = readFile(filePath);
+            if (content == null || content.isEmpty()) return null;
+            return doUpload(content, context, filePath);
+        } catch (Exception e) {
+            LOGGER.debug("[BlockMedic] Upload failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
     static Path findLogPath() {
-        // Try relative paths first, then absolute paths anchored to user.dir
         String userDir = System.getProperty("user.dir", ".");
         String[] candidates = {
             "logs/latest.log",
             "latest.log",
             userDir + "/logs/latest.log",
             userDir + "/latest.log",
-            // NeoForge sometimes runs from a sub-directory
             "../logs/latest.log",
         };
         for (String candidate : candidates) {
@@ -186,10 +171,12 @@ public class BlockMedicReporter {
 
     private static String readLatestLog() {
         Path p = findLogPath();
-        if (p == null) {
-            // No log file yet — fall back to captured console output
-            return getConsoleCapture();
-        }
+        if (p == null) return getConsoleCapture();
+        return readFile(p);
+    }
+
+    private static String readFile(Path p) {
+        if (p == null || !Files.exists(p)) return null;
         try {
             long size = Files.size(p);
             if (size > MAX_LOG_BYTES) {
@@ -207,6 +194,27 @@ public class BlockMedicReporter {
             return Files.readString(p);
         } catch (Exception ignored) {}
         return null;
+    }
+
+    private static String doUpload(String content, String context, Path sourcePath) throws Exception {
+        String metadata = "["
+                + metaEntry("version", LunarArcVersionInfo.projectVersion(), "LunarArc Version", true) + ","
+                + metaEntry("minecraft", LunarArcVersionInfo.minecraftVersion(), "Minecraft Version", true) + ","
+                + metaEntry("context", context, "Context", true)
+                + "]";
+        String payload = "{\"content\":" + jsonStr(content) + ",\"source\":\"LunarArc\",\"metadata\":" + metadata + "}";
+        String response = post(payload);
+        String url = extract(response, "url");
+        String errorCount = extract(response, "errors");
+        if (!url.isEmpty()) {
+            LOGGER.info("[BlockMedic] Uploaded {} ({} errors). View at: {}",
+                    sourcePath != null ? sourcePath.getFileName() : "console", errorCount.isEmpty() ? "?" : errorCount, url);
+        }
+        lastUploadTime = System.currentTimeMillis();
+        if (sourcePath != null) {
+            try { lastUploadedModified = Files.getLastModifiedTime(sourcePath).toMillis(); } catch (Exception ignored) {}
+        }
+        return url.isEmpty() ? null : url;
     }
 
     private static String post(String json) throws Exception {
