@@ -1,9 +1,9 @@
 package io.ampznetwork.lunararc.launcher;
 
-import io.ampznetwork.lunararc.libs.gson.JsonArray;
-import io.ampznetwork.lunararc.libs.gson.JsonElement;
-import io.ampznetwork.lunararc.libs.gson.JsonObject;
-import io.ampznetwork.lunararc.libs.gson.JsonParser;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import io.ampznetwork.lunararc.i18n.TranslationManager;
 
 import java.io.InputStreamReader;

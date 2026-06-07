@@ -43,6 +43,10 @@ dependencies {
     compileOnly 'org.slf4j:slf4j-api:2.0.9'
 }
 
+// compileJava reads the Paper server JAR produced by setupPaperServer — declare
+// the dependency so Gradle enforces the correct task ordering.
+tasks.named('compileJava') { dependsOn rootProject.tasks.named('setupPaperServer') }
+
 processResources {
     inputs.property 'version', project.version
     filesMatching('fabric.mod.json') { expand version: project.version }
