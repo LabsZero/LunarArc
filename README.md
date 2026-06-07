@@ -49,6 +49,7 @@ LunarArc is built upon the incredible work of the following projects:
 - **[Quilt](https://quiltmc.org/)**: The open-source, community-driven modding toolchain.
 - **[PaperMC](https://papermc.io/)**: High-performance Minecraft server implementation.
 - **[Architectury](https://architectury.dev/)**: Multi-platform modding abstraction layer.
+- **[Arclight](https://github.com/IzzelAliz/Arclight)**: Bridge+Mixin architecture, single-JAR bootstrap pattern (`LunarArcAgent` premain/`Instrumentation`), `IModLocatorService` self-registration, class-space unification via `PluginClassLoader`, and Velocity forwarding patterns are all inspired by and adapted from Arclight. LunarArc would not exist without this foundational work.
 - **[Youer](https://github.com/MohistMC/Youer)**: Inspiration for Paper 1.21.1+ compatibility and ServiceLoader-based build metadata.
 - **[SpongePowered](https://www.spongepowered.org/)**: Mixin and project structure inspiration.
 

@@ -1,7 +1,7 @@
 package io.ampznetwork.lunararc.i18n;
 
-import io.ampznetwork.lunararc.libs.gson.JsonObject;
-import io.ampznetwork.lunararc.libs.gson.JsonParser;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;

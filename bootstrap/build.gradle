@@ -80,9 +80,9 @@ def createFatJar(String platform) {
         archiveClassifier.set('')
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-        // Relocate shaded libraries to avoid classpath conflicts with the mod loader
+        // Relocate shaded libraries to avoid classpath conflicts with the mod loader.
+        // Gson is intentionally NOT relocated — it is provided by Minecraft/Paper at runtime.
         relocate 'org.objectweb.asm',      'io.ampznetwork.lunararc.libs.asm'
-        relocate 'com.google.gson',         'io.ampznetwork.lunararc.libs.gson'
         relocate 'net.kyori',               'io.ampznetwork.lunararc.libs.adventure'
         relocate 'org.yaml.snakeyaml',      'io.ampznetwork.lunararc.libs.snakeyaml'
         relocate 'org.apache.logging.log4j','io.ampznetwork.lunararc.libs.log4j'
