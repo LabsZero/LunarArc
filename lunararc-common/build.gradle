@@ -1,0 +1,49 @@
+// Core hybrid-server implementation: mixins, bridges, PaperMC stubs, remapper.
+// Analogous to arclight-common — compiled as an Architectury common project so
+// platform-specific transformations (NeoForge, Forge, Fabric, Quilt) can derive from it.
+plugins {
+    id 'architectury-plugin'
+    id 'dev.architectury.loom'
+}
+
+architectury {
+    common(rootProject.ext.supportedPlatforms)
+}
+
+loom {
+    silentMojangMappingsLicense()
+}
+
+dependencies {
+    minecraft libs.minecraft
+    mappings loom.layered() {
+        officialMojangMappings()
+        parchment("org.parchmentmc.data:parchment-${libs.versions.minecraft.get()}:${libs.versions.parchment.get()}@zip")
+    }
+
+    implementation project(':lunararc-api')
+    implementation project(':i18n-config')
+
+    // PaperMC — used instead of Spigot for the Bukkit API implementation.
+    // paper-api provides the public API interfaces; the deobfuscated Paper server
+    // JAR (downloaded by setupPaperServer) provides NMS/CraftBukkit implementation
+    // classes so our stubs compile with the exact Paper 1.21.1 mappings — making
+    // every plugin think it is running on a genuine Paper server.
+    compileOnly libs.paper.api
+    compileOnly fileTree(dir: rootProject.ext.paperDir, include: "paper-server-*.jar")
+    compileOnly 'org.joml:joml:1.10.5'
+    compileOnly libs.log4j.api
+    compileOnly libs.fastutil
+
+    // Mixin
+    compileOnly 'org.spongepowered:mixin:0.8.7'
+    compileOnly 'io.github.llamalad7:mixinextras-common:0.4.1'
+    annotationProcessor 'io.github.llamalad7:mixinextras-common:0.4.1'
+
+    compileOnly 'org.slf4j:slf4j-api:2.0.9'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand version: project.version }
+}

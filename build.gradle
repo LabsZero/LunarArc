@@ -1,4 +1,5 @@
 import java.nio.file.Files
+
 plugins {
     alias(libs.plugins.architectury) apply false
     alias(libs.plugins.loom) apply false
@@ -7,29 +8,22 @@ plugins {
 
 allprojects {
     apply plugin: 'java'
-    
+
     group = 'io.ampznetwork.lunararc'
     version = libs.versions.project.version.get()
-    
-    def getGitHash = { ->
-        try {
-            def stdout = new ByteArrayOutputStream()
-            exec {
-                commandLine 'git', 'rev-parse', '--short', 'HEAD'
-                standardOutput = stdout
-                ignoreExitValue = true
-            }
-            def hash = stdout.toString().trim()
-            return hash.isEmpty() ? "unknown" : hash
-        } catch (Exception e) {
-            return "unknown"
-        }
-    }
-    
+
     ext {
-        gitHash = getGitHash()
+        gitHash = { ->
+            try {
+                def out = new ByteArrayOutputStream()
+                exec { commandLine 'git', 'rev-parse', '--short', 'HEAD'; standardOutput = out; ignoreExitValue = true }
+                def h = out.toString().trim(); return h.isEmpty() ? 'unknown' : h
+            } catch (ignored) { return 'unknown' }
+        }()
         supportedPlatforms = ['neoforge', 'forge', 'fabric', 'quilt']
-        buildName = libs.versions.build.name.get()
+        buildName          = libs.versions.build.name.get()
+        paperDir           = rootProject.file('.gradle/paper')
+        paperServerJar     = rootProject.file(".gradle/paper/paper-server-${libs.versions.minecraft.get()}-${libs.versions.paper.build.get()}.jar")
     }
 
     repositories {
@@ -37,92 +31,51 @@ allprojects {
         maven { url 'https://maven.neoforged.net/releases' }
         maven { url 'https://repo.papermc.io/repository/maven-public/' }
         maven { url 'https://repo.spongepowered.org/maven' }
+        maven { url 'https://maven.parchmentmc.org' }
     }
-    
+
     java {
-        toolchain {
-            languageVersion = JavaLanguageVersion.of(21)
-        }
-    }
-
-    ext {
-        paperDir = project.rootProject.file(".gradle/paper")
-        paperServerJar = paperDir.toPath().resolve("paper-server-${libs.versions.minecraft.get()}-${libs.versions.paper.build.get()}.jar").toFile()
+        toolchain { languageVersion = JavaLanguageVersion.of(21) }
     }
 }
 
-// Task to generate launcher properties from libs.versions.toml
-tasks.register('generateLauncherProperties') {
-    def propsFile = project(':installer').file('src/main/resources/lunararc-launcher.properties')
-    outputs.file(propsFile)
-    doLast {
-        propsFile.parentFile.mkdirs()
-        def props = new Properties()
-        props.setProperty('version', libs.versions.project.version.get())
-        props.setProperty('buildname', libs.versions.build.name.get())
-        props.setProperty('minecraft', libs.versions.minecraft.get())
-        props.setProperty('neoforge', libs.versions.neoforge.get())
-        props.setProperty('forge', libs.versions.forge.get())
-        props.setProperty('fabric', libs.versions.fabric.loader.get())
-        props.setProperty('fabricInstaller', libs.versions.fabric.installer.get())
-        props.setProperty('quilt', libs.versions.quilt.loader.get())
-        props.setProperty('quiltInstaller', libs.versions.quilt.installer.get())
-        
-        propsFile.withOutputStream { out ->
-            props.store(out, "LunarArc Launcher Properties (Auto-generated)")
-        }
-    }
-}
-
-project(':installer').tasks.named('processResources') {
-    dependsOn(rootProject.tasks.named('generateLauncherProperties'))
-}
-
+// ── Download & extract Paper server JAR ───────────────────────────────────────
 tasks.register('setupPaperServer') {
-    outputs.file(project.ext.paperServerJar)
+    outputs.file(rootProject.ext.paperServerJar)
     doLast {
-        if (!project.ext.paperServerJar.exists()) {
-            project.ext.paperDir.mkdirs()
-            def mcVersion = libs.versions.minecraft.get()
+        if (!rootProject.ext.paperServerJar.exists()) {
+            rootProject.ext.paperDir.mkdirs()
+            def mc    = libs.versions.minecraft.get()
             def build = libs.versions.paper.build.get()
-            def url = "https://api.papermc.io/v2/projects/paper/versions/${mcVersion}/builds/${build}/downloads/paper-${mcVersion}-${build}.jar"
-            def paperBundler = project.ext.paperDir.toPath().resolve("paper-bundler.jar").toFile()
-
+            def url   = "https://api.papermc.io/v2/projects/paper/versions/${mc}/builds/${build}/downloads/paper-${mc}-${build}.jar"
+            def bundler = new File(rootProject.ext.paperDir, 'paper-bundler.jar')
             try {
-                println "Downloading Paper bundler from ${url}..."
+                println "Downloading Paper ${build} for MC ${mc}..."
                 def conn = URI.create(url).toURL().openConnection()
-                conn.connectTimeout = 30_000
-                conn.readTimeout = 120_000
-                paperBundler.withOutputStream { out -> conn.inputStream.transferTo(out) }
-
+                conn.connectTimeout = 30_000; conn.readTimeout = 120_000
+                bundler.withOutputStream { it2 -> conn.inputStream.transferTo(it2) }
                 println "Extracting paper-server from bundler..."
-                def jar = new java.util.jar.JarFile(paperBundler)
-                def entry = jar.stream()
-                        .filter({ e -> e.name.startsWith("META-INF/versions/") && e.name.endsWith(".jar") })
-                        .findFirst().orElse(null)
-                if (entry != null) {
-                    project.ext.paperServerJar.withOutputStream { out -> jar.getInputStream(entry).transferTo(out) }
-                    println "Paper server implementation ready at ${project.ext.paperServerJar}"
+                def jar   = new java.util.jar.JarFile(bundler)
+                def entry = jar.stream().filter { e -> e.name.startsWith('META-INF/versions/') && e.name.endsWith('.jar') }.findFirst().orElse(null)
+                if (entry) {
+                    rootProject.ext.paperServerJar.withOutputStream { it2 -> jar.getInputStream(entry).transferTo(it2) }
                 } else {
-                    Files.copy(paperBundler.toPath(), project.ext.paperServerJar.toPath(),
-                            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-                    println "Paper jar used directly as implementation."
+                    Files.copy(bundler.toPath(), rootProject.ext.paperServerJar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
                 }
                 jar.close()
+                println "Paper server JAR ready: ${rootProject.ext.paperServerJar}"
             } catch (Exception e) {
-                println "WARNING: setupPaperServer failed (network unavailable?): ${e.message}"
-                println "The paper server JAR is only needed at runtime, not for compilation. Build continues."
+                println "WARNING: setupPaperServer failed (network?): ${e.message}"
             } finally {
-                if (paperBundler.exists()) paperBundler.delete()
+                if (bundler.exists()) bundler.delete()
             }
         } else {
-            println "Paper server JAR already present: ${project.ext.paperServerJar}"
+            println "Paper server JAR already present: ${rootProject.ext.paperServerJar}"
         }
     }
 }
 
-jar.enabled = false
-
+// ── Collect all platform fat-JARs into build/libs ─────────────────────────────
 tasks.register('collect', Copy) {
     destinationDir = file('build/libs')
     from project(':bootstrap').tasks.named('neoforgeJar')
@@ -131,29 +84,4 @@ tasks.register('collect', Copy) {
     from project(':bootstrap').tasks.named('quiltJar')
 }
 
-def gitBranch() {
-    try {
-        def stdout = new ByteArrayOutputStream()
-        exec {
-            commandLine 'git', 'rev-parse', '--abbrev-ref', 'HEAD'
-            standardOutput = stdout
-            ignoreExitValue = true
-        }
-        def branch = stdout.toString().trim()
-        return branch.isEmpty() ? "unknown" : branch
-    } catch (Exception e) {
-        return "unknown"
-    }
-}
-
-abstract class UploadFilesTask extends DefaultTask {
-    @TaskAction
-    void upload() {
-        println "Uploading version ${project.version}-${project.ext.gitHash} from branch ${project.gitBranch()}"
-        // Add actual upload logic here (e.g., FTP, S3, etc.)
-    }
-}
-
-tasks.register('uploadFiles', UploadFilesTask) {
-    dependsOn(tasks.collect)
-}
+jar.enabled = false

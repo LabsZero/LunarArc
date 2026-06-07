@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-LunarArc is a **hybrid Minecraft server** that runs Paper plugins alongside mod loaders — analogous to Arclight. It bridges the Bukkit/Paper API with NeoForge, Forge, Fabric, and Quilt.
+LunarArc is a **hybrid Minecraft server** that runs Paper plugins alongside mod loaders — analogous to Arclight. It bridges the Bukkit/Paper API with NeoForge, Forge, Fabric, and Quilt. Uses **PaperMC** (not Spigot) as the Bukkit implementation base.
 
 ## Key Facts
 
@@ -25,14 +25,24 @@ Known methods that do NOT exist in build 133 (do not `@Override` these):
 - `getResourcePacksHash()`
 - `getCurrentInput()` (uses `org.bukkit.Input` which doesn't exist in build 133)
 
-## Project Structure
+## Project Structure (Arclight-style)
 
-- `projects/base/` — Bukkit/Paper stub implementations (CraftPlayer, CraftServer, etc.)
-- `projects/core/` — Core hybrid logic
-- `projects/loaders/fabric/` — Fabric loader integration
-- `projects/loaders/forge/` — Forge loader integration
-- `projects/loaders/quilt/` — Quilt loader integration
-- `build/libs/` — Collected output JARs
+Mirrors Arclight's folder layout with `ampznetwork`/`LunarArc` branding and PaperMC instead of Spigot.
+
+| Module | Purpose |
+|--------|---------|
+| `lunararc-api/` | Non-Minecraft utilities & shared API (analogous to `arclight-api`) |
+| `lunararc-common/` | Core hybrid code: mixins in `io/ampznetwork/lunararc/common/mixin/`, bridges in `io/ampznetwork/lunararc/common/bridge/`, remapper + mod utilities in `io/ampznetwork/lunararc/common/mod/` |
+| `lunararc-neoforge/` | NeoForge-specific integration (analogous to `arclight-neoforge`) |
+| `lunararc-forge/` | Forge-specific integration (analogous to `arclight-forge`) |
+| `lunararc-fabric/` | Fabric-specific integration (analogous to `arclight-fabric`) |
+| `lunararc-quilt/` | Quilt-specific integration |
+| `bootstrap/` | Assembles one per-platform fat-JAR server artifact |
+| `installer/` | Downloads & installs mod loaders automatically at runtime |
+| `i18n-config/` | Multi-language translation strings |
+| `buildSrc/` | Custom Gradle build logic (Paper JAR remapping utilities) |
+| `gradle/` | `libs.versions.toml` — central dependency version catalog |
+| `build/libs/` | Collected output JARs (neoforge, forge, fabric, quilt) |
 
 ## Build
 

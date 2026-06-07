@@ -1,110 +1,114 @@
+// Bootstrap — assembles all subprojects into one per-platform server JAR.
+// Analogous to Arclight's bootstrap subproject.
+// PaperMC is used as the Bukkit API implementation instead of Spigot.
 plugins {
-    id 'com.github.johnrengelman.shadow'
+    id 'com.gradleup.shadow'
 }
 
 dependencies {
     implementation project(':installer')
     implementation project(':lunararc-common')
-    implementation project(':api')
+    implementation project(':lunararc-api')
     implementation project(':lunararc-neoforge')
     implementation project(':lunararc-forge')
     implementation project(':lunararc-fabric')
     implementation project(':lunararc-quilt')
-    implementation project(':i18n')
+    implementation project(':i18n-config')
 
-    implementation 'com.google.code.gson:gson:2.10.1'
-
-    // Paper API (Required for hybrid bridge)
+    // PaperMC bridge (hybrid Bukkit implementation — replaces Spigot)
     implementation libs.paper.api
     implementation 'net.md-5:bungeecord-chat:1.20-R0.2'
+
+    // Bundled utilities
     implementation libs.sqlite.jdbc
-    implementation project(':libs')
+    implementation libs.gson
+    implementation libs.snakeyaml
+    implementation libs.adventure.api
+    implementation libs.adventure.text.minimessage
+    implementation libs.adventure.text.serializer.gson
+    implementation libs.adventure.text.serializer.legacy
+    implementation libs.adventure.text.serializer.plain
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
-}
+// ── Generate version properties at build time ─────────────────────────────────
+def versionsFile = file('src/main/resources/lunararc-launcher.properties')
 
-def versionsFile = file("src/main/resources/lunararc-launcher.properties")
-
-tasks.register("generateVersions") {
+tasks.register('generateVersions') {
+    outputs.file versionsFile
     doLast {
         versionsFile.parentFile.mkdirs()
         def props = new Properties()
-
-        props.setProperty("projectName", rootProject.name)
-        props.setProperty("version", libs.versions.project.version.get())
-        props.setProperty("minecraft", libs.versions.minecraft.get())
-        props.setProperty("neoforge", libs.versions.neoforge.get())
-        props.setProperty("forge", libs.versions.forge.get())
-        props.setProperty("fabric", libs.versions.fabric.loader.get())
-        props.setProperty("fabricInstaller", libs.versions.fabric.installer.get())
-        props.setProperty("quilt", libs.versions.quilt.loader.get())
-        props.setProperty("quiltInstaller", libs.versions.quilt.installer.get())
-        props.setProperty("paperBuild", libs.versions.paper.build.get())
-        props.setProperty("paperApi", libs.versions.paper.api.get())
-        props.setProperty("dataVersion", libs.versions.data.version.get())
-        props.setProperty("buildName", libs.versions.build.name.get())
-        props.setProperty("javaVersion", project.java.toolchain.languageVersion.get().toString())
-        props.setProperty("buildDate", new java.text.SimpleDateFormat("dd-MM-yyyy--HH:mm").format(new Date()))
-
-        versionsFile.text = ""
+        props['projectName']     = rootProject.name
+        props['version']         = libs.versions.project.version.get()
+        props['minecraft']       = libs.versions.minecraft.get()
+        props['neoforge']        = libs.versions.neoforge.get()
+        props['forge']           = libs.versions.forge.get()
+        props['fabric']          = libs.versions.fabric.loader.get()
+        props['fabricInstaller'] = libs.versions.fabric.installer.get()
+        props['quilt']           = libs.versions.quilt.loader.get()
+        props['quiltInstaller']  = libs.versions.quilt.installer.get()
+        props['paperBuild']      = libs.versions.paper.build.get()
+        props['paperApi']        = libs.versions.paper.api.get()
+        props['dataVersion']     = libs.versions.data.version.get()
+        props['buildName']       = libs.versions.build.name.get()
+        props['javaVersion']     = project.java.toolchain.languageVersion.get().toString()
+        props['buildDate']       = new java.text.SimpleDateFormat('dd-MM-yyyy HH:mm').format(new Date())
+        versionsFile.text = ''
         props.store(versionsFile.newWriter(), null)
     }
 }
 
-processResources.dependsOn("generateVersions")
+processResources.dependsOn 'generateVersions'
 
 jar {
     manifest {
         attributes(
-                'Main-Class': 'io.ampznetwork.lunararc.launcher.Launcher',
-                'Premain-Class': 'io.ampznetwork.lunararc.launcher.LunarArcAgent',
-                'Can-Retransform-Classes': 'true',
-                'Can-Append-To-Class-Path': 'true'
+            'Main-Class':           'io.ampznetwork.lunararc.launcher.Launcher',
+            'Premain-Class':        'io.ampznetwork.lunararc.launcher.LunarArcAgent',
+            'Can-Retransform-Classes': 'true',
+            'Can-Append-To-Class-Path': 'true'
         )
     }
 }
 
+// ── Per-platform shadow JAR factory ───────────────────────────────────────────
 def createFatJar(String platform) {
-    return tasks.register("${platform}Jar", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    tasks.register("${platform}Jar", com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
         def cleanVersion = project.version.toString().replace('-SNAPSHOT', '')
-        archiveBaseName.set("${rootProject.name.toLowerCase(java.util.Locale.ROOT).replaceAll('[^a-z0-9._-]+', '-')}-${platform}")
+        archiveBaseName.set("${rootProject.name.toLowerCase(Locale.ROOT).replaceAll('[^a-z0-9._-]+', '-')}-${platform}")
         archiveVersion.set(cleanVersion)
         archiveClassifier.set('')
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-        // ASM relocation is now handled by the :libs project to avoid Shadow scanner crashes
+        // Relocate shaded libraries to avoid classpath conflicts with the mod loader
+        relocate 'org.objectweb.asm',      'io.ampznetwork.lunararc.libs.asm'
+        relocate 'com.google.gson',         'io.ampznetwork.lunararc.libs.gson'
+        relocate 'net.kyori',               'io.ampznetwork.lunararc.libs.adventure'
+        relocate 'org.yaml.snakeyaml',      'io.ampznetwork.lunararc.libs.snakeyaml'
+        relocate 'org.apache.logging.log4j','io.ampznetwork.lunararc.libs.log4j'
 
-        dependencies {
-            exclude(project(':installer'))
-            exclude(project(':api'))
-            exclude(project(':lunararc-neoforge'))
-            exclude(project(':lunararc-common'))
-            exclude(project(':i18n'))
+        // ── Determine which platform JARs to include ───────────────────────
+        def platformProjectMap = [
+            neoforge: ':lunararc-neoforge',
+            forge:    ':lunararc-forge',
+            fabric:   ':lunararc-fabric',
+            quilt:    ':lunararc-quilt'
+        ]
+        def platformProject = project(platformProjectMap[platform])
+
+        def platformJarTask = platformProject.tasks.findByName('remapJar')
+        if (platformJarTask == null || !platformJarTask.enabled) {
+            platformJarTask = platformProject.tasks.findByName('jar')
         }
 
-        def platformProjectMap = [neoforge: ':lunararc-neoforge', forge: ':lunararc-forge', fabric: ':lunararc-fabric', quilt: ':lunararc-quilt']
-        def subprojectPath = platformProjectMap[platform]
-        def subproject = project(subprojectPath)
-
-        def jarTask = subproject.tasks.findByName('remapJar')
-        if (jarTask == null || !jarTask.enabled) {
-            jarTask = subproject.tasks.findByName('jar')
-        }
-
-        def commonTaskName = (platform == 'neoforge')
-                ? "transformProductionNeoForge"
-                : "transformProduction${platform.capitalize()}"
-
+        def commonTaskName = platform == 'neoforge'
+            ? 'transformProductionNeoForge'
+            : "transformProduction${platform.capitalize()}"
         def commonJarTask = project(':lunararc-common').tasks.findByName(commonTaskName)
 
-        dependsOn commonJarTask
-        dependsOn jarTask
+        dependsOn commonJarTask, platformJarTask
 
-        // Use the output directly instead of zipTree if possible, or filter aggressively
+        // Common hybrid-server classes (mixins, bridges, Paper stubs)
         from(zipTree(commonJarTask.outputs.files.singleFile)) {
             include 'io/ampznetwork/lunararc/**'
             include 'io/papermc/paper/**'
@@ -112,7 +116,8 @@ def createFatJar(String platform) {
             include 'META-INF/mixins.*.json'
         }
 
-        from(zipTree(jarTask.outputs.files.singleFile)) {
+        // Platform-specific classes and mod metadata
+        from(zipTree(platformJarTask.outputs.files.singleFile)) {
             include 'io/ampznetwork/lunararc/**'
             include 'META-INF/neoforge.mods.toml'
             include 'META-INF/mods.toml'
@@ -120,92 +125,82 @@ def createFatJar(String platform) {
             include 'quilt.mod.json'
         }
 
+        // Source-set outputs
         from project(':installer').sourceSets.main.output
-        from project(':api').sourceSets.main.output
-        from project(':i18n').sourceSets.main.output
-        from project(':libs').file('build/relocated')
+        from project(':lunararc-api').sourceSets.main.output
+        from project(':i18n-config').sourceSets.main.output
         from project(':lunararc-common').sourceSets.main.resources
-        from subproject.sourceSets.main.resources
+        from platformProject.sourceSets.main.resources
         from sourceSets.main.resources
 
+        // ── Runtime dependency filtering ───────────────────────────────────
         project.configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.each { artifact ->
             def id = artifact.moduleVersion.id
-            if (id.group != 'io.ampznetwork.lunararc' || id.name == 'libs') {
-                // EXCLUDE common platform libraries to avoid split package issues with NeoForge/Minecraft
-                boolean isProvidedByPlatform = id.group.startsWith('org.apache.commons') || 
-                                              id.group.startsWith('org.apache.maven') ||
-                                              id.group.startsWith('org.codehaus.plexus') ||
-                                              id.group.startsWith('org.apache.logging') ||
-                                              id.group.startsWith('org.slf4j') ||
-                                              id.group.startsWith('com.google.guava') ||
-                                              id.group.startsWith('com.google.code.findbugs') ||
-                                              id.group.startsWith('com.google.errorprone') ||
-                                              id.group.startsWith('org.checkerframework') ||
-                                              id.group.startsWith('com.mojang') ||
-                                              id.group.startsWith('it.unimi.dsi') ||
-                                              id.group.startsWith('org.joml') ||
-                                              id.group.startsWith('com.google.code.gson') ||
-                                              id.group.startsWith('org.ow2.asm') ||
-                                              id.group.startsWith('net.minecraft');
-                
-                if (isProvidedByPlatform && id.group != 'io.ampznetwork.lunararc') return;
 
-                // EXCLUDE loaders from other platforms to avoid Mixin duplication and conflicts
-                if (platform == 'neoforge' && (id.group == 'net.fabricmc' || id.group == 'org.quiltmc')) return;
-                if (platform == 'fabric' && (id.group == 'net.neoforged' || id.group == 'org.quiltmc')) return;
-                if (platform == 'quilt' && (id.group == 'net.neoforged' || id.group == 'net.fabricmc')) return;
-                if (platform == 'forge' && (id.group == 'net.neoforged' || id.group == 'net.fabricmc' || id.group == 'org.quiltmc')) return;
+            // Skip internal subprojects (already merged above)
+            if (id.group == 'io.ampznetwork.lunararc') return
 
-                boolean isRequiredFlatten = (id.group == 'io.papermc.paper' && id.name == 'paper-api') || 
-                                           id.group.startsWith('net.kyori') ||
-                                           id.group.contains('net.md-5') ||
-                                           (id.group == 'org.yaml' && id.name == 'snakeyaml') ||
-                                           (id.group == 'org.xerial' && id.name == 'sqlite-jdbc') ||
-                                           (id.group == 'io.ampznetwork.lunararc' && id.name == 'libs');
-                if (isRequiredFlatten) {
-                    // Flatten these into the root so they are visible to the mod classloader
-                    from(zipTree(artifact.file)) {
-                        exclude 'META-INF/MANIFEST.MF'
-                        exclude 'META-INF/*.SF'
-                        exclude 'META-INF/*.DSA'
-                        exclude 'META-INF/*.RSA'
-                        exclude 'org/bukkit/plugin/java/JavaPlugin.class'
-                        exclude 'org/bukkit/plugin/java/JavaPlugin$*.class'
-                        exclude 'org/bukkit/plugin/SimplePluginManager.class'
-                    }
-                } else {
-                    // Filter out conflicting libraries but keep everything else in subfolder for launcher
-                    boolean isConflicting = id.group.contains('org.apache.logging') || id.group.contains('com.google');
-                    
-                    if (!isConflicting) {
-                        from(artifact.file) {
-                            into "META-INF/libraries/${id.group.replace('.', '/')}/${id.name}/${id.version}"
-                        }
-                    }
+            // Provided by the mod loader or JVM — exclude to avoid split packages
+            def providedByPlatform = id.group.startsWith('org.apache.commons') ||
+                id.group.startsWith('org.apache.maven') ||
+                id.group.startsWith('org.codehaus.plexus') ||
+                id.group.startsWith('org.apache.logging') ||
+                id.group.startsWith('org.slf4j') ||
+                id.group.startsWith('com.google.guava') ||
+                id.group.startsWith('com.google.code.findbugs') ||
+                id.group.startsWith('com.google.errorprone') ||
+                id.group.startsWith('org.checkerframework') ||
+                id.group.startsWith('com.mojang') ||
+                id.group.startsWith('it.unimi.dsi') ||
+                id.group.startsWith('org.joml') ||
+                id.group.startsWith('com.google.code.gson') ||
+                id.group.startsWith('org.ow2.asm') ||
+                id.group.startsWith('net.minecraft')
+            if (providedByPlatform) return
+
+            // Cross-loader pollution guard
+            if (platform == 'neoforge' && (id.group == 'net.fabricmc' || id.group == 'org.quiltmc')) return
+            if (platform == 'fabric'   && (id.group == 'net.neoforged' || id.group == 'org.quiltmc')) return
+            if (platform == 'quilt'    && (id.group == 'net.neoforged' || id.group == 'net.fabricmc')) return
+            if (platform == 'forge'    && (id.group == 'net.neoforged' || id.group == 'net.fabricmc' || id.group == 'org.quiltmc')) return
+
+            // Flatten Paper API and core bridge libs into JAR root
+            boolean flatten = (id.group == 'io.papermc.paper' && id.name == 'paper-api') ||
+                id.group.startsWith('net.kyori') ||
+                id.group.contains('net.md-5') ||
+                (id.group == 'org.yaml' && id.name == 'snakeyaml') ||
+                (id.group == 'org.xerial' && id.name == 'sqlite-jdbc')
+
+            if (flatten) {
+                from(zipTree(artifact.file)) {
+                    exclude 'META-INF/MANIFEST.MF'
+                    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+                    exclude 'org/bukkit/plugin/java/JavaPlugin.class'
+                    exclude 'org/bukkit/plugin/java/JavaPlugin$*.class'
+                    exclude 'org/bukkit/plugin/SimplePluginManager.class'
+                }
+            } else {
+                // Everything else goes into META-INF/libraries/ for the launcher to load
+                from(artifact.file) {
+                    into "META-INF/libraries/${id.group.replace('.', '/')}/${id.name}/${id.version}"
                 }
             }
         }
 
-        exclude 'META-INF/*.SF'
-        exclude 'META-INF/*.DSA'
-        exclude 'META-INF/*.RSA'
-
+        exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
         mergeServiceFiles()
 
         manifest {
             attributes(
-                    'Main-Class': 'io.ampznetwork.lunararc.launcher.Launcher',
-                    'Premain-Class': 'io.ampznetwork.lunararc.launcher.LunarArcAgent',
-                    'Can-Retransform-Classes': 'true',
-                    'Can-Append-To-Class-Path': 'true',
-                    'LunarArc-Platform': platform,
-                    'Implementation-Version': project.version
+                'Main-Class':              'io.ampznetwork.lunararc.launcher.Launcher',
+                'Premain-Class':           'io.ampznetwork.lunararc.launcher.LunarArcAgent',
+                'Can-Retransform-Classes': 'true',
+                'Can-Append-To-Class-Path': 'true',
+                'LunarArc-Platform':       platform,
+                'Implementation-Version':  project.version
             )
         }
     }
 }
 
-def platforms = ['neoforge', 'forge', 'fabric', 'quilt']
-platforms.each { platform ->
-    createFatJar(platform)
-}
+['neoforge', 'forge', 'fabric', 'quilt'].each { createFatJar(it) }

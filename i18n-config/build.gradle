@@ -1,0 +1,9 @@
+// Internationalisation — multi-language translation strings.
+// Analogous to Arclight's i18n-config subproject.
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    api project(':lunararc-api')
+}
