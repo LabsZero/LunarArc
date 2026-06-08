@@ -24,14 +24,14 @@ public class CraftItemMeta implements ItemMeta {
 
     public boolean hasDestroyableKeys() { return false; }
     @Override
-    public @NotNull Set<org.bukkit.Namespaced> getDestroyableKeys() { return Collections.emptySet(); }
+    public @NotNull Set<com.destroystokyo.paper.Namespaced> getDestroyableKeys() { return Collections.emptySet(); }
     @Override
-    public void setDestroyableKeys(@NotNull Collection<org.bukkit.Namespaced> canDestroy) {}
+    public void setDestroyableKeys(@NotNull Collection<com.destroystokyo.paper.Namespaced> canDestroy) {}
     public boolean hasPlaceableKeys() { return false; }
     @Override
-    public @NotNull Set<org.bukkit.Namespaced> getPlaceableKeys() { return Collections.emptySet(); }
+    public @NotNull Set<com.destroystokyo.paper.Namespaced> getPlaceableKeys() { return Collections.emptySet(); }
     @Override
-    public void setPlaceableKeys(@NotNull Collection<org.bukkit.Namespaced> canPlaceOn) {}
+    public void setPlaceableKeys(@NotNull Collection<com.destroystokyo.paper.Namespaced> canPlaceOn) {}
 
     // Core data
     private Component displayName = null;
