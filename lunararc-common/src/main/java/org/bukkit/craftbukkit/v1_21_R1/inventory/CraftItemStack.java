@@ -2,6 +2,7 @@ package org.bukkit.craftbukkit.v1_21_R1.inventory;
 
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -31,20 +32,7 @@ public class CraftItemStack extends ItemStack {
 
     public static ItemStack asBukkitCopy(net.minecraft.world.item.ItemStack stack) {
         if (stack == null || stack.isEmpty()) return null;
-
-        Material material = Material.AIR;
-        try {
-            net.minecraft.resources.ResourceLocation key = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
-            material = Material.valueOf(key.getPath().toUpperCase(java.util.Locale.ROOT));
-        } catch (Exception ignored) {}
-
-        try {
-            return new ItemStack(material, stack.getCount());
-        } catch (IllegalArgumentException ignored) {
-            // Material doesn't pass isItem() check in this Paper build (e.g. block-only materials);
-            // wrap the NMS stack directly so callers get correct type/amount via overrides.
-            return new CraftItemStack(stack.copy());
-        }
+        return new CraftItemStack(stack.copy());
     }
 
     public static net.minecraft.world.item.ItemStack asNMSCopy(@Nullable ItemStack stack) {
@@ -75,4 +63,41 @@ public class CraftItemStack extends ItemStack {
     public net.minecraft.world.item.ItemStack getHandle() {
         return handle;
     }
+
+    @Override
+    public boolean hasItemMeta() {
+        if (handle == null || handle.isEmpty()) return false;
+        CraftItemMeta meta = new CraftItemMeta(handle);
+        return meta.hasDisplayName() || meta.hasLore() || meta.hasEnchants()
+            || meta.isUnbreakable() || meta.hasCustomModelData();
+    }
+
+    @Override
+    public @Nullable ItemMeta getItemMeta() {
+        if (handle == null || handle.isEmpty()) return new CraftItemMeta();
+        return new CraftItemMeta(handle);
+    }
+
+    @Override
+    public boolean setItemMeta(@Nullable ItemMeta meta) {
+        if (handle == null || handle.isEmpty()) return false;
+        if (meta instanceof CraftItemMeta craftMeta) {
+            craftMeta.applyToNms(handle);
+        } else if (meta != null) {
+            // Convert generic ItemMeta to CraftItemMeta
+            CraftItemMeta craft = new CraftItemMeta();
+            if (meta.hasDisplayName()) craft.setDisplayName(meta.getDisplayName());
+            if (meta.hasLore()) craft.setLore(meta.getLore());
+            craft.setUnbreakable(meta.isUnbreakable());
+            craft.applyToNms(handle);
+        } else {
+            // null meta clears all
+            handle.remove(net.minecraft.core.component.DataComponents.CUSTOM_NAME);
+            handle.remove(net.minecraft.core.component.DataComponents.LORE);
+            handle.remove(net.minecraft.core.component.DataComponents.UNBREAKABLE);
+            handle.remove(net.minecraft.core.component.DataComponents.CUSTOM_MODEL_DATA);
+        }
+        return true;
+    }
+
 }

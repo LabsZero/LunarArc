@@ -272,28 +272,21 @@ public class CraftServer implements Server {
         this.itemFactory = (ItemFactory) java.lang.reflect.Proxy.newProxyInstance(
                 ItemFactory.class.getClassLoader(),
                 new Class<?>[] { ItemFactory.class },
-                (proxy, method, args) -> {
-                    if (method.getReturnType().equals(boolean.class))
-                        return false;
-                    if (method.getName().equals("getItemMeta") && args != null && args.length > 0) {
-                        // Return a safe dummy ItemMeta proxy to prevent NPEs
-                        return java.lang.reflect.Proxy.newProxyInstance(
-                                org.bukkit.inventory.meta.ItemMeta.class.getClassLoader(),
-                                new Class<?>[] { org.bukkit.inventory.meta.ItemMeta.class }, (p, m, a) -> {
-                                    if (m.getReturnType().equals(boolean.class))
-                                        return false;
-                                    if (m.getReturnType().equals(int.class))
-                                        return 0;
-                                    if (m.getReturnType().equals(List.class))
-                                        return Collections.emptyList();
-                                    if (m.getReturnType().equals(Map.class))
-                                        return Collections.emptyMap();
-                                    if (m.getReturnType().equals(Set.class))
-                                        return Collections.emptySet();
-                                    return null;
-                                });
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "getItemMeta" -> new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftItemMeta();
+                    case "isApplicable" -> true;
+                    case "equals" -> {
+                        // Both empty metas are equal
+                        if (args == null || args.length < 2) yield false;
+                        yield args[0] == null ? args[1] == null : args[0].equals(args[1]);
                     }
-                    return null;
+                    case "asMetaFor" -> args != null && args.length > 0 ? args[0] : null;
+                    case "getDefaultMeta" -> new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftItemMeta();
+                    default -> {
+                        if (method.getReturnType().equals(boolean.class)) yield false;
+                        if (method.getReturnType().equals(int.class)) yield 0;
+                        yield null;
+                    }
                 });
 
         this.loadConfigurations();
