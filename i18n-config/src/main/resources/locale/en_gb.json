@@ -19,6 +19,12 @@
   "error.invalid_selection": "Invalid selection. Aborting.",
   "error.critical_failure": "Critical failure in boot sequence:",
 
+  "eula.header": "[33m[1mMinecraft End User License Agreement[0m\nBefore starting the server you must agree to the Minecraft EULA.",
+  "eula.url": "[34mRead the EULA at: [36m[4mhttps://aka.ms/MinecraftEULA[0m",
+  "eula.prompt": "[33mDo you agree to the Minecraft EULA? (yes/no) > [0m",
+  "eula.accepted": "[32m✔ EULA accepted. eula.txt written.[0m",
+  "eula.declined": "[31m✘ EULA not accepted. Server will not start. Edit eula.txt and set eula=true to agree.[0m",
+
   "blockmedic.disabled": "§c[BlockMedic] Log upload is disabled. Set §fenable_blockmedic=true §cin §flunararc.conf §cto enable it.",
   "blockmedic.declined": "§c[BlockMedic] You previously declined the terms. To re-enable, set §fblockmedic_consent=accepted §cin §flunararc.conf§c.",
   "blockmedic.consent.title": "[BlockMedic] First-time upload consent",

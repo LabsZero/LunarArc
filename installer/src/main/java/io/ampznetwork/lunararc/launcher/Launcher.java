@@ -44,7 +44,10 @@ public class Launcher {
             String buildName = versions.getProperty("buildName", "unknown");
             
             ConsoleUI.printLogo(minecraftVersion);
-            
+
+            // EULA check — must agree before server starts
+            checkEula();
+
             // Check for updates
             UpdateChecker.check(projectVersion, buildName);
 
@@ -160,6 +163,35 @@ public class Launcher {
             }
         } catch (Exception ignored) {
             return null;
+        }
+    }
+
+    private static void checkEula() throws Exception {
+        Path eulaFile = Paths.get("eula.txt");
+        if (Files.exists(eulaFile)) {
+            Properties eula = new Properties();
+            try (InputStream in = Files.newInputStream(eulaFile)) {
+                eula.load(in);
+            }
+            if ("true".equalsIgnoreCase(eula.getProperty("eula", "false"))) {
+                return;
+            }
+        }
+        System.out.println(TranslationManager.get("eula.header"));
+        System.out.println(TranslationManager.get("eula.url"));
+        System.out.println(TranslationManager.get("eula.prompt"));
+        Scanner scanner = new Scanner(System.in);
+        String response = scanner.nextLine().trim().toLowerCase();
+        if (response.equals("yes") || response.equals("y") || response.equals("true")) {
+            Properties eula = new Properties();
+            eula.setProperty("eula", "true");
+            try (java.io.OutputStream out = Files.newOutputStream(eulaFile)) {
+                eula.store(out, "By changing the setting below to TRUE you are indicating your agreement to the EULA (https://aka.ms/MinecraftEULA).");
+            }
+            System.out.println(TranslationManager.get("eula.accepted"));
+        } else {
+            System.out.println(TranslationManager.get("eula.declined"));
+            System.exit(0);
         }
     }
 
