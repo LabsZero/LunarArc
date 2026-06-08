@@ -3,6 +3,7 @@ package io.ampznetwork.lunararc.common.mixin.core.server;
 import io.ampznetwork.lunararc.common.LunarArcPlatform;
 import org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer;
 import org.bukkit.craftbukkit.v1_21_R1.event.CraftEventFactory;
+import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundChatPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -47,6 +48,39 @@ public abstract class ServerGamePacketListenerImplMixin {
             Boolean isCancelled = (Boolean) eventClass.getMethod("isCancelled").invoke(event);
             if (isCancelled) {
                 ci.cancel();
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    @Inject(method = "handleChatCommand", at = @At("HEAD"), cancellable = true)
+    private void lunararc$onChatCommand(ServerboundChatCommandPacket packet, CallbackInfo ci) {
+        try {
+            org.bukkit.Server craftServer = LunarArcPlatform.getServer();
+            if (craftServer == null) return;
+
+            org.bukkit.entity.Player bukkitPlayer =
+                (org.bukkit.entity.Player) ((io.ampznetwork.lunararc.common.bridge.EntityBridge) this.player)
+                    .lunararc$getBukkitEntity();
+
+            String command = "/" + packet.command();
+
+            org.bukkit.event.player.PlayerCommandPreprocessEvent event =
+                new org.bukkit.event.player.PlayerCommandPreprocessEvent(bukkitPlayer, command);
+            craftServer.getPluginManager().callEvent(event);
+
+            if (event.isCancelled()) {
+                ci.cancel();
+                return;
+            }
+
+            // If the message was modified by a plugin, re-dispatch through Bukkit's command map
+            // so the plugin's version of the command runs instead of the original packet command.
+            String modified = event.getMessage();
+            if (!modified.equals(command)) {
+                ci.cancel();
+                craftServer.dispatchCommand(bukkitPlayer,
+                    modified.startsWith("/") ? modified.substring(1) : modified);
             }
         } catch (Throwable ignored) {
         }

@@ -97,12 +97,37 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
     @Override
     public void sendMessage(String message) {
+        if (getHandle().connection == null) return;
         getHandle().sendSystemMessage(net.minecraft.network.chat.Component.literal(message));
     }
 
     @Override
     public void sendMessage(String... messages) {
         for (String msg : messages) sendMessage(msg);
+    }
+
+    @Override
+    public void sendMessage(net.kyori.adventure.text.Component message) {
+        if (getHandle().connection == null) return;
+        getHandle().sendSystemMessage(adventureToNms(message));
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    public void sendMessage(net.kyori.adventure.identity.Identity identity,
+            net.kyori.adventure.text.Component message, net.kyori.adventure.audience.MessageType type) {
+        sendMessage(message);
+    }
+
+    private static net.minecraft.network.chat.Component adventureToNms(net.kyori.adventure.text.Component component) {
+        try {
+            String json = net.kyori.adventure.text.serializer.gson.GsonComponentSerializer.gson().serialize(component);
+            net.minecraft.network.chat.MutableComponent nms =
+                org.bukkit.craftbukkit.v1_21_R1.util.CraftChatMessage.fromJSON(json);
+            if (nms != null) return nms;
+        } catch (Throwable ignored) {}
+        return net.minecraft.network.chat.Component.literal(
+            net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(component));
     }
 
     @Override

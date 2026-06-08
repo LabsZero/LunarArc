@@ -37,6 +37,19 @@ public class CraftConsoleCommandSender implements ConsoleCommandSender {
         logger.info(translate(message));
     }
 
+    @Override
+    public void sendMessage(net.kyori.adventure.text.Component message) {
+        sendMessage(net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+                .legacySection().serialize(message));
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    public void sendMessage(net.kyori.adventure.identity.Identity identity,
+            net.kyori.adventure.text.Component message, net.kyori.adventure.audience.MessageType type) {
+        sendMessage(message);
+    }
+
     private String translate(String text) {
         if (text == null)
             return null;

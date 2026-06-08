@@ -67,6 +67,28 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         CLASS_MAP.put(
                 "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$b",
                 "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$Entry");
+
+        // SRG → Mojang-mapped entity / network renames used by TAB and similar plugins.
+        CLASS_MAP.put("net/minecraft/server/level/EntityPlayer",
+                "net/minecraft/server/level/ServerPlayer");
+        CLASS_MAP.put("net/minecraft/server/network/PlayerConnection",
+                "net/minecraft/server/network/ServerGamePacketListenerImpl");
+        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayInChat",
+                "net/minecraft/network/protocol/game/ServerboundChatPacket");
+        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayInTabComplete",
+                "net/minecraft/network/protocol/game/ServerboundCommandSuggestionPacket");
+        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutTabComplete",
+                "net/minecraft/network/protocol/game/ClientboundCommandSuggestionsPacket");
+        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutPlayerInfo",
+                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket");
+        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutPlayerListHeaderFooter",
+                "net/minecraft/network/protocol/game/ClientboundTabListPacket");
+        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutTitle",
+                "net/minecraft/network/protocol/game/ClientboundSetTitleTextPacket");
+        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutBoss",
+                "net/minecraft/network/protocol/game/ClientboundBossEventPacket");
+        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutEntityMetadata",
+                "net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket");
     }
 
     @Override
