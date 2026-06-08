@@ -74,7 +74,13 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
 
     @Override
     public @NotNull org.bukkit.entity.EntityType getType() {
-        return org.bukkit.entity.EntityType.UNKNOWN;
+        try {
+            String path = entity.getType().builtInRegistryHolder().key().location().getPath();
+            org.bukkit.entity.EntityType type = org.bukkit.entity.EntityType.fromName(path);
+            return type != null ? type : org.bukkit.entity.EntityType.UNKNOWN;
+        } catch (Throwable t) {
+            return org.bukkit.entity.EntityType.UNKNOWN;
+        }
     }
 
     @Override

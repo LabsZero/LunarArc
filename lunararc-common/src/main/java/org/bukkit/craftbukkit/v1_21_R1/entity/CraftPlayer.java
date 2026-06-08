@@ -75,9 +75,15 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         super(server, player);
     }
 
+    private net.kyori.adventure.text.Component tabListHeader = net.kyori.adventure.text.Component.empty();
+    private net.kyori.adventure.text.Component tabListFooter = net.kyori.adventure.text.Component.empty();
+
     public ServerPlayer getHandle() {
         return (ServerPlayer) entity;
     }
+
+    @Override
+    public org.bukkit.entity.EntityType getType() { return org.bukkit.entity.EntityType.PLAYER; }
 
     @Override
     public String getName() {
@@ -137,6 +143,32 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
     @Override
     public void setDisplayName(String name) {}
+
+    private void sendTabListPacket() {
+        try {
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundTabListPacket(
+                    adventureToNms(tabListHeader), adventureToNms(tabListFooter)));
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    public void sendPlayerListHeader(@NotNull net.kyori.adventure.text.Component header) {
+        tabListHeader = header;
+        sendTabListPacket();
+    }
+
+    @Override
+    public void sendPlayerListFooter(@NotNull net.kyori.adventure.text.Component footer) {
+        tabListFooter = footer;
+        sendTabListPacket();
+    }
+
+    @Override
+    public void sendPlayerListHeaderAndFooter(@NotNull net.kyori.adventure.text.Component header, @NotNull net.kyori.adventure.text.Component footer) {
+        tabListHeader = header;
+        tabListFooter = footer;
+        sendTabListPacket();
+    }
 
     @Override
     public void kickPlayer(String message) {
@@ -336,8 +368,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void showTitle(BaseComponent title) {}
     @Override public void showTitle(BaseComponent[] title, BaseComponent[] subtitle, int fadeIn, int stay, int fadeOut) {}
     @Override public void showTitle(BaseComponent title, BaseComponent subtitle, int fadeIn, int stay, int fadeOut) {}
-    @Override public void setPlayerListHeaderFooter(BaseComponent[] header, BaseComponent[] footer) {}
-    @Override public void setPlayerListHeaderFooter(BaseComponent header, BaseComponent footer) {}
+    @Override public void setPlayerListHeaderFooter(BaseComponent[] header, BaseComponent[] footer) {
+        setPlayerListHeaderFooter(
+            header != null ? net.md_5.bungee.api.chat.TextComponent.toLegacyText(header) : null,
+            footer != null ? net.md_5.bungee.api.chat.TextComponent.toLegacyText(footer) : null);
+    }
+    @Override public void setPlayerListHeaderFooter(BaseComponent header, BaseComponent footer) {
+        setPlayerListHeaderFooter(
+            header != null ? header.toPlainText() : null,
+            footer != null ? footer.toPlainText() : null);
+    }
     @Override public String getPlayerListHeader() { return ""; }
     @Override public String getPlayerListFooter() { return ""; }
     @Override public void sendActionBar(BaseComponent... message) {
@@ -364,15 +404,39 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void showWinScreen() {}
     @Override public Component displayName() { return Component.text(getName()); }
     @Override public void displayName(Component displayName) {}
-    @Override public Component playerListName() { return null; }
-    @Override public void playerListName(Component name) {}
-    @Override public Component playerListHeader() { return null; }
-    @Override public Component playerListFooter() { return null; }
-    @Override public void setPlayerListHeader(String header) {}
-    @Override public void setPlayerListFooter(String footer) {}
-    @Override public void setPlayerListHeaderFooter(String header, String footer) {}
-    @Override public String getPlayerListName() { return getName(); }
-    @Override public void setPlayerListName(String name) {}
+    @Override public Component playerListName() {
+        net.minecraft.network.chat.Component display = getHandle().getTabListDisplayName();
+        String name = display != null ? display.getString() : getName();
+        return net.kyori.adventure.text.Component.text(name);
+    }
+    @Override public void playerListName(Component name) {
+        if (name == null) name = net.kyori.adventure.text.Component.text(getName());
+        getHandle().setTabListDisplayName(net.minecraft.network.chat.Component.literal(
+                net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(name)));
+    }
+    @Override public Component playerListHeader() { return tabListHeader; }
+    @Override public Component playerListFooter() { return tabListFooter; }
+    @Override public void setPlayerListHeader(String header) {
+        tabListHeader = header == null ? net.kyori.adventure.text.Component.empty() : net.kyori.adventure.text.Component.text(header);
+        sendTabListPacket();
+    }
+    @Override public void setPlayerListFooter(String footer) {
+        tabListFooter = footer == null ? net.kyori.adventure.text.Component.empty() : net.kyori.adventure.text.Component.text(footer);
+        sendTabListPacket();
+    }
+    @Override public void setPlayerListHeaderFooter(String header, String footer) {
+        tabListHeader = header == null ? net.kyori.adventure.text.Component.empty() : net.kyori.adventure.text.Component.text(header);
+        tabListFooter = footer == null ? net.kyori.adventure.text.Component.empty() : net.kyori.adventure.text.Component.text(footer);
+        sendTabListPacket();
+    }
+    @Override public String getPlayerListName() {
+        net.minecraft.network.chat.Component display = getHandle().getTabListDisplayName();
+        return display != null ? display.getString() : getName();
+    }
+    @Override public void setPlayerListName(String name) {
+        getHandle().setTabListDisplayName(name == null ? null :
+                net.minecraft.network.chat.Component.literal(name));
+    }
     @Override public void setCompassTarget(Location loc) {}
     @Override public Firework fireworkBoost(ItemStack stack) { return null; }
     @Override public Location getCompassTarget() { return new Location(getWorld(), 0, 0, 0); }
@@ -694,7 +758,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public PlayerInventory getInventory() {
         return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftPlayerInventory(getHandle().getInventory(), this);
     }
-    @Override public Inventory getEnderChest() { return null; }
+    @Override public Inventory getEnderChest() {
+        return new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftNMSInventory(
+                getHandle().getEnderChestInventory(), this);
+    }
     @Override public MainHand getMainHand() { return MainHand.RIGHT; }
     @Override public InventoryView getOpenInventory() { return null; }
     @Override public InventoryView openInventory(Inventory inventory) { return null; }
@@ -709,8 +776,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public InventoryView openLoom(Location location, boolean force) { return null; }
     @Override public InventoryView openSmithingTable(Location location, boolean force) { return null; }
     @Override public InventoryView openStonecutter(Location location, boolean force) { return null; }
-    @Override public void closeInventory() {}
-    @Override public void closeInventory(InventoryCloseEvent.Reason reason) {}
+    @Override public void closeInventory() {
+        try {
+            getHandle().closeContainer();
+        } catch (Throwable ignored) {}
+    }
+    @Override public void closeInventory(InventoryCloseEvent.Reason reason) { closeInventory(); }
     @Override public boolean discoverRecipe(NamespacedKey recipe) { return false; }
     @Override public int getEnchantmentSeed() { return 0; }
     @Override public void setEnchantmentSeed(int seed) {}
