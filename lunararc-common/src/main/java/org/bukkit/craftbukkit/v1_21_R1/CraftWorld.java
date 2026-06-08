@@ -39,19 +39,27 @@ public class CraftWorld implements World {
         return world;
     }
 
+    /** Returns the conventional Bukkit world name for this dimension. */
     @Override
     public @NotNull String getName() {
-        return world.dimension().location().getPath();
+        String dim = world.dimension().location().toString();
+        return switch (dim) {
+            case "minecraft:overworld" -> "world";
+            case "minecraft:the_nether" -> "world_nether";
+            case "minecraft:the_end" -> "world_the_end";
+            default -> world.dimension().location().getPath();
+        };
     }
 
     @Override
     public @NotNull UUID getUID() {
-        return UUID.nameUUIDFromBytes(getName().getBytes());
+        return UUID.nameUUIDFromBytes(world.dimension().location().toString().getBytes());
     }
 
     @Override
     public @NotNull NamespacedKey getKey() {
-        return NamespacedKey.minecraft(getName().toLowerCase());
+        net.minecraft.resources.ResourceLocation loc = world.dimension().location();
+        return new NamespacedKey(loc.getNamespace(), loc.getPath());
     }
 
     @Override

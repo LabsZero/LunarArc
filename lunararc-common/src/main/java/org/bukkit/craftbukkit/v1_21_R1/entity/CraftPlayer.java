@@ -182,8 +182,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void transfer(String host, int port) {}
     
     @Override public void kick() { kick(net.kyori.adventure.text.Component.empty()); }
-    @Override public void kick(net.kyori.adventure.text.Component message) {}
-    @Override public void kick(net.kyori.adventure.text.Component message, org.bukkit.event.player.PlayerKickEvent.Cause cause) {}
+    @Override public void kick(net.kyori.adventure.text.Component message) {
+        kickPlayer(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(message == null ? net.kyori.adventure.text.Component.empty() : message));
+    }
+    @Override public void kick(net.kyori.adventure.text.Component message, org.bukkit.event.player.PlayerKickEvent.Cause cause) { kick(message); }
 
     @Override public <E extends org.bukkit.BanEntry<? super PlayerProfile>> E ban(String reason, Date expires, String source, boolean kickPlayer) { return null; }
     @Override public <E extends org.bukkit.BanEntry<? super PlayerProfile>> E ban(String reason, Instant expires, String source, boolean kickPlayer) { return null; }
@@ -308,9 +310,25 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
 
     @Override public net.kyori.adventure.text.Component name() { return net.kyori.adventure.text.Component.text(getName()); }
     @Override public void sendEntityEffect(EntityEffect effect, Entity entity) {}
-    @Override public void showTitle(net.kyori.adventure.title.Title title) { getHandle().sendSystemMessage(net.minecraft.network.chat.Component.literal("Title: " + title.toString())); }
+    @Override public void showTitle(net.kyori.adventure.title.Title title) {
+        try {
+            net.minecraft.network.chat.Component titleComp = adventureToNms(title.title());
+            net.minecraft.network.chat.Component subtitleComp = adventureToNms(title.subtitle());
+            net.kyori.adventure.title.Title.Times times = title.times();
+            int fadeIn = times != null ? (int) (times.fadeIn().toMillis() / 50) : 10;
+            int stay   = times != null ? (int) (times.stay().toMillis() / 50) : 70;
+            int fadeOut= times != null ? (int) (times.fadeOut().toMillis() / 50) : 20;
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket(fadeIn, stay, fadeOut));
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(subtitleComp));
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(titleComp));
+        } catch (Throwable ignored) {}
+    }
     @Override public void updateTitle(@NotNull com.destroystokyo.paper.Title title) {}
-    @Override public void clearTitle() {}
+    @Override public void clearTitle() {
+        try {
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundClearTitlesPacket(false));
+        } catch (Throwable ignored) {}
+    }
     @Override public void setTitleTimes(int fadeIn, int stay, int fadeOut) {}
     @Override public void setSubtitle(BaseComponent[] subtitle) {}
     @Override public void setSubtitle(BaseComponent subtitle) {}
@@ -322,9 +340,25 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void setPlayerListHeaderFooter(BaseComponent header, BaseComponent footer) {}
     @Override public String getPlayerListHeader() { return ""; }
     @Override public String getPlayerListFooter() { return ""; }
-    @Override public void sendActionBar(BaseComponent... message) {}
-    @Override public void sendActionBar(char colorChar, String message) {}
-    @Override public void sendActionBar(String message) {}
+    @Override public void sendActionBar(BaseComponent... message) {
+        if (message != null && message.length > 0)
+            sendActionBar(net.md_5.bungee.api.chat.TextComponent.toLegacyText(message));
+    }
+    @Override public void sendActionBar(char colorChar, String message) { sendActionBar(message); }
+    @Override public void sendActionBar(String message) {
+        try {
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(
+                    net.minecraft.network.chat.Component.literal(message)));
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    public void sendActionBar(@NotNull net.kyori.adventure.text.Component message) {
+        try {
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(
+                    adventureToNms(message)));
+        } catch (Throwable ignored) {}
+    }
     @Override public void setHasSeenWinScreen(boolean hasSeenWinScreen) {}
     @Override public boolean hasSeenWinScreen() { return false; }
     @Override public void showWinScreen() {}
@@ -372,7 +406,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void addCustomChatCompletions(Collection<String> completions) {}
     @Override public void removeCustomChatCompletions(Collection<String> completions) {}
     @Override public void setCustomChatCompletions(Collection<String> completions) {}
-    @Override public void updateInventory() {}
+    @Override public void updateInventory() {
+        getHandle().inventoryMenu.broadcastChanges();
+    }
     @Override public GameMode getPreviousGameMode() { return null; }
     @Override public void setPlayerTime(long time, boolean relative) {}
     @Override public long getPlayerTime() { return 0L; }
@@ -384,17 +420,17 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void resetPlayerWeather() {}
     @Override public int getExpCooldown() { return 0; }
     @Override public void setExpCooldown(int ticks) {}
-    @Override public void giveExp(int amount, boolean applyMending) {}
+    @Override public void giveExp(int amount, boolean applyMending) { getHandle().giveExperiencePoints(amount); }
     @Override public int applyMending(int amount) { return amount; }
-    @Override public void giveExpLevels(int levels) {}
-    @Override public void setExp(float exp) {}
-    @Override public float getExp() { return 0; }
-    @Override public void sendExperienceChange(float progress, int level) {}
-    @Override public void setExperienceLevelAndProgress(int level) {}
-    @Override public void setLevel(int level) {}
-    @Override public int getLevel() { return 0; }
-    @Override public void setTotalExperience(int exp) {}
-    @Override public int getTotalExperience() { return 0; }
+    @Override public void giveExpLevels(int levels) { getHandle().giveExperienceLevels(levels); }
+    @Override public void setExp(float exp) { getHandle().experienceProgress = exp; getHandle().sendExperienceChange(exp, getLevel()); }
+    @Override public float getExp() { return getHandle().experienceProgress; }
+    @Override public void sendExperienceChange(float progress, int level) { getHandle().sendExperienceChange(progress, level); }
+    @Override public void setExperienceLevelAndProgress(int level) { setLevel(level); }
+    @Override public void setLevel(int level) { getHandle().experienceLevel = level; getHandle().sendExperienceChange(getExp(), level); }
+    @Override public int getLevel() { return getHandle().experienceLevel; }
+    @Override public void setTotalExperience(int exp) { getHandle().totalExperience = exp; }
+    @Override public int getTotalExperience() { return getHandle().totalExperience; }
     @Override public int getExperiencePointsNeededForNextLevel() { return 0; }
     @Override public int calculateTotalExperiencePoints() { return 0; }
     @Override public boolean isChunkSent(long chunk) { return false; }
@@ -402,7 +438,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public Set<Long> getSentChunkKeys() { return Collections.emptySet(); }
     @Override public void resetIdleDuration() {}
     @Override public Duration getIdleDuration() { return Duration.ZERO; }
-    @Override public void setRotation(float yaw, float pitch) {}
+    @Override public void setRotation(float yaw, float pitch) {
+        getHandle().moveTo(getHandle().getX(), getHandle().getY(), getHandle().getZ(), yaw, pitch);
+        getHandle().connection.teleport(getHandle().getX(), getHandle().getY(), getHandle().getZ(), yaw, pitch);
+    }
     @Override public void lookAt(double x, double y, double z, io.papermc.paper.entity.LookAnchor anchor) {}
     @Override public void lookAt(Entity entity, io.papermc.paper.entity.LookAnchor anchor, io.papermc.paper.entity.LookAnchor anchor2) {}
     @Override public void showElderGuardian(boolean silent) {}
@@ -427,14 +466,27 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void setPlayerProfile(PlayerProfile profile) {}
     @Override public boolean isAllowingServerListings() { return true; }
     @Override public void showDemoScreen() {}
-    @Override public void updateCommands() {}
+    @Override public void updateCommands() {
+        try {
+            getHandle().server.getCommands().sendCommands(getHandle());
+        } catch (Throwable ignored) {}
+    }
     @Override public void openBook(ItemStack book) {}
     @Override public void openSign(Sign sign) {}
     @Override public void openSign(Sign sign, Side side) {}
     @Override public int getClientViewDistance() { return 10; }
-    @Override public int getPing() { return 0; }
-    @Override public String getLocale() { return "en_us"; }
-    @Override public java.util.Locale locale() { return java.util.Locale.US; }
+    @Override public int getPing() {
+        try { return getHandle().connection.latency(); } catch (Throwable t) { return 0; }
+    }
+    @Override public String getLocale() {
+        try { return getHandle().getLanguage(); } catch (Throwable t) { return "en_us"; }
+    }
+    @Override public java.util.Locale locale() {
+        try {
+            String tag = getLocale().replace('_', '-');
+            return java.util.Locale.forLanguageTag(tag);
+        } catch (Throwable t) { return java.util.Locale.US; }
+    }
     @Override public boolean getAffectsSpawning() { return true; }
     @Override public void setAffectsSpawning(boolean value) {}
     @Override public int getViewDistance() { return 10; }
@@ -570,15 +622,21 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     // HumanEntity
     @Override public boolean setWindowProperty(InventoryView.Property prop, int value) { return false; }
     @Override public void wakeup(boolean setSpawnLocation) {}
-    @Override public ItemStack getItemOnCursor() { return new ItemStack(Material.AIR); }
+    @Override public ItemStack getItemOnCursor() {
+        return CraftItemStack.asBukkitCopy(getHandle().containerMenu.getCarried());
+    }
+    @Override public void setItemOnCursor(ItemStack item) {
+        getHandle().containerMenu.setCarried(CraftItemStack.asNMSCopy(item));
+    }
     @Override public int discoverRecipes(Collection<NamespacedKey> recipes) { return 0; }
     @Override public int undiscoverRecipes(Collection<NamespacedKey> recipes) { return 0; }
     @Override public EntityEquipment getEquipment() { return (EntityEquipment) java.lang.reflect.Proxy.newProxyInstance(EntityEquipment.class.getClassLoader(), new Class<?>[] { EntityEquipment.class }, (p, m, a) -> null); }
     @Override public void setStarvationRate(int rate) {}
-    @Override public void setItemOnCursor(ItemStack item) {}
     @Override public boolean isBlocking() { return getHandle().isBlocking(); }
     @Override public void setSaturatedRegenRate(int rate) {}
-    @Override public float getExhaustion() { return 0; }
+    @Override public float getExhaustion() {
+        return ((io.ampznetwork.lunararc.common.mixin.core.player.FoodDataAccessor) getHandle().getFoodData()).getExhaustionLevel();
+    }
     @Override public boolean hasCooldown(Material material) { return false; }
     @Override public void setCooldown(Material material, int ticks) {}
     @Override public GameMode getGameMode() { return fromNMS(getHandle().gameMode.getGameModeForPlayer()); }
@@ -599,7 +657,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public Set<NamespacedKey> getDiscoveredRecipes() { return Collections.emptySet(); }
     @Override public int getSaturatedRegenRate() { return 0; }
     @Override public Location getBedLocation() { return null; }
-    @Override public void setSaturation(float value) {}
+    @Override public void setSaturation(float value) {
+        ((io.ampznetwork.lunararc.common.mixin.core.player.FoodDataAccessor) getHandle().getFoodData()).setSaturationLevel(value);
+    }
     @Override public FishHook getFishHook() { return null; }
     @Override public void startRiptideAttack(int duration, float attackDamage, ItemStack itemStack) {}
     @Override public boolean isHandRaised() { return false; }
@@ -607,10 +667,17 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public int getCooldown(Material material) { return 0; }
     @Override public void setUnsaturatedRegenRate(int rate) {}
     @Override public boolean dropItem(boolean dropAll) { return false; }
-    @Override public ItemStack getItemInHand() { return new ItemStack(Material.AIR); }
-    @Override public void setItemInHand(ItemStack item) {}
-    @Override public float getSaturation() { return 0; }
-    @Override public void setExhaustion(float value) {}
+    @Override public ItemStack getItemInHand() {
+        return CraftItemStack.asBukkitCopy(getHandle().getMainHandItem());
+    }
+    @Override public void setItemInHand(ItemStack item) {
+        getHandle().getInventory().setItem(getHandle().getInventory().selected, CraftItemStack.asNMSCopy(item));
+        getHandle().inventoryMenu.broadcastChanges();
+    }
+    @Override public float getSaturation() { return getHandle().getFoodData().getSaturationLevel(); }
+    @Override public void setExhaustion(float value) {
+        ((io.ampznetwork.lunararc.common.mixin.core.player.FoodDataAccessor) getHandle().getFoodData()).setExhaustionLevel(value);
+    }
     @Override public float getAttackCooldown() { return 0; }
     @Override public int getExpToLevel() { return 0; }
     @Override public Location getPotentialBedLocation() { return null; }
@@ -638,7 +705,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public boolean discoverRecipe(NamespacedKey recipe) { return false; }
     @Override public int getEnchantmentSeed() { return 0; }
     @Override public void setEnchantmentSeed(int seed) {}
-    @Override public void setFoodLevel(int value) {}
+    @Override public void setFoodLevel(int value) {
+        ((io.ampznetwork.lunararc.common.mixin.core.player.FoodDataAccessor) getHandle().getFoodData()).setFoodLevel(value);
+    }
 
     // OfflinePlayer
     @Override public long getFirstPlayed() { return 0; }
@@ -665,9 +734,15 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void setHealth(double health) { getHandle().setHealth((float) health); }
     @Override public void heal(double amount, EntityRegainHealthEvent.RegainReason reason) { getHandle().heal((float) amount); }
     @Override public double getHealth() { return getHandle().getHealth(); }
-    @Override public void damage(double amount) {}
-    @Override public void damage(double amount, Entity source) {}
-    @Override public void damage(double amount, DamageSource damageSource) {}
+    @Override public void damage(double amount) {
+        getHandle().hurt(getHandle().level().damageSources().generic(), (float) amount);
+    }
+    @Override public void damage(double amount, Entity source) {
+        getHandle().hurt(getHandle().level().damageSources().generic(), (float) amount);
+    }
+    @Override public void damage(double amount, DamageSource damageSource) {
+        getHandle().hurt(getHandle().level().damageSources().generic(), (float) amount);
+    }
     @Override public void resetMaxHealth() { setMaxHealth(20.0); }
     @Override public double getMaxHealth() { return getHandle().getMaxHealth(); }
     @Override public double getAbsorptionAmount() { return 0; }
@@ -696,7 +771,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public int getActiveItemRemainingTime() { return 0; }
     @Override public void setNextBeeStingerRemoval(int ticks) {}
     @Override public int getNextBeeStingerRemoval() { return 0; }
-    @Override public boolean addPotionEffects(Collection<PotionEffect> effects) { return false; }
+    @Override public boolean addPotionEffects(Collection<PotionEffect> effects) {
+        boolean result = false;
+        for (PotionEffect effect : effects) if (addPotionEffect(effect)) result = true;
+        return result;
+    }
     @Override public List<Block> getLineOfSight(Set<Material> transparent, int distance) { return Collections.emptyList(); }
     @Override public boolean hasAI() { return false; }
     @Override public void setAI(boolean ai) {}
@@ -730,7 +809,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public boolean setLeashHolder(Entity holder) { return false; }
     @Override public void setArrowsStuck(int arrows) {}
     @Override public int getArrowsStuck() { return 0; }
-    @Override public boolean clearActivePotionEffects() { return false; }
+    @Override public boolean clearActivePotionEffects() {
+        Collection<PotionEffect> active = getActivePotionEffects();
+        if (active.isEmpty()) return false;
+        for (PotionEffect e : active) removePotionEffect(e.getType());
+        return true;
+    }
     @Override public void setActiveItemRemainingTime(int ticks) {}
     @Override public void setLastDamage(double damage) {}
     @Override public double getLastDamage() { return 0; }

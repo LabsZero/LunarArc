@@ -353,27 +353,38 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
 
     @Override
     public @NotNull List<org.bukkit.entity.Entity> getPassengers() {
-        return Collections.emptyList();
+        java.util.List<org.bukkit.entity.Entity> out = new java.util.ArrayList<>();
+        for (Entity p : entity.getPassengers()) {
+            org.bukkit.entity.Entity bukkit = getEntity(server, p);
+            if (bukkit != null) out.add(bukkit);
+        }
+        return out;
     }
 
     @Override
     public boolean addPassenger(@NotNull org.bukkit.entity.Entity passenger) {
-        return false;
+        if (!(passenger instanceof CraftEntity ce)) return false;
+        return ce.entity.startRiding(entity, true);
     }
 
     @Override
     public boolean removePassenger(@NotNull org.bukkit.entity.Entity passenger) {
-        return false;
+        if (!(passenger instanceof CraftEntity ce)) return false;
+        if (!entity.getPassengers().contains(ce.entity)) return false;
+        ce.entity.stopRiding();
+        return true;
     }
 
     @Override
     public boolean isEmpty() {
-        return getPassengers().isEmpty();
+        return entity.getPassengers().isEmpty();
     }
 
     @Override
     public boolean eject() {
-        return false;
+        if (entity.getPassengers().isEmpty()) return false;
+        entity.ejectPassengers();
+        return true;
     }
 
     @Override

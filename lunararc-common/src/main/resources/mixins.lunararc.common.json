@@ -15,6 +15,7 @@
     "core.server.ServerPlayerGameModeMixin",
     "core.network.ConnectionAccessor",
     "core.network.ConnectionMixin",
+    "core.player.FoodDataAccessor",
     "core.command.CommandsMixin",
     "core.command.CommandsAccessor",
     "core.command.CommandSourceStackMixin",

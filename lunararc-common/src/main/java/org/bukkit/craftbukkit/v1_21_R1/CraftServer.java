@@ -459,7 +459,7 @@ public class CraftServer implements Server {
     public @NotNull List<World> getWorlds() {
         List<World> worlds = new ArrayList<>();
         for (net.minecraft.server.level.ServerLevel level : console.getAllLevels()) {
-            World world = getWorld(level.dimension().location().getPath());
+            World world = getWorld(level.dimension().location().toString());
             if (world != null)
                 worlds.add(world);
         }
@@ -775,7 +775,14 @@ public class CraftServer implements Server {
 
     @Override
     public @Nullable World getWorld(@NotNull String name) {
-        String qualified = name.contains(":") ? name : "minecraft:" + name;
+        // Accept both "world"/"world_nether"/"world_the_end" (Bukkit names) and
+        // "overworld"/"the_nether"/"the_end" (dimension paths) and full "minecraft:overworld"
+        String qualified = switch (name.toLowerCase()) {
+            case "world" -> "minecraft:overworld";
+            case "world_nether" -> "minecraft:the_nether";
+            case "world_the_end" -> "minecraft:the_end";
+            default -> name.contains(":") ? name : "minecraft:" + name;
+        };
         net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.tryParse(qualified);
         if (rl == null)
             return null;
@@ -786,7 +793,7 @@ public class CraftServer implements Server {
         if (level == null)
             return null;
 
-        UUID uid = UUID.nameUUIDFromBytes(name.getBytes());
+        UUID uid = UUID.nameUUIDFromBytes(qualified.getBytes());
         return worldCache.computeIfAbsent(uid, k -> new CraftWorld(level));
     }
 
@@ -802,7 +809,7 @@ public class CraftServer implements Server {
 
     @Override
     public @Nullable World getWorld(@NotNull net.kyori.adventure.key.Key key) {
-        return null;
+        return getWorld(key.namespace() + ":" + key.value());
     }
 
     @Override
@@ -973,6 +980,14 @@ public class CraftServer implements Server {
     public @NotNull OfflinePlayer getOfflinePlayer(@NotNull String name) {
         Player online = getPlayer(name);
         if (online != null) return online;
+        // Try the profile cache for the real Mojang UUID
+        try {
+            var profile = console.getProfileCache().get(name);
+            if (profile.isPresent()) {
+                return new org.bukkit.craftbukkit.v1_21_R1.entity.CraftOfflinePlayer(
+                        profile.get().getId(), name);
+            }
+        } catch (Throwable ignored) {}
         return new org.bukkit.craftbukkit.v1_21_R1.entity.CraftOfflinePlayer(
                 UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8)), name);
     }
@@ -981,13 +996,29 @@ public class CraftServer implements Server {
     public @NotNull OfflinePlayer getOfflinePlayer(@NotNull UUID id) {
         Player online = getPlayer(id);
         if (online != null) return online;
+        // Try profile cache for name
+        try {
+            var profile = console.getProfileCache().get(id);
+            if (profile.isPresent()) {
+                return new org.bukkit.craftbukkit.v1_21_R1.entity.CraftOfflinePlayer(
+                        id, profile.get().getName());
+            }
+        } catch (Throwable ignored) {}
         return new org.bukkit.craftbukkit.v1_21_R1.entity.CraftOfflinePlayer(id, null);
     }
 
     @Override
     public @Nullable OfflinePlayer getOfflinePlayerIfCached(@NotNull String name) {
         Player online = getPlayer(name);
-        return online;
+        if (online != null) return online;
+        try {
+            var profile = console.getProfileCache().get(name);
+            if (profile.isPresent()) {
+                return new org.bukkit.craftbukkit.v1_21_R1.entity.CraftOfflinePlayer(
+                        profile.get().getId(), name);
+            }
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     @Override
@@ -1683,21 +1714,35 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull PlayerProfile createPlayerProfile(@Nullable UUID uniqueId, @Nullable String name) {
-        return null;
+        return new io.ampznetwork.lunararc.common.server.LunarArcPlayerProfile(uniqueId, name);
     }
 
     @Override
     public @NotNull PlayerProfile createPlayerProfile(@NotNull UUID uniqueId) {
-        return null;
+        String name = null;
+        try {
+            var profile = console.getProfileCache().get(uniqueId);
+            if (profile.isPresent()) name = profile.get().getName();
+        } catch (Throwable ignored) {}
+        return new io.ampznetwork.lunararc.common.server.LunarArcPlayerProfile(uniqueId, name);
     }
 
     @Override
     public @NotNull PlayerProfile createPlayerProfile(@NotNull String name) {
-        return null;
+        UUID id = getPlayerUniqueId(name);
+        return new io.ampznetwork.lunararc.common.server.LunarArcPlayerProfile(id, name);
     }
 
     @Override
     public @Nullable UUID getPlayerUniqueId(@NotNull String name) {
+        // Check online players first
+        Player online = getPlayer(name);
+        if (online != null) return online.getUniqueId();
+        // Try profile cache
+        try {
+            var profile = console.getProfileCache().get(name);
+            if (profile.isPresent()) return profile.get().getId();
+        } catch (Throwable ignored) {}
         return null;
     }
 
