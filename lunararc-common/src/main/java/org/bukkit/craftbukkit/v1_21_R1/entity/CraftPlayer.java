@@ -377,7 +377,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public Firework fireworkBoost(ItemStack stack) { return null; }
     @Override public Location getCompassTarget() { return new Location(getWorld(), 0, 0, 0); }
     @Override public Iterable<? extends BossBar> activeBossBars() { return java.util.Collections.emptyList(); }
-    @Override public void sendExperienceChange(float progress) {}
+    @Override public void sendExperienceChange(float progress) { getHandle().sendExperienceChange(progress, getLevel()); }
     @Override public void sendMap(MapView map) {}
     @Override public void sendRawMessage(String message) { sendMessage(message); }
     @Override public void sendBlockChange(Location loc, Material material, byte data) {}
@@ -520,9 +520,18 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public double getHealthScale() { return 20.0; }
     @Override public Entity getSpectatorTarget() { return null; }
     @Override public void setSpectatorTarget(Entity entity) {}
-    @Override public void sendTitle(@NotNull com.destroystokyo.paper.Title title) {}
-    @Override public void sendTitle(String title, String subtitle) {}
-    @Override public void sendTitle(String title, String subtitle, int fadeIn, int stay, int fadeOut) {}
+    @Override public void sendTitle(@NotNull com.destroystokyo.paper.Title title) {
+        sendTitle(title.getTitle(), title.getSubtitle(),
+                title.getFadeIn(), title.getStay(), title.getFadeOut());
+    }
+    @Override public void sendTitle(String title, String subtitle) { sendTitle(title, subtitle, 10, 70, 20); }
+    @Override public void sendTitle(String title, String subtitle, int fadeIn, int stay, int fadeOut) {
+        try {
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket(fadeIn, stay, fadeOut));
+            if (subtitle != null) getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(net.minecraft.network.chat.Component.literal(subtitle)));
+            if (title != null) getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(net.minecraft.network.chat.Component.literal(title)));
+        } catch (Throwable ignored) {}
+    }
     @Override public void resetTitle() {}
     @Override public void removeResourcePacks() {}
     @Override public void removeResourcePack(UUID id) {}
