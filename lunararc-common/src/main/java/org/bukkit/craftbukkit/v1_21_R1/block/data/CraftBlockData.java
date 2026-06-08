@@ -120,6 +120,9 @@ public class CraftBlockData implements BlockData {
     public @NotNull org.bukkit.Color getMapColor() { return org.bukkit.Color.WHITE; }
 
     @Override
+    public boolean isFaceSturdy(@NotNull org.bukkit.block.BlockFace face, @NotNull org.bukkit.block.BlockSupport support) { return false; }
+
+    @Override
     public void mirror(@NotNull org.bukkit.block.structure.Mirror mirror) {}
 
     @Override

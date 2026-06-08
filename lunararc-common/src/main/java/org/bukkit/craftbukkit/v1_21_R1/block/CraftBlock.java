@@ -265,6 +265,9 @@ public class CraftBlock implements Block {
     public boolean canPlace(@NotNull BlockData data) { return true; }
 
     @Override
+    public float getBreakSpeed(@NotNull org.bukkit.entity.Player player) { return 1.0f; }
+
+    @Override
     public @NotNull org.bukkit.util.VoxelShape getCollisionShape() {
         return (org.bukkit.util.VoxelShape) java.lang.reflect.Proxy.newProxyInstance(
             org.bukkit.util.VoxelShape.class.getClassLoader(),
