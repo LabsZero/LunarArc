@@ -105,6 +105,9 @@ public class CraftBlockData implements BlockData {
     }
 
     @Override
+    public @NotNull org.bukkit.Color getMapColor() { return org.bukkit.Color.WHITE; }
+
+    @Override
     public void mirror(@NotNull org.bukkit.block.structure.Mirror mirror) {}
 
     @Override

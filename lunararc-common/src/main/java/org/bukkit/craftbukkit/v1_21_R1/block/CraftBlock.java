@@ -262,6 +262,9 @@ public class CraftBlock implements Block {
     // -----------------------------------------------------------------------
 
     @Override
+    public boolean canPlace(@NotNull BlockData data) { return true; }
+
+    @Override
     public boolean isSolid() { return nmsState().isSolid(); }
 
     @Override
