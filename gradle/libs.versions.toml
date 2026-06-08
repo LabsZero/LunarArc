@@ -15,7 +15,7 @@ quilt-loader = "0.29.2"
 quilt-installer = "0.9.2"
 
 # loader
-bungeecord-chat-api = "1.20-R0.2"
+bungeecord-chat-api = "1.21-R0.4"
 paper-api = "1.21.1-R0.1-SNAPSHOT"
 paper-build = "133"
 data-version = "3953"
