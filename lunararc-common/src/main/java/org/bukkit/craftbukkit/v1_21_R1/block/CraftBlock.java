@@ -350,6 +350,12 @@ public class CraftBlock implements Block {
     }
 
     @Override
+    public boolean breakNaturally(boolean triggerEffect, boolean dropExperience) {
+        world.destroyBlock(position, true);
+        return true;
+    }
+
+    @Override
     public boolean breakNaturally(@NotNull ItemStack tool, boolean triggerEffect) {
         return breakNaturally(tool);
     }

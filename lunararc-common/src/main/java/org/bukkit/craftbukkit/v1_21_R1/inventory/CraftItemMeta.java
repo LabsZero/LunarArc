@@ -415,6 +415,28 @@ public class CraftItemMeta implements ItemMeta {
     public @Nullable org.bukkit.inventory.meta.components.ToolComponent getTool() { return null; }
     @Override
     public void setTool(@Nullable org.bukkit.inventory.meta.components.ToolComponent tool) {}
+    @Override
+    public boolean hasJukeboxPlayable() { return false; }
+    @Override
+    public @Nullable org.bukkit.inventory.meta.components.JukeboxPlayableComponent getJukeboxPlayable() { return null; }
+    @Override
+    public void setJukeboxPlayable(@Nullable org.bukkit.inventory.meta.components.JukeboxPlayableComponent jukeboxPlayable) {}
+    @Override
+    public boolean hasFood() { return false; }
+    @Override
+    public @NotNull org.bukkit.inventory.meta.components.FoodComponent getFood() {
+        return (org.bukkit.inventory.meta.components.FoodComponent) java.lang.reflect.Proxy.newProxyInstance(
+            org.bukkit.inventory.meta.components.FoodComponent.class.getClassLoader(),
+            new Class<?>[]{ org.bukkit.inventory.meta.components.FoodComponent.class },
+            (proxy, method, args) -> {
+                if (method.getReturnType() == boolean.class) return false;
+                if (method.getReturnType() == int.class) return 0;
+                if (method.getReturnType() == float.class) return 0.0f;
+                return null;
+            });
+    }
+    @Override
+    public void setFood(@Nullable org.bukkit.inventory.meta.components.FoodComponent food) {}
     public boolean hasUseRemainder() { return false; }
     public @Nullable ItemStack getUseRemainder() { return null; }
     public void setUseRemainder(@Nullable ItemStack remainder) {}

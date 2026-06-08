@@ -17,7 +17,7 @@ dependencies {
 
     // PaperMC bridge (hybrid Bukkit implementation — replaces Spigot)
     implementation libs.paper.api
-    implementation 'net.md-5:bungeecord-chat:1.20-R0.2'
+    implementation libs.bungeecord.chat.api
 
     // Bundled utilities
     implementation libs.sqlite.jdbc
