@@ -78,6 +78,11 @@ public class CraftBlockData implements BlockData {
     }
 
     @Override
+    public float getDestroySpeed(@NotNull org.bukkit.inventory.ItemStack itemStack, boolean considerEnchants) {
+        return state.getDestroySpeed(net.minecraft.world.item.ItemStack.EMPTY);
+    }
+
+    @Override
     public boolean isRandomlyTicked() {
         return state.isRandomlyTicking();
     }

@@ -75,7 +75,7 @@ public class CraftItemMeta implements ItemMeta {
             enc.entrySet().forEach(e -> {
                 try {
                     net.minecraft.resources.ResourceLocation key =
-                        net.minecraft.core.registries.BuiltInRegistries.ENCHANTMENT.getKey(e.getKey().value());
+                        e.getKey().unwrapKey().map(k -> k.location()).orElse(null);
                     if (key != null) {
                         Enchantment bukkit = Enchantment.getByKey(
                             org.bukkit.NamespacedKey.fromString(key.toString()));
@@ -243,7 +243,6 @@ public class CraftItemMeta implements ItemMeta {
         return enchantments.remove(ench) != null;
     }
 
-    @Override
     public boolean removeEnchants(@NotNull Enchantment... enchantments) {
         boolean changed = false;
         for (Enchantment e : enchantments) changed |= removeEnchant(e);
@@ -255,7 +254,6 @@ public class CraftItemMeta implements ItemMeta {
         return false;
     }
 
-    @Override
     public boolean isEnchantmentGlintOverrideSet() { return false; }
     @Override
     public @Nullable Boolean getEnchantmentGlintOverride() { return null; }
@@ -308,7 +306,6 @@ public class CraftItemMeta implements ItemMeta {
         return com.google.common.collect.HashMultimap.create();
     }
 
-    @Override
     public @NotNull com.google.common.collect.Multimap<Attribute, AttributeModifier> getAttributeModifiers(
             @NotNull EquipmentSlotGroup group) {
         return com.google.common.collect.HashMultimap.create();
@@ -331,7 +328,6 @@ public class CraftItemMeta implements ItemMeta {
     public boolean removeAttributeModifier(@NotNull Attribute attribute) { return false; }
     @Override
     public boolean removeAttributeModifier(@NotNull EquipmentSlot slot) { return false; }
-    @Override
     public boolean removeAttributeModifier(@NotNull EquipmentSlotGroup group) { return false; }
     @Override
     public boolean removeAttributeModifier(@NotNull Attribute attribute, @NotNull AttributeModifier modifier) { return false; }
@@ -354,12 +350,9 @@ public class CraftItemMeta implements ItemMeta {
     @Override
     public void setCanPlaceOn(@Nullable Set<org.bukkit.Material> materials) {}
 
-    @Override
     public boolean hasCustomTags() { return false; }
-    @Override
     public @Nullable String getCustomTagContainer() { return null; }
 
-    @Override
     public int getVersion() { return 0; }
 
     @Override
@@ -368,9 +361,7 @@ public class CraftItemMeta implements ItemMeta {
     public org.bukkit.inventory.ItemRarity getRarity() { return org.bukkit.inventory.ItemRarity.COMMON; }
     @Override
     public void setRarity(@Nullable org.bukkit.inventory.ItemRarity rarity) {}
-    @Override
     public boolean isGlider() { return false; }
-    @Override
     public void setGlider(boolean glider) {}
     @Override
     public boolean hasTool() { return false; }
@@ -378,11 +369,8 @@ public class CraftItemMeta implements ItemMeta {
     public @Nullable org.bukkit.inventory.meta.components.ToolComponent getTool() { return null; }
     @Override
     public void setTool(@Nullable org.bukkit.inventory.meta.components.ToolComponent tool) {}
-    @Override
     public boolean hasUseRemainder() { return false; }
-    @Override
     public @Nullable ItemStack getUseRemainder() { return null; }
-    @Override
     public void setUseRemainder(@Nullable ItemStack remainder) {}
     @Override
     public boolean hasMaxStackSize() { return false; }
@@ -390,23 +378,16 @@ public class CraftItemMeta implements ItemMeta {
     public int getMaxStackSize() { return 64; }
     @Override
     public void setMaxStackSize(@Nullable Integer max) {}
-    @Override
     public boolean hasTooltipStyle() { return false; }
-    @Override
     public @Nullable NamespacedKey getTooltipStyle() { return null; }
-    @Override
     public void setTooltipStyle(@Nullable NamespacedKey key) {}
     @Override
     public boolean isHideTooltip() { return false; }
     @Override
     public void setHideTooltip(boolean hide) {}
-    @Override
     public boolean hasDyedColor() { return false; }
-    @Override
     public boolean hasCustomName() { return hasDisplayName(); }
-    @Override
     public boolean hasRepairCost() { return false; }
-    @Override
     public int getRepairCost() { return 0; }
     @Override
     public void addItemFlags(@NotNull org.bukkit.inventory.ItemFlag... itemFlags) {}
