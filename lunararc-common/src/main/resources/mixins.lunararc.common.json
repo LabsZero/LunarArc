@@ -24,7 +24,8 @@
     "core.item.BlockItemMixin",
     "mod.util.VelocityForwardQueryMixin",
     "bukkit.MaterialMixin",
-    "api.RegistryAccessMixin"
+    "api.RegistryAccessMixin",
+    "api.ServerBuildInfoMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -18,21 +18,26 @@ public record LunarArcServerBuildInfo(
         @NotNull Optional<String> gitBranch,
         @NotNull Optional<String> gitCommit) implements ServerBuildInfo {
 
-    public LunarArcServerBuildInfo() {
+    /** Singleton — created once at class-load time so buildTime is stable. */
+    public static final LunarArcServerBuildInfo INSTANCE = new LunarArcServerBuildInfo();
+
+    private LunarArcServerBuildInfo() {
         this(
-                Key.key("lunararc", "lunararc"),
-                LunarArcVersionInfo.projectName(),
+                Key.key("paper", "paper"),      // brand must be paper:paper for plugin compat
+                LunarArcVersionInfo.projectName(), // "Paper"
                 LunarArcVersionInfo.minecraftVersion(),
                 LunarArcVersionInfo.minecraftVersion(),
-                OptionalInt.of(1),
-                Instant.now(),
-                Optional.of("master"),
+                OptionalInt.of(133),
+                Instant.EPOCH,
+                Optional.of("main"),
                 Optional.of(LunarArcVersionInfo.projectVersion()));
     }
 
     @Override
     public boolean isBrandCompatible(@NotNull Key brand) {
-        return brand.value().equals("paper") || brand.value().equals("lunararc") || brand.value().equals("spigot");
+        String ns = brand.namespace();
+        String val = brand.value();
+        return "paper".equals(ns) || "paper".equals(val) || "lunararc".equals(val) || "spigot".equals(val);
     }
 
     @Override

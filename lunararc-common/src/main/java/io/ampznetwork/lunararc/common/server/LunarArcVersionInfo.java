@@ -34,7 +34,7 @@ public final class LunarArcVersionInfo {
     }
 
     public static String paperApiVersion() {
-        return minecraftVersion();
+        return minecraftVersion() + "-R0.1-SNAPSHOT";
     }
 
     public static OptionalInt dataVersion() {
