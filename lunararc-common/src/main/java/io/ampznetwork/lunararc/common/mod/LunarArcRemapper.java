@@ -1,7 +1,10 @@
 package io.ampznetwork.lunararc.common.mod;
 
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.commons.ClassRemapper;
 
 import java.util.HashMap;
@@ -26,6 +29,34 @@ import java.util.Map;
 public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
 
     private static final Map<String, String> CLASS_MAP = new HashMap<>();
+
+    // owner -> (srg-name -> mojang-name) for field remapping
+    private static final Map<String, Map<String, String>> FIELD_MAP = new HashMap<>();
+
+    static {
+        // TAB plugin: ServerPlayer.c (obfuscated) → connection (Mojang)
+        Map<String, String> serverPlayerFields = new HashMap<>();
+        serverPlayerFields.put("c", "connection");
+        serverPlayerFields.put("e", "gameMode");
+        FIELD_MAP.put("net/minecraft/server/level/ServerPlayer", serverPlayerFields);
+
+        // ServerGamePacketListenerImpl obfuscated field names
+        Map<String, String> listenerFields = new HashMap<>();
+        listenerFields.put("a", "player");
+        listenerFields.put("b", "connection");
+        FIELD_MAP.put("net/minecraft/server/network/ServerGamePacketListenerImpl", listenerFields);
+    }
+
+    @Override
+    public String mapFieldName(String owner, String name, String descriptor) {
+        String mappedOwner = map(owner);
+        Map<String, String> fields = FIELD_MAP.get(mappedOwner != null ? mappedOwner : owner);
+        if (fields != null) {
+            String remapped = fields.get(name);
+            if (remapped != null) return remapped;
+        }
+        return name;
+    }
 
     static {
         // Remap any versioned CraftBukkit package to the current target version.
@@ -158,31 +189,28 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         return bytecode;
     }
 
-    /** Replace one UTF-8 string constant in raw class bytecode (constant-pool surgery). */
+    /** Replace one string constant in all LDC instructions via ASM (safe for any string length). */
     private static byte[] patchStringConstant(byte[] bytes, String from, String to) {
         try {
-            // Constant-pool entry for UTF-8: tag=1, u2 length, bytes
-            byte fromTag = 1;
-            byte[] fromBytes = from.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            byte[] toBytes   = to.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            if (fromBytes.length != toBytes.length) {
-                // Lengths differ — pad/truncate to same size to keep offsets valid
-                toBytes = java.util.Arrays.copyOf(toBytes, fromBytes.length);
-            }
-            int searchLen = 1 + 2 + fromBytes.length; // tag + length field + data
-            outer:
-            for (int i = 0; i <= bytes.length - searchLen; i++) {
-                if (bytes[i] != fromTag) continue;
-                int len = ((bytes[i+1] & 0xFF) << 8) | (bytes[i+2] & 0xFF);
-                if (len != fromBytes.length) continue;
-                for (int j = 0; j < fromBytes.length; j++) {
-                    if (bytes[i + 3 + j] != fromBytes[j]) continue outer;
+            ClassReader reader = new ClassReader(bytes);
+            ClassWriter writer = new ClassWriter(0);
+            reader.accept(new ClassVisitor(Opcodes.ASM9, writer) {
+                @Override
+                public MethodVisitor visitMethod(int access, String name, String descriptor,
+                        String signature, String[] exceptions) {
+                    MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
+                    return new MethodVisitor(Opcodes.ASM9, mv) {
+                        @Override
+                        public void visitLdcInsn(Object value) {
+                            super.visitLdcInsn(from.equals(value) ? to : value);
+                        }
+                    };
                 }
-                System.arraycopy(toBytes, 0, bytes, i + 3, toBytes.length);
-                break;
-            }
-        } catch (Throwable ignored) {}
-        return bytes;
+            }, 0);
+            return writer.toByteArray();
+        } catch (Throwable t) {
+            return bytes;
+        }
     }
 
     /**
