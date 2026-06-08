@@ -118,6 +118,11 @@ public class CraftBlock implements Block {
     }
 
     @Override
+    public @NotNull String translationKey() {
+        return getTranslationKey();
+    }
+
+    @Override
     public @NotNull World getWorld() {
         return new CraftWorld(world);
     }
