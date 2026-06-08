@@ -134,6 +134,52 @@ public class CraftBlockData implements BlockData {
     }
 
     @Override
+    public int getLightEmission() { return state.getLightEmission(); }
+
+    @Override
+    public @NotNull org.bukkit.block.PistonMoveReaction getPistonMoveReaction() {
+        return org.bukkit.block.PistonMoveReaction.MOVE;
+    }
+
+    @Override
+    public @NotNull org.bukkit.SoundGroup getSoundGroup() {
+        net.minecraft.world.level.block.SoundType nms = state.getSoundType();
+        return new org.bukkit.SoundGroup() {
+            private org.bukkit.Sound toSound(net.minecraft.sounds.SoundEvent e) {
+                try {
+                    net.minecraft.resources.ResourceLocation rl =
+                        BuiltInRegistries.SOUND_EVENT.getKey(e);
+                    if (rl == null) return org.bukkit.Sound.BLOCK_STONE_BREAK;
+                    return org.bukkit.Sound.valueOf(
+                        rl.getPath().toUpperCase(java.util.Locale.ROOT).replace('.', '_'));
+                } catch (Throwable t) { return org.bukkit.Sound.BLOCK_STONE_BREAK; }
+            }
+            @Override public float getVolume() { return nms.getVolume(); }
+            @Override public float getPitch() { return nms.getPitch(); }
+            @Override public @NotNull org.bukkit.Sound getBreakSound() { return toSound(nms.getBreakSound()); }
+            @Override public @NotNull org.bukkit.Sound getStepSound() { return toSound(nms.getStepSound()); }
+            @Override public @NotNull org.bukkit.Sound getPlaceSound() { return toSound(nms.getPlaceSound()); }
+            @Override public @NotNull org.bukkit.Sound getHitSound() { return toSound(nms.getHitSound()); }
+            @Override public @NotNull org.bukkit.Sound getFallSound() { return toSound(nms.getFallSound()); }
+        };
+    }
+
+    @Override
+    public boolean isOccluding() { return false; }
+
+    @Override
+    public boolean isPreferredTool(@NotNull org.bukkit.inventory.ItemStack tool) { return true; }
+
+    @Override
+    public boolean isSupported(@NotNull org.bukkit.Location location) { return true; }
+
+    @Override
+    public boolean isSupported(@NotNull org.bukkit.block.Block block) { return true; }
+
+    @Override
+    public boolean requiresCorrectToolForDrops() { return false; }
+
+    @Override
     public @NotNull BlockData merge(@NotNull BlockData data) {
         return this;
     }

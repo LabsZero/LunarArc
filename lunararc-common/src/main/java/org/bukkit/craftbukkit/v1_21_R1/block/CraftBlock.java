@@ -268,6 +268,47 @@ public class CraftBlock implements Block {
     public float getBreakSpeed(@NotNull org.bukkit.entity.Player player) { return 1.0f; }
 
     @Override
+    public void randomTick() {}
+
+    @Override
+    public void tick() {}
+
+    @Override
+    public void fluidTick() {}
+
+    @Override
+    public int getBlockPower() { return 0; }
+
+    @Override
+    public int getBlockPower(@NotNull BlockFace face) { return 0; }
+
+    @Override
+    public boolean isBlockFaceIndirectlyPowered(@NotNull BlockFace face) { return false; }
+
+    @Override
+    public boolean isBlockFacePowered(@NotNull BlockFace face) { return false; }
+
+    @Override
+    public boolean isBlockIndirectlyPowered() { return false; }
+
+    @Override
+    public boolean isBlockPowered() { return false; }
+
+    @Override
+    public boolean isBuildable() { return nmsState().isSolid(); }
+
+    @Override
+    public boolean isBurnable() { return false; }
+
+    @Override
+    public boolean isCollidable() { return nmsState().isSolid(); }
+
+    @Override
+    public boolean isReplaceable() { return false; }
+
+    public boolean isValidTool(@NotNull ItemStack tool) { return true; }
+
+    @Override
     public @NotNull org.bukkit.util.VoxelShape getCollisionShape() {
         return (org.bukkit.util.VoxelShape) java.lang.reflect.Proxy.newProxyInstance(
             org.bukkit.util.VoxelShape.class.getClassLoader(),

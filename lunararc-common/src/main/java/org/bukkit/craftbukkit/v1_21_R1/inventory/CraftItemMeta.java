@@ -158,6 +158,16 @@ public class CraftItemMeta implements ItemMeta {
     }
 
     @Override
+    public @NotNull Component itemName() {
+        return displayName != null ? displayName : Component.empty();
+    }
+
+    @Override
+    public void itemName(@Nullable Component name) {
+        this.displayName = name;
+    }
+
+    @Override
     public @Nullable List<Component> lore() {
         return lore;
     }
@@ -254,6 +264,11 @@ public class CraftItemMeta implements ItemMeta {
         return enchantments.remove(ench) != null;
     }
 
+    @Override
+    public void removeEnchantments() {
+        enchantments.clear();
+    }
+
     public boolean removeEnchants(@NotNull Enchantment... enchantments) {
         boolean changed = false;
         for (Enchantment e : enchantments) changed |= removeEnchant(e);
@@ -266,6 +281,8 @@ public class CraftItemMeta implements ItemMeta {
     }
 
     public boolean isEnchantmentGlintOverrideSet() { return false; }
+    @Override
+    public boolean hasEnchantmentGlintOverride() { return false; }
     @Override
     public @Nullable Boolean getEnchantmentGlintOverride() { return null; }
     @Override
@@ -379,6 +396,9 @@ public class CraftItemMeta implements ItemMeta {
     public void setVersion(int version) {}
 
     @Override
+    public @NotNull String getAsString() { return "{}"; }
+
+    @Override
     public @NotNull String getAsComponentString() { return "{}"; }
 
     @Override
@@ -415,6 +435,12 @@ public class CraftItemMeta implements ItemMeta {
     public boolean hasCustomName() { return hasDisplayName(); }
     public boolean hasRepairCost() { return false; }
     public int getRepairCost() { return 0; }
+    public boolean isFireResistant() { return false; }
+    public void setFireResistant(boolean fireResistant) {}
+    public net.md_5.bungee.api.chat.BaseComponent[] getDisplayNameComponent() { return null; }
+    public void setDisplayNameComponent(net.md_5.bungee.api.chat.BaseComponent[] component) {}
+    @Nullable public java.util.List<net.md_5.bungee.api.chat.BaseComponent[]> getLoreComponents() { return null; }
+    public void setLoreComponents(@Nullable java.util.List<net.md_5.bungee.api.chat.BaseComponent[]> lore) {}
     @Override
     public void addItemFlags(@NotNull org.bukkit.inventory.ItemFlag... itemFlags) {}
     @Override
