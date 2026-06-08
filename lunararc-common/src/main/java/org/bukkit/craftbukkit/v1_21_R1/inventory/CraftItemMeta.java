@@ -22,18 +22,16 @@ import java.util.*;
 
 public class CraftItemMeta implements ItemMeta {
 
-    @Override
     public boolean hasDestroyableKeys() { return false; }
     @Override
-    public @NotNull Set<org.bukkit.NamespacedKey> getDestroyableKeys() { return Collections.emptySet(); }
+    public @NotNull Set<org.bukkit.Namespaced> getDestroyableKeys() { return Collections.emptySet(); }
     @Override
-    public void setDestroyableKeys(@NotNull Collection<org.bukkit.NamespacedKey> canDestroy) {}
-    @Override
+    public void setDestroyableKeys(@NotNull Collection<org.bukkit.Namespaced> canDestroy) {}
     public boolean hasPlaceableKeys() { return false; }
     @Override
-    public @NotNull Set<org.bukkit.NamespacedKey> getPlaceableKeys() { return Collections.emptySet(); }
+    public @NotNull Set<org.bukkit.Namespaced> getPlaceableKeys() { return Collections.emptySet(); }
     @Override
-    public void setPlaceableKeys(@NotNull Collection<org.bukkit.NamespacedKey> canPlaceOn) {}
+    public void setPlaceableKeys(@NotNull Collection<org.bukkit.Namespaced> canPlaceOn) {}
 
     // Core data
     private Component displayName = null;

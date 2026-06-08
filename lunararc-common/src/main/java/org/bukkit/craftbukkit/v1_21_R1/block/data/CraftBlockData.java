@@ -97,6 +97,9 @@ public class CraftBlockData implements BlockData {
     }
 
     @Override
+    public void copyTo(@NotNull BlockData blockData) {}
+
+    @Override
     public boolean isRandomlyTicked() {
         return state.isRandomlyTicking();
     }

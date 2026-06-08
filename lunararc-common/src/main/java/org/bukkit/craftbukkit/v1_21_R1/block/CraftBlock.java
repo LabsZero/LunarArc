@@ -67,7 +67,7 @@ public class CraftBlock implements Block {
     // -----------------------------------------------------------------------
 
     @Override
-    public @NotNull org.bukkit.SoundGroup getSoundGroup() {
+    public @NotNull org.bukkit.SoundGroup getBlockSoundGroup() {
         net.minecraft.world.level.block.SoundType nms = world.getBlockState(position).getSoundType();
         return new org.bukkit.SoundGroup() {
             private org.bukkit.Sound toSound(net.minecraft.sounds.SoundEvent e) {
