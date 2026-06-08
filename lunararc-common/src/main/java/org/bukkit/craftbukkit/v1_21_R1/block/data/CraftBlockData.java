@@ -105,6 +105,18 @@ public class CraftBlockData implements BlockData {
     }
 
     @Override
+    public @NotNull org.bukkit.util.VoxelShape getCollisionShape(@NotNull org.bukkit.Location location) {
+        return (org.bukkit.util.VoxelShape) java.lang.reflect.Proxy.newProxyInstance(
+            org.bukkit.util.VoxelShape.class.getClassLoader(),
+            new Class<?>[]{ org.bukkit.util.VoxelShape.class },
+            (proxy, method, args) -> {
+                if (method.getReturnType() == boolean.class) return false;
+                if (method.getReturnType() == java.util.Collection.class) return java.util.Collections.emptyList();
+                return null;
+            });
+    }
+
+    @Override
     public @NotNull org.bukkit.Color getMapColor() { return org.bukkit.Color.WHITE; }
 
     @Override

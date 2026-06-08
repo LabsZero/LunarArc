@@ -379,6 +379,9 @@ public class CraftItemMeta implements ItemMeta {
     public void setVersion(int version) {}
 
     @Override
+    public @NotNull String getAsComponentString() { return getAsString(); }
+
+    @Override
     public boolean hasRarity() { return false; }
     @Override
     public org.bukkit.inventory.ItemRarity getRarity() { return org.bukkit.inventory.ItemRarity.COMMON; }

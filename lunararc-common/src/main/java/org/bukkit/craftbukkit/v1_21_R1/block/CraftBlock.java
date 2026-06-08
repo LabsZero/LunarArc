@@ -265,6 +265,18 @@ public class CraftBlock implements Block {
     public boolean canPlace(@NotNull BlockData data) { return true; }
 
     @Override
+    public @NotNull org.bukkit.util.VoxelShape getCollisionShape() {
+        return (org.bukkit.util.VoxelShape) java.lang.reflect.Proxy.newProxyInstance(
+            org.bukkit.util.VoxelShape.class.getClassLoader(),
+            new Class<?>[]{ org.bukkit.util.VoxelShape.class },
+            (proxy, method, args) -> {
+                if (method.getReturnType() == boolean.class) return false;
+                if (method.getReturnType() == java.util.Collection.class) return java.util.Collections.emptyList();
+                return null;
+            });
+    }
+
+    @Override
     public boolean isSolid() { return nmsState().isSolid(); }
 
     @Override
