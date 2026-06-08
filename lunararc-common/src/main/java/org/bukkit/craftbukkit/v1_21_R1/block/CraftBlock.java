@@ -89,11 +89,11 @@ public class CraftBlock implements Block {
         };
     }
 
-    public @NotNull io.papermc.paper.block.BlockSoundGroup getSoundGroup() {
+    public @NotNull com.destroystokyo.paper.block.BlockSoundGroup getSoundGroup() {
         org.bukkit.SoundGroup base = getBlockSoundGroup();
-        return (io.papermc.paper.block.BlockSoundGroup) java.lang.reflect.Proxy.newProxyInstance(
-            io.papermc.paper.block.BlockSoundGroup.class.getClassLoader(),
-            new Class<?>[]{ io.papermc.paper.block.BlockSoundGroup.class },
+        return (com.destroystokyo.paper.block.BlockSoundGroup) java.lang.reflect.Proxy.newProxyInstance(
+            com.destroystokyo.paper.block.BlockSoundGroup.class.getClassLoader(),
+            new Class<?>[]{ com.destroystokyo.paper.block.BlockSoundGroup.class },
             (proxy, method, args) -> {
                 switch (method.getName()) {
                     case "getVolume": return base.getVolume();
