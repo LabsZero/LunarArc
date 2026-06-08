@@ -373,35 +373,11 @@ public class CraftItemMeta implements ItemMeta {
     @Override
     public void setGlider(boolean glider) {}
     @Override
-    public boolean hasEquippable() { return false; }
-    @Override
-    public @Nullable org.bukkit.inventory.EquipableComponent getEquippable() { return null; }
-    @Override
-    public void setEquippable(@Nullable org.bukkit.inventory.EquipableComponent component) {}
-    @Override
-    public boolean hasFoodComponent() { return false; }
-    @Override
-    public @Nullable org.bukkit.inventory.FoodComponent getFoodComponent() { return null; }
-    @Override
-    public void setFoodComponent(@Nullable org.bukkit.inventory.FoodComponent component) {}
-    @Override
     public boolean hasTool() { return false; }
     @Override
     public @Nullable org.bukkit.inventory.meta.components.ToolComponent getTool() { return null; }
     @Override
     public void setTool(@Nullable org.bukkit.inventory.meta.components.ToolComponent tool) {}
-    @Override
-    public boolean hasJukeboxPlayable() { return false; }
-    @Override
-    public @Nullable org.bukkit.inventory.meta.components.JukeboxComponent getJukeboxPlayable() { return null; }
-    @Override
-    public void setJukeboxPlayable(@Nullable org.bukkit.inventory.meta.components.JukeboxComponent component) {}
-    @Override
-    public boolean hasUseCooldown() { return false; }
-    @Override
-    public @Nullable org.bukkit.inventory.meta.components.UseCooldownComponent getUseCooldown() { return null; }
-    @Override
-    public void setUseCooldown(@Nullable org.bukkit.inventory.meta.components.UseCooldownComponent component) {}
     @Override
     public boolean hasUseRemainder() { return false; }
     @Override

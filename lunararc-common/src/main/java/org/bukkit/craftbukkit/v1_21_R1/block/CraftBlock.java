@@ -385,15 +385,4 @@ public class CraftBlock implements Block {
     public @NotNull BoundingBox getBoundingBox() {
         return BoundingBox.of(getLocation(), getLocation().add(1, 1, 1));
     }
-
-    @Override
-    public @NotNull org.bukkit.collision.CollisionData getCollisionData() {
-        return (org.bukkit.collision.CollisionData) java.lang.reflect.Proxy.newProxyInstance(
-            org.bukkit.collision.CollisionData.class.getClassLoader(),
-            new Class<?>[]{ org.bukkit.collision.CollisionData.class },
-            (p, m, a) -> {
-                if (m.getReturnType() == boolean.class) return false;
-                return null;
-            });
-    }
 }
