@@ -113,7 +113,7 @@ public class CraftPlayerInventory implements PlayerInventory {
     }
 
     @Override public void setItemInMainHand(@Nullable ItemStack item) {
-        handle.items.set(handle.selected, CraftItemStack.asNMSCopy(item));
+        setNms(handle.selected, CraftItemStack.asNMSCopy(item));
     }
 
     @Override public @NotNull ItemStack getItemInOffHand() {
