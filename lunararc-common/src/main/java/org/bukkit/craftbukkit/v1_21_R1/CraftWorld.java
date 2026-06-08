@@ -260,25 +260,46 @@ public class CraftWorld implements World {
 
     @Override
     public void setBlockData(int x, int y, int z, @NotNull org.bukkit.block.data.BlockData blockData) {
+        net.minecraft.world.level.block.state.BlockState nms;
+        if (blockData instanceof org.bukkit.craftbukkit.v1_21_R1.block.data.CraftBlockData craftData) {
+            nms = craftData.getState();
+        } else {
+            nms = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                    .get(net.minecraft.resources.ResourceLocation.withDefaultNamespace(
+                            blockData.getMaterial().name().toLowerCase(java.util.Locale.ROOT)))
+                    .defaultBlockState();
+        }
+        world.setBlock(new net.minecraft.core.BlockPos(x, y, z), nms, 3);
     }
 
     @Override
     public void setBlockData(@NotNull Location location, @NotNull org.bukkit.block.data.BlockData blockData) {
+        setBlockData(location.getBlockX(), location.getBlockY(), location.getBlockZ(), blockData);
     }
 
     @Override
     public @NotNull Material getType(int x, int y, int z) {
-        return Material.AIR;
+        net.minecraft.world.level.block.state.BlockState state =
+                world.getBlockState(new net.minecraft.core.BlockPos(x, y, z));
+        net.minecraft.resources.ResourceLocation key =
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        if (key == null) return Material.AIR;
+        try {
+            return Material.valueOf(key.getPath().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return Material.AIR;
+        }
     }
 
     @Override
     public @NotNull Material getType(@NotNull Location location) {
-        return Material.AIR;
+        return getType(location.getBlockX(), location.getBlockY(), location.getBlockZ());
     }
 
     @Override
     public @NotNull org.bukkit.block.data.BlockData getBlockData(int x, int y, int z) {
-        return org.bukkit.Bukkit.createBlockData(getType(x, y, z));
+        return new org.bukkit.craftbukkit.v1_21_R1.block.data.CraftBlockData(
+                world.getBlockState(new net.minecraft.core.BlockPos(x, y, z)));
     }
 
     @Override
