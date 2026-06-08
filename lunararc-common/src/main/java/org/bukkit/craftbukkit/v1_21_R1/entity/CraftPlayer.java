@@ -476,7 +476,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void openSign(Sign sign, Side side) {}
     @Override public int getClientViewDistance() { return 10; }
     @Override public int getPing() {
-        try { return getHandle().connection.latency(); } catch (Throwable t) { return 0; }
+        try { return getHandle().latency; } catch (Throwable t) { return 0; }
     }
     @Override public String getLocale() {
         try { return getHandle().getLanguage(); } catch (Throwable t) { return "en_us"; }
