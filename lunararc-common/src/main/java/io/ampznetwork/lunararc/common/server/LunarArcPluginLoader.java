@@ -29,9 +29,20 @@ public class LunarArcPluginLoader implements PluginLoader {
         this.server = server;
     }
 
+    /** Apply per-plugin compatibility fixes before loading classes. */
+    private static void applyPluginFixes(String fileName) {
+        String lower = fileName.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("worldedit") || lower.contains("fastasyncworldedit") || lower.contains("fawe")) {
+            // Force the v1_21 Paper adapter so WorldEdit doesn't try to auto-detect
+            System.setProperty("worldedit.bukkit.adapter",
+                "com.sk89q.worldedit.bukkit.adapter.impl.v1_21.PaperweightAdapter");
+        }
+    }
+
     @Override
     public Plugin loadPlugin(File file) throws InvalidPluginException, UnknownDependencyException {
         logger.info("[LunarArc] Loading plugin jar: " + file.getName());
+        applyPluginFixes(file.getName());
         if (!file.exists()) {
             throw new InvalidPluginException(new java.io.FileNotFoundException(file.getPath()));
         }

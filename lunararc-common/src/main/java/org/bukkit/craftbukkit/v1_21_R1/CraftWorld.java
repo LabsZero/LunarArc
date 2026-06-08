@@ -71,17 +71,24 @@ public class CraftWorld implements World {
 
     @Override
     public int getHighestBlockYAt(int x, int z, @NotNull HeightMap heightMap) {
-        return 0;
+        Heightmap.Types nmsType = switch (heightMap) {
+            case MOTION_BLOCKING -> Heightmap.Types.MOTION_BLOCKING;
+            case MOTION_BLOCKING_NO_LEAVES -> Heightmap.Types.MOTION_BLOCKING_NO_LEAVES;
+            case OCEAN_FLOOR -> Heightmap.Types.OCEAN_FLOOR;
+            case WORLD_SURFACE -> Heightmap.Types.WORLD_SURFACE;
+            default -> Heightmap.Types.MOTION_BLOCKING;
+        };
+        return world.getHeight(nmsType, x, z);
     }
 
     @Override
     public int getHighestBlockYAt(@NotNull Location location) {
-        return 0;
+        return getHighestBlockYAt(location.getBlockX(), location.getBlockZ());
     }
 
     @Override
     public int getHighestBlockYAt(@NotNull Location location, @NotNull HeightMap heightMap) {
-        return 0;
+        return getHighestBlockYAt(location.getBlockX(), location.getBlockZ(), heightMap);
     }
 
     @Override
@@ -1239,43 +1246,84 @@ public class CraftWorld implements World {
     }
 
     @Override
-    public <T extends Entity> @NotNull T spawn(@NotNull Location location, @NotNull Class<T> clazz) {
-        return null;
+    @SuppressWarnings("unchecked")
+    private <T extends Entity> @Nullable T spawnInternal(@NotNull Location location, @NotNull EntityType type,
+            @Nullable java.util.function.Consumer<? super T> function) {
+        net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.parse(type.getKey().toString());
+        net.minecraft.world.entity.EntityType<?> nmsType = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.get(rl);
+        if (nmsType == null) return null;
+        net.minecraft.world.entity.Entity nmsEntity = nmsType.create(world);
+        if (nmsEntity == null) return null;
+        nmsEntity.setPos(location.getX(), location.getY(), location.getZ());
+        nmsEntity.setYRot(location.getYaw());
+        nmsEntity.setXRot(location.getPitch());
+        org.bukkit.craftbukkit.v1_21_R1.CraftServer cs =
+            (org.bukkit.craftbukkit.v1_21_R1.CraftServer) org.bukkit.Bukkit.getServer();
+        org.bukkit.entity.Entity bukkit = org.bukkit.craftbukkit.v1_21_R1.entity.CraftEntity.getEntity(cs, nmsEntity);
+        if (function != null && bukkit != null) {
+            try { function.accept((T) bukkit); } catch (Throwable ignored) {}
+        }
+        world.addFreshEntity(nmsEntity);
+        return bukkit != null ? (T) bukkit : null;
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public <T extends Entity> @NotNull T spawn(@NotNull Location location, @NotNull Class<T> clazz) {
+        for (EntityType type : EntityType.values()) {
+            if (type.getEntityClass() != null && type.getEntityClass().isAssignableFrom(clazz)) {
+                T result = spawnInternal(location, type, null);
+                if (result != null) return result;
+            }
+        }
+        throw new IllegalArgumentException("Cannot spawn entity of class " + clazz.getName());
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
     public <T extends Entity> @NotNull T spawn(@NotNull Location location, @NotNull Class<T> clazz,
             boolean randomizeData, @Nullable java.util.function.Consumer<? super T> function) {
-        return null;
+        for (EntityType type : EntityType.values()) {
+            if (type.getEntityClass() != null && type.getEntityClass().isAssignableFrom(clazz)) {
+                T result = spawnInternal(location, type, function);
+                if (result != null) return result;
+            }
+        }
+        throw new IllegalArgumentException("Cannot spawn entity of class " + clazz.getName());
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public <T extends Entity> @NotNull T spawn(@NotNull Location location, @NotNull Class<T> clazz,
             @Nullable java.util.function.Consumer<? super T> function,
             @NotNull org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason reason) {
-        return null;
+        return spawn(location, clazz, true, function);
     }
 
     @Override
     public @NotNull Entity spawnEntity(@NotNull Location location, @NotNull EntityType type) {
-        return null;
+        Entity result = spawnInternal(location, type, null);
+        if (result == null) throw new IllegalArgumentException("Cannot spawn entity type " + type);
+        return result;
     }
 
     @Override
     public @NotNull Entity spawnEntity(@NotNull Location location, @NotNull EntityType type, boolean randomizeData) {
-        return null;
+        return spawnEntity(location, type);
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public <T extends Entity> @NotNull T createEntity(@NotNull Location location, @NotNull Class<T> clazz) {
-        return null;
+        return spawn(location, clazz);
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public <T extends org.bukkit.entity.LivingEntity> @NotNull T spawn(@NotNull org.bukkit.Location location,
             @NotNull Class<T> clazz, @NotNull org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason reason,
             boolean randomizeData, @Nullable java.util.function.Consumer<? super T> function) {
-        return null;
+        return spawn(location, clazz, randomizeData, function);
     }
 
     @Override
@@ -1487,35 +1535,54 @@ public class CraftWorld implements World {
         return null;
     }
 
+    private java.util.List<org.bukkit.entity.Entity> entitiesInAABB(net.minecraft.world.phys.AABB aabb,
+            java.util.function.Predicate<? super org.bukkit.entity.Entity> filter) {
+        java.util.List<org.bukkit.entity.Entity> out = new java.util.ArrayList<>();
+        org.bukkit.craftbukkit.v1_21_R1.CraftServer cs =
+            (org.bukkit.craftbukkit.v1_21_R1.CraftServer) org.bukkit.Bukkit.getServer();
+        for (net.minecraft.world.entity.Entity e : world.getEntities(null, aabb)) {
+            org.bukkit.entity.Entity bukkit = org.bukkit.craftbukkit.v1_21_R1.entity.CraftEntity.getEntity(cs, e);
+            if (bukkit != null && (filter == null || filter.test(bukkit))) out.add(bukkit);
+        }
+        return out;
+    }
+
     @Override
     public @NotNull java.util.Collection<org.bukkit.entity.Entity> getNearbyEntities(
             @NotNull org.bukkit.util.BoundingBox boundingBox,
             @Nullable java.util.function.Predicate<? super org.bukkit.entity.Entity> filter) {
-        return java.util.Collections.emptyList();
+        return entitiesInAABB(new net.minecraft.world.phys.AABB(
+            boundingBox.getMinX(), boundingBox.getMinY(), boundingBox.getMinZ(),
+            boundingBox.getMaxX(), boundingBox.getMaxY(), boundingBox.getMaxZ()), filter);
     }
 
     @Override
     public @NotNull java.util.Collection<org.bukkit.entity.Entity> getNearbyEntities(
             @NotNull org.bukkit.util.BoundingBox boundingBox) {
-        return java.util.Collections.emptyList();
+        return getNearbyEntities(boundingBox, null);
     }
 
     @Override
     public @NotNull java.util.Collection<org.bukkit.entity.Entity> getNearbyEntities(
             @NotNull org.bukkit.Location location, double x, double y, double z,
             @Nullable java.util.function.Predicate<? super org.bukkit.entity.Entity> filter) {
-        return java.util.Collections.emptyList();
+        return entitiesInAABB(new net.minecraft.world.phys.AABB(
+            location.getX()-x, location.getY()-y, location.getZ()-z,
+            location.getX()+x, location.getY()+y, location.getZ()+z), filter);
     }
 
     @Override
     public @NotNull java.util.Collection<org.bukkit.entity.Entity> getNearbyEntities(
             @NotNull org.bukkit.Location location, double x, double y, double z) {
-        return java.util.Collections.emptyList();
+        return getNearbyEntities(location, x, y, z, null);
     }
 
     @Override
     public @Nullable org.bukkit.entity.Entity getEntity(@NotNull java.util.UUID uuid) {
-        return null;
+        net.minecraft.world.entity.Entity e = world.getEntities().get(uuid);
+        if (e == null) return null;
+        return org.bukkit.craftbukkit.v1_21_R1.entity.CraftEntity.getEntity(
+            (org.bukkit.craftbukkit.v1_21_R1.CraftServer) org.bukkit.Bukkit.getServer(), e);
     }
 
     @Override
@@ -1547,26 +1614,51 @@ public class CraftWorld implements World {
         return java.util.concurrent.CompletableFuture.completedFuture(null);
     }
 
+    private java.util.List<org.bukkit.entity.Entity> allBukkitEntities() {
+        java.util.List<org.bukkit.entity.Entity> out = new java.util.ArrayList<>();
+        org.bukkit.craftbukkit.v1_21_R1.CraftServer cs =
+            (org.bukkit.craftbukkit.v1_21_R1.CraftServer) org.bukkit.Bukkit.getServer();
+        world.getAllEntities().forEach(e -> {
+            org.bukkit.entity.Entity bukkit = org.bukkit.craftbukkit.v1_21_R1.entity.CraftEntity.getEntity(cs, e);
+            if (bukkit != null) out.add(bukkit);
+        });
+        return out;
+    }
+
     @Override
     public @NotNull java.util.Collection<org.bukkit.entity.Entity> getEntitiesByClasses(@NotNull Class<?>... classes) {
-        return java.util.Collections.emptyList();
+        java.util.List<org.bukkit.entity.Entity> out = new java.util.ArrayList<>();
+        for (org.bukkit.entity.Entity e : allBukkitEntities())
+            for (Class<?> cls : classes) if (cls.isInstance(e)) { out.add(e); break; }
+        return out;
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public @NotNull <T extends org.bukkit.entity.Entity> java.util.Collection<T> getEntitiesByClass(
             @NotNull Class<T> cls) {
-        return java.util.Collections.emptyList();
+        java.util.List<T> out = new java.util.ArrayList<>();
+        for (org.bukkit.entity.Entity e : allBukkitEntities())
+            if (cls.isInstance(e)) out.add((T) e);
+        return out;
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public @NotNull <T extends org.bukkit.entity.Entity> java.util.Collection<T> getEntitiesByClass(
             @NotNull Class<T>... classes) {
-        return java.util.Collections.emptyList();
+        java.util.List<T> out = new java.util.ArrayList<>();
+        for (org.bukkit.entity.Entity e : allBukkitEntities())
+            for (Class<T> cls : classes) if (cls.isInstance(e)) { out.add((T) e); break; }
+        return out;
     }
 
     @Override
     public @NotNull java.util.List<org.bukkit.entity.LivingEntity> getLivingEntities() {
-        return java.util.Collections.emptyList();
+        java.util.List<org.bukkit.entity.LivingEntity> out = new java.util.ArrayList<>();
+        for (org.bukkit.entity.Entity e : allBukkitEntities())
+            if (e instanceof org.bukkit.entity.LivingEntity le) out.add(le);
+        return out;
     }
 
     @Override

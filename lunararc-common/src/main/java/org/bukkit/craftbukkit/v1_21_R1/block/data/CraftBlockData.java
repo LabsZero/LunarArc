@@ -43,7 +43,27 @@ public class CraftBlockData implements BlockData {
 
     @Override
     public @NotNull String getAsString() {
-        return state.toString();
+        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        String base = key != null ? key.toString() : "minecraft:air";
+        // Build block-state properties string: "minecraft:stone_stairs[facing=north,...]"
+        net.minecraft.world.level.block.state.StateDefinition<net.minecraft.world.level.block.Block,
+                net.minecraft.world.level.block.state.BlockState> def = state.getBlock().getStateDefinition();
+        if (def.getProperties().isEmpty()) return base;
+        StringBuilder sb = new StringBuilder(base).append('[');
+        boolean first = true;
+        for (net.minecraft.world.level.block.state.properties.Property<?> prop : def.getProperties()) {
+            if (!first) sb.append(',');
+            first = false;
+            sb.append(prop.getName()).append('=').append(getPropertyValueString(state, prop));
+        }
+        return sb.append(']').toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Comparable<T>> String getPropertyValueString(
+            net.minecraft.world.level.block.state.BlockState state,
+            net.minecraft.world.level.block.state.properties.Property<T> prop) {
+        return prop.getName(state.getValue(prop));
     }
 
     @Override

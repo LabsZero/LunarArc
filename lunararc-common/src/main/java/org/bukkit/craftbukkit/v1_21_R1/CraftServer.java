@@ -711,22 +711,36 @@ public class CraftServer implements Server {
 
     @Override
     public int broadcastMessage(@NotNull String message) {
-        return 0;
+        int count = 0;
+        for (Player p : getOnlinePlayers()) { p.sendMessage(message); count++; }
+        getConsoleSender().sendMessage(message);
+        return count;
     }
 
     @Override
     public int broadcast(@NotNull String message, @NotNull String permission) {
-        return 0;
+        int count = 0;
+        for (Player p : getOnlinePlayers()) {
+            if (p.hasPermission(permission)) { p.sendMessage(message); count++; }
+        }
+        return count;
     }
 
     @Override
     public int broadcast(@NotNull net.kyori.adventure.text.Component message, @NotNull String permission) {
-        return 0;
+        int count = 0;
+        for (Player p : getOnlinePlayers()) {
+            if (p.hasPermission(permission)) { p.sendMessage(message); count++; }
+        }
+        return count;
     }
 
     @Override
     public int broadcast(@NotNull net.kyori.adventure.text.Component message) {
-        return 0;
+        int count = 0;
+        for (Player p : getOnlinePlayers()) { p.sendMessage(message); count++; }
+        getConsoleSender().sendMessage(message);
+        return count;
     }
 
     @Override

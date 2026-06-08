@@ -515,8 +515,25 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public float getForwardsMovement() { return 0; }
     @Override public boolean isRiptiding() { return false; }
     @Override public boolean isClimbing() { return false; }
-    @Override public Collection<PotionEffect> getActivePotionEffects() { return Collections.emptyList(); }
-    @Override public boolean hasPotionEffect(PotionEffectType type) { return false; }
+    @Override
+    public Collection<PotionEffect> getActivePotionEffects() {
+        java.util.List<PotionEffect> out = new java.util.ArrayList<>();
+        for (net.minecraft.world.effect.MobEffectInstance fx : getHandle().getActiveEffects()) {
+            PotionEffectType type = PotionEffectType.getByKey(
+                org.bukkit.NamespacedKey.fromString(
+                    net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getKey(fx.getEffect().value()).toString()));
+            if (type != null)
+                out.add(new PotionEffect(type, fx.getDuration(), fx.getAmplifier(), fx.isAmbient(), fx.isVisible()));
+        }
+        return out;
+    }
+    @Override
+    public boolean hasPotionEffect(PotionEffectType type) {
+        if (type == null) return false;
+        net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.parse(type.getKey().toString());
+        var effectOpt = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getHolder(rl);
+        return effectOpt.isPresent() && getHandle().hasEffect(effectOpt.get());
+    }
     @Override public void knockback(double strength, double x, double z) {}
     @Override public void setShieldBlockingDelay(int delay) {}
     @Override public void setArrowCooldown(int ticks) {}
@@ -705,7 +722,15 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void setActiveItemRemainingTime(int ticks) {}
     @Override public void setLastDamage(double damage) {}
     @Override public double getLastDamage() { return 0; }
-    @Override public void removePotionEffect(PotionEffectType type) {}
+    @Override
+    public void removePotionEffect(PotionEffectType type) {
+        if (type == null) return;
+        try {
+            net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.parse(type.getKey().toString());
+            var holder = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getHolder(rl).orElse(null);
+            if (holder != null) getHandle().removeEffect(holder);
+        } catch (Throwable ignored) {}
+    }
     @Override public boolean hasActiveItem() { return false; }
     @Override public int getMaximumAir() { return 300; }
     @Override public int getRemainingAir() { return getHandle().getAirSupply(); }
@@ -721,9 +746,34 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public boolean getCanPickupItems() { return true; }
     @Override public org.bukkit.Sound getEatingSound(ItemStack itemStack) { return org.bukkit.Sound.ENTITY_GENERIC_EAT; }
     @Override public EquipmentSlot getActiveItemHand() { return EquipmentSlot.HAND; }
-    @Override public boolean addPotionEffect(PotionEffect effect) { return false; }
-    @Override public boolean addPotionEffect(PotionEffect effect, boolean force) { return false; }
-    @Override public PotionEffect getPotionEffect(PotionEffectType type) { return null; }
+    @Override
+    public boolean addPotionEffect(PotionEffect effect) {
+        return addPotionEffect(effect, false);
+    }
+    @Override
+    public boolean addPotionEffect(PotionEffect effect, boolean force) {
+        if (effect == null) return false;
+        try {
+            net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.parse(effect.getType().getKey().toString());
+            var holder = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getHolder(rl).orElse(null);
+            if (holder == null) return false;
+            getHandle().addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                holder, effect.getDuration(), effect.getAmplifier(), effect.isAmbient(), effect.hasParticles()), null);
+            return true;
+        } catch (Throwable t) { return false; }
+    }
+    @Override
+    public PotionEffect getPotionEffect(PotionEffectType type) {
+        if (type == null) return null;
+        try {
+            net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.parse(type.getKey().toString());
+            var holder = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getHolder(rl).orElse(null);
+            if (holder == null) return null;
+            net.minecraft.world.effect.MobEffectInstance fx = getHandle().getEffect(holder);
+            if (fx == null) return null;
+            return new PotionEffect(type, fx.getDuration(), fx.getAmplifier(), fx.isAmbient(), fx.isVisible());
+        } catch (Throwable t) { return null; }
+    }
 
     // HumanEntity extra
     @Override public int getFoodLevel() { return getHandle().getFoodData().getFoodLevel(); }
@@ -750,9 +800,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     // PluginMessageRecipient
     @Override public Set<String> getListeningPluginChannels() { return Collections.emptySet(); }
 
-    // Attributable extra
-    @Override public void registerAttribute(Attribute attribute) {}
-    @Override public AttributeInstance getAttribute(Attribute attribute) { return null; }
+    // Attributable — delegated to CraftHumanEntity
 
     // Conversable extra
     @Override public void sendRawMessage(UUID sender, String message) {}

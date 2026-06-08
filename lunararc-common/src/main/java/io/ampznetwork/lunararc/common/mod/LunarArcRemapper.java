@@ -129,6 +129,65 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     /**
      * Transforms plugin bytecode: applies name remapping and optionally downgrades
      * the class-file version so a plugin compiled on a newer JDK still loads.
+     *
+     * @param className internal class name (e.g. "com/sk89q/worldedit/bukkit/BukkitConfiguration")
+     */
+    public byte[] transform(byte[] bytecode, String className) {
+        bytecode = transform(bytecode);
+        if (className != null) {
+            bytecode = applyWorldEditFixes(bytecode, className);
+        }
+        return bytecode;
+    }
+
+    /** Patch WorldEdit classes to bypass unsupported-version checks. */
+    private static byte[] applyWorldEditFixes(byte[] bytecode, String className) {
+        switch (className) {
+            // Force unsupportedVersionEditing = true by making the config-key lookup return a
+            // key that does not exist, so getBoolean() falls back to its default (true when patched).
+            case "com/sk89q/worldedit/bukkit/BukkitConfiguration" -> {
+                return patchStringConstant(bytecode,
+                    "allow-editing-on-unsupported-versions",
+                    "lunararc-supported");
+            }
+            // FastAsyncWorldEdit version probe — make it return our target package version
+            case "com/fastasyncworldedit/bukkit/util/MinecraftVersion" -> {
+                return patchStringConstant(bytecode, "getPackageVersion", "v1_21_R1");
+            }
+        }
+        return bytecode;
+    }
+
+    /** Replace one UTF-8 string constant in raw class bytecode (constant-pool surgery). */
+    private static byte[] patchStringConstant(byte[] bytes, String from, String to) {
+        try {
+            // Constant-pool entry for UTF-8: tag=1, u2 length, bytes
+            byte fromTag = 1;
+            byte[] fromBytes = from.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            byte[] toBytes   = to.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            if (fromBytes.length != toBytes.length) {
+                // Lengths differ — pad/truncate to same size to keep offsets valid
+                toBytes = java.util.Arrays.copyOf(toBytes, fromBytes.length);
+            }
+            int searchLen = 1 + 2 + fromBytes.length; // tag + length field + data
+            outer:
+            for (int i = 0; i <= bytes.length - searchLen; i++) {
+                if (bytes[i] != fromTag) continue;
+                int len = ((bytes[i+1] & 0xFF) << 8) | (bytes[i+2] & 0xFF);
+                if (len != fromBytes.length) continue;
+                for (int j = 0; j < fromBytes.length; j++) {
+                    if (bytes[i + 3 + j] != fromBytes[j]) continue outer;
+                }
+                System.arraycopy(toBytes, 0, bytes, i + 3, toBytes.length);
+                break;
+            }
+        } catch (Throwable ignored) {}
+        return bytes;
+    }
+
+    /**
+     * Transforms plugin bytecode: applies name remapping and optionally downgrades
+     * the class-file version so a plugin compiled on a newer JDK still loads.
      */
     public byte[] transform(byte[] bytecode) {
         try {

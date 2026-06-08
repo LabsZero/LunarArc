@@ -99,7 +99,7 @@ public final class PluginClassLoader extends URLClassLoader {
         URL url = findResource(path);
         if (url != null) {
             try (InputStream is = url.openStream()) {
-                byte[] bytecode = remapper.transform(is.readAllBytes());
+                byte[] bytecode = remapper.transform(is.readAllBytes(), name.replace('.', '/'));
 
                 String pkg = name.contains(".") ? name.substring(0, name.lastIndexOf('.')) : null;
                 if (pkg != null && getDefinedPackage(pkg) == null) {
