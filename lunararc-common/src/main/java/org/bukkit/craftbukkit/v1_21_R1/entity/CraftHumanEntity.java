@@ -97,7 +97,6 @@ public abstract class CraftHumanEntity extends CraftEntity {
         perm.recalculatePermissions();
     }
 
-    @Override
     public @Nullable org.bukkit.attribute.AttributeInstance getAttribute(@NotNull Attribute attribute) {
         Holder<net.minecraft.world.entity.ai.attributes.Attribute> nmsAttr = toNms(attribute);
         if (nmsAttr == null) return null;
@@ -106,7 +105,6 @@ public abstract class CraftHumanEntity extends CraftEntity {
         return instance == null ? null : new CraftAttributeInstance(instance, attribute);
     }
 
-    @Override
     public void registerAttribute(@NotNull Attribute attribute) {}
 
     public net.minecraft.world.entity.player.Player getHandle() {

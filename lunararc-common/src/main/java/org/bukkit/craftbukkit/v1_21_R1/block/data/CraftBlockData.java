@@ -78,6 +78,11 @@ public class CraftBlockData implements BlockData {
     }
 
     @Override
+    public boolean isRandomlyTicked() {
+        return state.isRandomlyTicking();
+    }
+
+    @Override
     public @NotNull BlockData merge(@NotNull BlockData data) {
         return this;
     }

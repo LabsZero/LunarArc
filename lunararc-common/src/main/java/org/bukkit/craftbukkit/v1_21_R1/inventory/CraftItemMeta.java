@@ -409,8 +409,6 @@ public class CraftItemMeta implements ItemMeta {
     @Override
     public int getRepairCost() { return 0; }
     @Override
-    public void setRepairCost(int cost) {}
-    @Override
     public void addItemFlags(@NotNull org.bukkit.inventory.ItemFlag... itemFlags) {}
     @Override
     public void removeItemFlags(@NotNull org.bukkit.inventory.ItemFlag... itemFlags) {}
@@ -418,18 +416,6 @@ public class CraftItemMeta implements ItemMeta {
     public @NotNull Set<org.bukkit.inventory.ItemFlag> getItemFlags() { return Collections.emptySet(); }
     @Override
     public boolean hasItemFlag(@NotNull org.bukkit.inventory.ItemFlag flag) { return false; }
-    @Override
-    public boolean hasDamage() { return false; }
-    @Override
-    public int getDamage() { return 0; }
-    @Override
-    public void setDamage(int damage) {}
-    @Override
-    public boolean hasMaxDamage() { return false; }
-    @Override
-    public int getMaxDamage() { return 0; }
-    @Override
-    public void setMaxDamage(@Nullable Integer max) {}
     @Override
     public @NotNull PersistentDataContainer getPersistentDataContainer() {
         return new org.bukkit.craftbukkit.v1_21_R1.persistence.CraftPersistentDataContainer();

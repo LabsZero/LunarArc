@@ -67,6 +67,12 @@ public class CraftBlock implements Block {
     // -----------------------------------------------------------------------
 
     @Override
+    public @NotNull String getTranslationKey() {
+        net.minecraft.world.level.block.state.BlockState state = world.getBlockState(position);
+        return state.getBlock().getDescriptionId();
+    }
+
+    @Override
     public @NotNull World getWorld() {
         return new CraftWorld(world);
     }
@@ -161,10 +167,8 @@ public class CraftBlock implements Block {
     @Override
     public byte getData() { return 0; }
 
-    @Override
     public void setData(byte data) {}
 
-    @Override
     public void setData(byte data, boolean applyPhysics) {}
 
     // -----------------------------------------------------------------------
@@ -266,7 +270,6 @@ public class CraftBlock implements Block {
     @Override
     public float getDestroySpeed(@NotNull ItemStack itemStack, boolean considerEnchants) { return 1.0f; }
 
-    @Override
     public boolean isPreferredTool(@NotNull ItemStack tool, @Nullable BlockFace face) { return true; }
 
     // -----------------------------------------------------------------------

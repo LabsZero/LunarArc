@@ -1245,7 +1245,6 @@ public class CraftWorld implements World {
         return entity;
     }
 
-    @Override
     @SuppressWarnings("unchecked")
     private <T extends Entity> @Nullable T spawnInternal(@NotNull Location location, @NotNull EntityType type,
             @Nullable java.util.function.Consumer<? super T> function) {
@@ -1579,10 +1578,16 @@ public class CraftWorld implements World {
 
     @Override
     public @Nullable org.bukkit.entity.Entity getEntity(@NotNull java.util.UUID uuid) {
-        net.minecraft.world.entity.Entity e = world.getEntities().get(uuid);
-        if (e == null) return null;
-        return org.bukkit.craftbukkit.v1_21_R1.entity.CraftEntity.getEntity(
-            (org.bukkit.craftbukkit.v1_21_R1.CraftServer) org.bukkit.Bukkit.getServer(), e);
+        // Scan loaded entities in a world-spanning AABB — O(n) but reliable across all NMS versions.
+        net.minecraft.world.phys.AABB fullWorld = new net.minecraft.world.phys.AABB(
+            -30000000, world.getMinBuildHeight(), -30000000,
+             30000000, world.getMaxBuildHeight(),  30000000);
+        for (net.minecraft.world.entity.Entity e : world.getEntities((net.minecraft.world.entity.Entity) null, fullWorld)) {
+            if (uuid.equals(e.getUUID()))
+                return org.bukkit.craftbukkit.v1_21_R1.entity.CraftEntity.getEntity(
+                    (org.bukkit.craftbukkit.v1_21_R1.CraftServer) org.bukkit.Bukkit.getServer(), e);
+        }
+        return null;
     }
 
     @Override

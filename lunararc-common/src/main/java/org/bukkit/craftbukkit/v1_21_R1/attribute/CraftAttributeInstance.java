@@ -67,4 +67,7 @@ public class CraftAttributeInstance implements org.bukkit.attribute.AttributeIns
 
     @Override
     public void removeModifier(@NotNull UUID id) {}
+
+    @Override
+    public void addTransientModifier(@NotNull AttributeModifier modifier) {}
 }
