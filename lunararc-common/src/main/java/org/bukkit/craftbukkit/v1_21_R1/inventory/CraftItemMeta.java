@@ -376,6 +376,7 @@ public class CraftItemMeta implements ItemMeta {
     }
 
     public int getVersion() { return 0; }
+    public void setVersion(int version) {}
 
     @Override
     public boolean hasRarity() { return false; }

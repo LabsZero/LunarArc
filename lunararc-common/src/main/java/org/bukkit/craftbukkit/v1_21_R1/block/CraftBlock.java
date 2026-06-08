@@ -89,6 +89,10 @@ public class CraftBlock implements Block {
         };
     }
 
+    public @NotNull org.bukkit.SoundGroup getSoundGroup() {
+        return getBlockSoundGroup();
+    }
+
     @Override
     public @NotNull String getTranslationKey() {
         net.minecraft.world.level.block.state.BlockState state = world.getBlockState(position);

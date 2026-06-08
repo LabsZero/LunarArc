@@ -100,6 +100,12 @@ public class CraftBlockData implements BlockData {
     public void copyTo(@NotNull BlockData blockData) {}
 
     @Override
+    public void mirror(@NotNull org.bukkit.block.structure.Mirror mirror) {}
+
+    @Override
+    public void rotate(@NotNull org.bukkit.block.structure.StructureRotation rotation) {}
+
+    @Override
     public boolean isRandomlyTicked() {
         return state.isRandomlyTicking();
     }
