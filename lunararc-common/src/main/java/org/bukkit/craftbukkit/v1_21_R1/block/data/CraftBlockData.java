@@ -79,7 +79,21 @@ public class CraftBlockData implements BlockData {
 
     @Override
     public float getDestroySpeed(@NotNull org.bukkit.inventory.ItemStack itemStack, boolean considerEnchants) {
-        return state.getDestroySpeed(net.minecraft.world.item.ItemStack.EMPTY);
+        return 1.0f;
+    }
+
+    @Override
+    public @NotNull org.bukkit.block.BlockState createBlockState() {
+        return (org.bukkit.block.BlockState) java.lang.reflect.Proxy.newProxyInstance(
+            org.bukkit.block.BlockState.class.getClassLoader(),
+            new Class<?>[]{ org.bukkit.block.BlockState.class },
+            (proxy, method, args) -> {
+                if (method.getReturnType() == boolean.class) return false;
+                if (method.getReturnType() == int.class) return 0;
+                if (method.getReturnType() == float.class) return 0.0f;
+                if (method.getReturnType() == org.bukkit.block.data.BlockData.class) return this;
+                return null;
+            });
     }
 
     @Override

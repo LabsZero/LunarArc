@@ -66,6 +66,11 @@ public class CraftAttributeInstance implements org.bukkit.attribute.AttributeIns
     }
 
     @Override
+    public @Nullable AttributeModifier getModifier(@NotNull net.kyori.adventure.key.Key key) {
+        return null;
+    }
+
+    @Override
     public void removeModifier(@NotNull UUID id) {}
 
     @Override

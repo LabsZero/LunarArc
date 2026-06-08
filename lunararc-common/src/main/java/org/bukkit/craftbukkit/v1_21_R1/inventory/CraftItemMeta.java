@@ -22,6 +22,19 @@ import java.util.*;
 
 public class CraftItemMeta implements ItemMeta {
 
+    @Override
+    public boolean hasDestroyableKeys() { return false; }
+    @Override
+    public @NotNull Set<org.bukkit.NamespacedKey> getDestroyableKeys() { return Collections.emptySet(); }
+    @Override
+    public void setDestroyableKeys(@NotNull Collection<org.bukkit.NamespacedKey> canDestroy) {}
+    @Override
+    public boolean hasPlaceableKeys() { return false; }
+    @Override
+    public @NotNull Set<org.bukkit.NamespacedKey> getPlaceableKeys() { return Collections.emptySet(); }
+    @Override
+    public void setPlaceableKeys(@NotNull Collection<org.bukkit.NamespacedKey> canPlaceOn) {}
+
     // Core data
     private Component displayName = null;
     private List<Component> lore = null;
@@ -351,7 +364,18 @@ public class CraftItemMeta implements ItemMeta {
     public void setCanPlaceOn(@Nullable Set<org.bukkit.Material> materials) {}
 
     public boolean hasCustomTags() { return false; }
-    public @Nullable String getCustomTagContainer() { return null; }
+    @Override
+    public @NotNull org.bukkit.inventory.meta.tags.CustomItemTagContainer getCustomTagContainer() {
+        return (org.bukkit.inventory.meta.tags.CustomItemTagContainer)
+            java.lang.reflect.Proxy.newProxyInstance(
+                org.bukkit.inventory.meta.tags.CustomItemTagContainer.class.getClassLoader(),
+                new Class<?>[]{ org.bukkit.inventory.meta.tags.CustomItemTagContainer.class },
+                (proxy, method, args) -> {
+                    if (method.getReturnType() == boolean.class) return false;
+                    if (method.getReturnType() == java.util.Map.class) return Collections.emptyMap();
+                    return null;
+                });
+    }
 
     public int getVersion() { return 0; }
 

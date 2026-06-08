@@ -67,7 +67,7 @@ public class CraftBlock implements Block {
     // -----------------------------------------------------------------------
 
     @Override
-    public @NotNull org.bukkit.SoundGroup getBlockSoundGroup() {
+    public @NotNull org.bukkit.SoundGroup getSoundGroup() {
         net.minecraft.world.level.block.SoundType nms = world.getBlockState(position).getSoundType();
         return new org.bukkit.SoundGroup() {
             private org.bukkit.Sound toSound(net.minecraft.sounds.SoundEvent e) {
@@ -81,11 +81,11 @@ public class CraftBlock implements Block {
             }
             @Override public float getVolume() { return nms.getVolume(); }
             @Override public float getPitch() { return nms.getPitch(); }
-            @Override public @NotNull org.bukkit.Sound getBreakSound() { return toSound(nms.getBreakSound().value()); }
-            @Override public @NotNull org.bukkit.Sound getStepSound() { return toSound(nms.getStepSound().value()); }
-            @Override public @NotNull org.bukkit.Sound getPlaceSound() { return toSound(nms.getPlaceSound().value()); }
-            @Override public @NotNull org.bukkit.Sound getHitSound() { return toSound(nms.getHitSound().value()); }
-            @Override public @NotNull org.bukkit.Sound getFallSound() { return toSound(nms.getFallSound().value()); }
+            @Override public @NotNull org.bukkit.Sound getBreakSound() { return toSound(nms.getBreakSound()); }
+            @Override public @NotNull org.bukkit.Sound getStepSound() { return toSound(nms.getStepSound()); }
+            @Override public @NotNull org.bukkit.Sound getPlaceSound() { return toSound(nms.getPlaceSound()); }
+            @Override public @NotNull org.bukkit.Sound getHitSound() { return toSound(nms.getHitSound()); }
+            @Override public @NotNull org.bukkit.Sound getFallSound() { return toSound(nms.getFallSound()); }
         };
     }
 
