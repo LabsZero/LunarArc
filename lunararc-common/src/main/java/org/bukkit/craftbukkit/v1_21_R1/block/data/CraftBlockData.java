@@ -100,6 +100,11 @@ public class CraftBlockData implements BlockData {
     public void copyTo(@NotNull BlockData blockData) {}
 
     @Override
+    public @NotNull org.bukkit.Material getPlacementMaterial() {
+        return getMaterial();
+    }
+
+    @Override
     public void mirror(@NotNull org.bukkit.block.structure.Mirror mirror) {}
 
     @Override
