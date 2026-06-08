@@ -14,6 +14,7 @@
     "core.server.ServerGamePacketListenerImplMixin",
     "core.server.ServerPlayerGameModeMixin",
     "core.network.ConnectionAccessor",
+    "core.network.ConnectionMixin",
     "core.command.CommandsMixin",
     "core.command.CommandsAccessor",
     "core.command.CommandSourceStackMixin",

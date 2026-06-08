@@ -208,7 +208,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public boolean isSneaking() { return getHandle().isShiftKeyDown(); }
     @Override public void setSneaking(boolean sneak) { getHandle().setShiftKeyDown(sneak); }
     @Override public boolean isSprinting() { return getHandle().isSprinting(); }
-    @Override public void setSprinting(boolean sprinting) {}
+    @Override public void setSprinting(boolean sprinting) { getHandle().setSprinting(sprinting); }
     
     @Override public void saveData() {}
     @Override public void loadData() {}
@@ -283,14 +283,26 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void showEntity(org.bukkit.plugin.Plugin plugin, Entity entity) {}
 
 
-    @Override public float getWalkSpeed() { return 0.2f; }
-    @Override public float getFlySpeed() { return 0.1f; }
-    @Override public void setFlySpeed(float value) {}
-    @Override public void setWalkSpeed(float value) {}
-    @Override public void setFlying(boolean value) {}
-    @Override public boolean isFlying() { return false; }
-    @Override public void setAllowFlight(boolean value) {}
-    @Override public boolean getAllowFlight() { return false; }
+    @Override public float getWalkSpeed() { return getHandle().getAbilities().walkingSpeed * 2.0f; }
+    @Override public float getFlySpeed() { return getHandle().getAbilities().flyingSpeed * 2.0f; }
+    @Override public void setFlySpeed(float value) {
+        getHandle().getAbilities().flyingSpeed = value / 2.0f;
+        getHandle().onUpdateAbilities();
+    }
+    @Override public void setWalkSpeed(float value) {
+        getHandle().getAbilities().walkingSpeed = value / 2.0f;
+        getHandle().onUpdateAbilities();
+    }
+    @Override public void setFlying(boolean value) {
+        getHandle().getAbilities().flying = value;
+        getHandle().onUpdateAbilities();
+    }
+    @Override public boolean isFlying() { return getHandle().getAbilities().flying; }
+    @Override public void setAllowFlight(boolean value) {
+        getHandle().getAbilities().mayfly = value;
+        getHandle().onUpdateAbilities();
+    }
+    @Override public boolean getAllowFlight() { return getHandle().getAbilities().mayfly; }
     @Override public TriState hasFlyingFallDamage() { return TriState.NOT_SET; }
     @Override public void setFlyingFallDamage(TriState value) {}
 
