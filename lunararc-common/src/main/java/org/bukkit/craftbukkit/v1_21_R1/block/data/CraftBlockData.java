@@ -25,6 +25,11 @@ public class CraftBlockData implements BlockData {
         return new CraftBlockData(state);
     }
 
+    /** Compat alias used by CraftServer.createBlockData(). */
+    public static CraftBlockData create(BlockState state) {
+        return new CraftBlockData(state);
+    }
+
     @Override
     public @NotNull Material getMaterial() {
         ResourceLocation key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
