@@ -154,7 +154,8 @@ public final class PluginClassLoader extends URLClassLoader {
      * Returns null if this class name is not handled.
      */
     private Class<?> generateInlineStub(String name) {
-        if (!name.startsWith("org.json.simple.") && !name.equals("org.json.simple.parser.JSONParser")) return null;
+        if (!name.startsWith("org.json.simple.") && !name.equals("org.json.simple.parser.JSONParser")
+                && !name.equals("com.destroystokyo.paper.PaperConfig")) return null;
         try {
             String internalName = name.replace('.', '/');
 

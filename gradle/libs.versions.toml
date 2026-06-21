@@ -3,10 +3,10 @@
 architectury-loom = "1.14.473"
 
 # common
-project-version = "0.0.1-ALPHA"
+project-version = "0.0.1-SNAPSHOT"
 build-name = "Trial Zenith"
 minecraft = "1.21.1"
-neoforge = "21.1.233"
+neoforge = "21.1.234"
 forge = "52.1.14"
 fabric-loader = "0.19.3"
 fabric-api = "0.116.12+1.21.1"

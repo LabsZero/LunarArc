@@ -317,14 +317,14 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void showEntity(org.bukkit.plugin.Plugin plugin, Entity entity) {}
 
 
-    @Override public float getWalkSpeed() { return getHandle().getAbilities().walkingSpeed * 2.0f; }
-    @Override public float getFlySpeed() { return getHandle().getAbilities().flyingSpeed * 2.0f; }
+    @Override public float getWalkSpeed() { return getHandle().getAbilities().getWalkingSpeed() * 2.0f; }
+    @Override public float getFlySpeed() { return getHandle().getAbilities().getFlyingSpeed() * 2.0f; }
     @Override public void setFlySpeed(float value) {
-        getHandle().getAbilities().flyingSpeed = value / 2.0f;
+        getHandle().getAbilities().setFlyingSpeed(value / 2.0f);
         getHandle().onUpdateAbilities();
     }
     @Override public void setWalkSpeed(float value) {
-        getHandle().getAbilities().walkingSpeed = value / 2.0f;
+        getHandle().getAbilities().setWalkingSpeed(value / 2.0f);
         getHandle().onUpdateAbilities();
     }
     @Override public void setFlying(boolean value) {
@@ -411,8 +411,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
     @Override public void playerListName(Component name) {
         if (name == null) name = net.kyori.adventure.text.Component.text(getName());
-        getHandle().setTabListDisplayName(net.minecraft.network.chat.Component.literal(
-                net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(name)));
+        try {
+            var field = net.minecraft.server.level.ServerPlayer.class.getDeclaredField("tabListDisplayName");
+            field.setAccessible(true);
+            field.set(getHandle(), net.minecraft.network.chat.Component.literal(
+                    net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(name)));
+        } catch (Throwable ignored) {}
     }
     @Override public Component playerListHeader() { return tabListHeader; }
     @Override public Component playerListFooter() { return tabListFooter; }
@@ -434,14 +438,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         return display != null ? display.getString() : getName();
     }
     @Override public void setPlayerListName(String name) {
-        getHandle().setTabListDisplayName(name == null ? null :
-                net.minecraft.network.chat.Component.literal(name));
+        try {
+            var field = net.minecraft.server.level.ServerPlayer.class.getDeclaredField("tabListDisplayName");
+            field.setAccessible(true);
+            field.set(getHandle(), name == null ? null : net.minecraft.network.chat.Component.literal(name));
+        } catch (Throwable ignored) {}
     }
     @Override public void setCompassTarget(Location loc) {}
     @Override public Firework fireworkBoost(ItemStack stack) { return null; }
     @Override public Location getCompassTarget() { return new Location(getWorld(), 0, 0, 0); }
     @Override public Iterable<? extends BossBar> activeBossBars() { return java.util.Collections.emptyList(); }
-    @Override public void sendExperienceChange(float progress) { getHandle().sendExperienceChange(progress, getLevel()); }
+    @Override public void sendExperienceChange(float progress) {
+        getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetExperiencePacket(progress, getHandle().totalExperience, getHandle().experienceLevel));
+    }
     @Override public void sendMap(MapView map) {}
     @Override public void sendRawMessage(String message) { sendMessage(message); }
     @Override public void sendBlockChange(Location loc, Material material, byte data) {}
@@ -487,11 +496,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void giveExp(int amount, boolean applyMending) { getHandle().giveExperiencePoints(amount); }
     @Override public int applyMending(int amount) { return amount; }
     @Override public void giveExpLevels(int levels) { getHandle().giveExperienceLevels(levels); }
-    @Override public void setExp(float exp) { getHandle().experienceProgress = exp; getHandle().sendExperienceChange(exp, getLevel()); }
+    @Override public void setExp(float exp) { getHandle().experienceProgress = exp; getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetExperiencePacket(exp, getHandle().totalExperience, getHandle().experienceLevel)); }
     @Override public float getExp() { return getHandle().experienceProgress; }
-    @Override public void sendExperienceChange(float progress, int level) { getHandle().sendExperienceChange(progress, level); }
+    @Override public void sendExperienceChange(float progress, int level) { getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetExperiencePacket(progress, getHandle().totalExperience, level)); }
     @Override public void setExperienceLevelAndProgress(int level) { setLevel(level); }
-    @Override public void setLevel(int level) { getHandle().experienceLevel = level; getHandle().sendExperienceChange(getExp(), level); }
+    @Override public void setLevel(int level) { getHandle().experienceLevel = level; getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetExperiencePacket(getExp(), getHandle().totalExperience, level)); }
     @Override public int getLevel() { return getHandle().experienceLevel; }
     @Override public void setTotalExperience(int exp) { getHandle().totalExperience = exp; }
     @Override public int getTotalExperience() { return getHandle().totalExperience; }
@@ -540,10 +549,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public void openSign(Sign sign, Side side) {}
     @Override public int getClientViewDistance() { return 10; }
     @Override public int getPing() {
-        try { return getHandle().latency; } catch (Throwable t) { return 0; }
+        try { return getHandle().connection.latency(); } catch (Throwable t) { return 0; }
     }
     @Override public String getLocale() {
-        try { return getHandle().getLanguage(); } catch (Throwable t) { return "en_us"; }
+        try { return (String) net.minecraft.server.level.ServerPlayer.class.getMethod("getLanguage").invoke(getHandle()); } catch (Throwable t) { return "en_us"; }
     }
     @Override public java.util.Locale locale() {
         try {
@@ -585,8 +594,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public Entity getSpectatorTarget() { return null; }
     @Override public void setSpectatorTarget(Entity entity) {}
     @Override public void sendTitle(@NotNull com.destroystokyo.paper.Title title) {
-        sendTitle(title.getTitle(), title.getSubtitle(),
-                title.getFadeIn(), title.getStay(), title.getFadeOut());
+        sendTitle(
+            title.getTitle() != null ? net.md_5.bungee.api.chat.BaseComponent.toLegacyText(title.getTitle()) : null,
+            title.getSubtitle() != null ? net.md_5.bungee.api.chat.BaseComponent.toLegacyText(title.getSubtitle()) : null,
+            title.getFadeIn(), title.getStay(), title.getFadeOut()
+        );
     }
     @Override public void sendTitle(String title, String subtitle) { sendTitle(title, subtitle, 10, 70, 20); }
     @Override public void sendTitle(String title, String subtitle, int fadeIn, int stay, int fadeOut) {

@@ -15,12 +15,6 @@ public abstract class ConnectionMixin {
 
     @Shadow public Channel channel;
 
-    /**
-     * TAB plugin accesses the Netty channel via getDeclaredField("n") — the SRG
-     * obfuscated name for Connection.channel. Adding a public field "n" that mirrors
-     * "channel" makes those reflection lookups succeed in NeoForge's Mojang-mapped
-     * environment where the real field is named "channel".
-     */
     @Unique public Channel n;
 
     @Inject(method = "channelActive", at = @At("TAIL"))

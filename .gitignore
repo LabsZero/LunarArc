@@ -29,10 +29,6 @@ Thumbs.db
 *.ear
 !gradle-wrapper.jar
 
-# Log Files
-*.log
-logs/
-
 # Temp files from javac invocations
 javac.*.args
 
@@ -42,35 +38,5 @@ javac.*.args
 !gradle.properties
 .env
 .env.*
-
-# Paper/Minecraft Runtime (If generated locally — root-relative so source dirs are unaffected)
-/run/
-.gradle/paper/
-paper-server-*.jar
-/cache/
-usercache.json
-eula.txt
-server.properties
-whitelist.json
-ops.json
-banned-ips.json
-banned-players.json
-/world/
-/plugins/
-/mods/
-/config/
-/defaultconfigs/
-/scripts/
-/kubejs/
-/patchouli_books/
-/logs/
-/crash-reports/
-/debug/
-/screenshots/
-/resourcepacks/
-/shaderpacks/
-/saves/
-/stats/
-/advancements/
-/datapacks/
 .claude/
+claude.md

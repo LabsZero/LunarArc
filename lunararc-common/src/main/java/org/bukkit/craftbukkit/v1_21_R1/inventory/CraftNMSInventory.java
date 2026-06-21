@@ -81,6 +81,8 @@ public class CraftNMSInventory implements Inventory {
         return leftover;
     }
 
+    @Override public @NotNull HashMap<Integer, ItemStack> removeItemAnySlot(@NotNull ItemStack... items) throws IllegalArgumentException { return removeItem(items); }
+
     @Override public @NotNull HashMap<Integer, ItemStack> removeItem(@NotNull ItemStack... items) {
         HashMap<Integer, ItemStack> leftover = new HashMap<>();
         for (int i = 0; i < items.length; i++) {

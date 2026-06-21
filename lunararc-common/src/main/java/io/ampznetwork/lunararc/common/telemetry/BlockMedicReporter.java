@@ -229,6 +229,7 @@ public class BlockMedicReporter {
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
         conn.setRequestProperty("User-Agent", "LunarArc/" + LunarArcVersionInfo.projectVersion());
+        conn.setRequestProperty("Origin", "https://ampznetwork.com");
         conn.setDoOutput(true);
         conn.setConnectTimeout(10_000);
         conn.setReadTimeout(10_000);

@@ -28,6 +28,7 @@ public class PaperPluginManagerImpl implements PluginManager {
     private final Map<String, Plugin> plugins = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     private final Map<String, PluginDescriptionFile> descriptions = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     private final List<Plugin> pluginList = new ArrayList<>();
+    private final Map<String, Permission> permissions = new HashMap<>();
     private static final Logger logger = LoggerFactory.getLogger("LunarArc");
 
     public PaperPluginManagerImpl(Server server, SimpleCommandMap commandMap,
@@ -360,24 +361,37 @@ public class PaperPluginManagerImpl implements PluginManager {
 
     @Override
     public Permission getPermission(@NotNull String name) {
-        return null;
+        return permissions.get(name);
     }
 
     @Override
     public void addPermission(@NotNull Permission perm) {
+        Permission existing = permissions.putIfAbsent(perm.getName(), perm);
+        if (existing != null) {
+            throw new IllegalArgumentException("Permission " + perm.getName() + " already exists");
+        }
+        recalculatePermissionDefaults(perm);
     }
 
     @Override
     public void removePermission(@NotNull Permission perm) {
+        removePermission(perm.getName());
     }
 
     @Override
     public void removePermission(@NotNull String name) {
+        permissions.remove(name);
     }
 
     @Override
     public Set<Permission> getDefaultPermissions(boolean op) {
-        return java.util.Collections.emptySet();
+        Set<Permission> result = new HashSet<>();
+        for (Permission perm : permissions.values()) {
+            if (perm.getDefault().getValue(op)) {
+                result.add(perm);
+            }
+        }
+        return result;
     }
 
     @Override
@@ -414,7 +428,7 @@ public class PaperPluginManagerImpl implements PluginManager {
 
     @Override
     public Set<Permission> getPermissions() {
-        return java.util.Collections.emptySet();
+        return new HashSet<>(permissions.values());
     }
 
     @Override
