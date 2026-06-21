@@ -9,6 +9,9 @@ on:
     branches:
       - '**'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -37,10 +40,10 @@ jobs:
             .gradle/loom-cache
             .gradle/quilt-loom-cache
             .gradle/paper
-            projects/core/.gradle
-            projects/loaders/fabric/.gradle
-            projects/loaders/forge/.gradle
-            projects/loaders/quilt/.gradle
+            lunararc-neoforge/.gradle
+            lunararc-fabric/.gradle
+            lunararc-forge/.gradle
+            lunararc-quilt/.gradle
           key: loom-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
           restore-keys: |
             loom-${{ runner.os }}-

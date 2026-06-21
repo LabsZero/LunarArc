@@ -7,7 +7,7 @@ An experimental PaperMC server bridge built to unify the modding ecosystem. Whil
 
 |        Release        |  Forge  | NeoForge |  Fabric  |  QuiltMC  | Status |                                                                                                                                              Build                                                           
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Trial Zenith (1.21.1) | 52.1.14 |21.1.228 |  0.19.2  |  2.29.3  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
+| Trial Zenith (1.21.1) | 52.1.14 |21.1.233 |  0.19.3  |  2.29.2  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
 
 ## Installing
 
@@ -49,6 +49,7 @@ LunarArc is built upon the incredible work of the following projects:
 - **[Quilt](https://quiltmc.org/)**: The open-source, community-driven modding toolchain.
 - **[PaperMC](https://papermc.io/)**: High-performance Minecraft server implementation.
 - **[Architectury](https://architectury.dev/)**: Multi-platform modding abstraction layer.
+- **[Arclight](https://github.com/IzzelAliz/Arclight)**: Bridge+Mixin architecture, single-JAR bootstrap pattern (`LunarArcAgent` premain/`Instrumentation`), `IModLocatorService` self-registration, class-space unification via `PluginClassLoader`, and Velocity forwarding patterns are all inspired by and adapted from Arclight. LunarArc would not exist without this foundational work.
 - **[Youer](https://github.com/MohistMC/Youer)**: Inspiration for Paper 1.21.1+ compatibility and ServiceLoader-based build metadata.
 - **[SpongePowered](https://www.spongepowered.org/)**: Mixin and project structure inspiration.
 

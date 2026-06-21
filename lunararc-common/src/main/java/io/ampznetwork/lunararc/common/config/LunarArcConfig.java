@@ -1,0 +1,88 @@
+package io.ampznetwork.lunararc.common.config;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Properties;
+
+public class LunarArcConfig {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc");
+    private static final Path CONFIG_PATH = Paths.get("lunararc.conf");
+
+    private static boolean velocityEnabled = false;
+    private static byte[] velocitySecret = new byte[0];
+    private static boolean blockMedicEnabled = true;
+    private static String blockMedicConsent = "unset"; // "unset" | "accepted" | "declined"
+
+    public static void load() {
+        Properties props = readProps();
+
+        boolean changed = false;
+        if (!props.containsKey("proxy.velocity.enabled")) {
+            props.setProperty("proxy.velocity.enabled", "false");
+            changed = true;
+        }
+        if (!props.containsKey("proxy.velocity.secret")) {
+            props.setProperty("proxy.velocity.secret", "");
+            changed = true;
+        }
+        if (!props.containsKey("enable_blockmedic")) {
+            props.setProperty("enable_blockmedic", "true");
+            changed = true;
+        }
+        if (!props.containsKey("blockmedic_consent")) {
+            props.setProperty("blockmedic_consent", "unset");
+            changed = true;
+        }
+        if (changed) writeProps(props);
+
+        velocityEnabled = Boolean.parseBoolean(props.getProperty("proxy.velocity.enabled", "false"));
+        String secret = props.getProperty("proxy.velocity.secret", "");
+        velocitySecret = secret.isEmpty() ? new byte[0] : secret.getBytes(StandardCharsets.UTF_8);
+        blockMedicEnabled = Boolean.parseBoolean(props.getProperty("enable_blockmedic", "true"));
+        blockMedicConsent = props.getProperty("blockmedic_consent", "unset");
+
+        LOGGER.info("[LunarArc] Config loaded (velocity={}, blockmedic={}).", velocityEnabled, blockMedicEnabled);
+    }
+
+    public static String getBlockMedicConsent() { return blockMedicConsent; }
+
+    public static void setBlockMedicConsent(String value) {
+        blockMedicConsent = value;
+        Properties props = readProps();
+        props.setProperty("blockmedic_consent", value);
+        writeProps(props);
+    }
+
+    static Properties readProps() {
+        Properties props = new Properties();
+        if (Files.exists(CONFIG_PATH)) {
+            try (InputStream in = Files.newInputStream(CONFIG_PATH)) {
+                props.load(in);
+            } catch (Exception e) {
+                LOGGER.error("[LunarArc] Failed to read lunararc.conf — using defaults.", e);
+            }
+        }
+        return props;
+    }
+
+    static void writeProps(Properties props) {
+        try (OutputStream out = Files.newOutputStream(CONFIG_PATH)) {
+            props.store(out, "LunarArc Server Configuration");
+        } catch (IOException e) {
+            LOGGER.error("[LunarArc] Could not write lunararc.conf", e);
+        }
+    }
+
+    public static boolean isVelocityEnabled() { return velocityEnabled; }
+    public static byte[] getVelocitySecret() { return velocitySecret; }
+    public static boolean isBlockMedicEnabled() { return blockMedicEnabled; }
+}
