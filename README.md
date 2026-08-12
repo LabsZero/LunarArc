@@ -3,11 +3,11 @@
 [![Downloads count](https://img.shields.io/github/downloads/AMPZNetwork/LunarArc/total?style=for-the-badge)](https://lunararc.ampznetwork.com)  ![License](https://img.shields.io/github/license/AMPZNetwork/LunarArc?style=for-the-badge) ![GitHub forks](https://img.shields.io/github/forks/AMPZNetwork/LunarArc?style=for-the-badge&logo=github)
 
 
-An experimental PaperMC server bridge built to unify the modding ecosystem. While many hybrid servers exist, few successfully unify the PaperMC core with diverse mod loaders; **LunarArc** aims to fill that gap by providing seamless support for **Fabric**, **Quilt**, **Forge**, and **NeoForge** mods on a high performance Paper foundation.
+An upcoming experimental PaperMC server bridge built to unify the modding ecosystem. While many hybrid servers exist, few successfully unify the PaperMC core with diverse mod loaders; **LunarArc** aims to fill that gap by providing seamless support for **Fabric**, **Quilt**, **Forge**, and **NeoForge** mods on a high performance Paper foundation.
 
 |        Release        |  Forge  | NeoForge |  Fabric  |  QuiltMC  | Status |                                                                                                                                              Build                                                           
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Trial Zenith (1.21.1) | 52.1.14 |21.1.233 |  0.19.3  |  2.29.2  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
+| Trial Zenith (1.21.1) | 52.1.16 |21.1.248 | 0.19.3  |  0.30.0  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
 
 ## Installing
 
@@ -19,7 +19,7 @@ Read our document for more information.
 
 ## Support
 
-Discord Server [Inivte Link](discord.ampznetwork.com) 
+Discord Server [Inivte Link](https://discord.gg/YKS6J9qEBq) 
 
 ## License
 
