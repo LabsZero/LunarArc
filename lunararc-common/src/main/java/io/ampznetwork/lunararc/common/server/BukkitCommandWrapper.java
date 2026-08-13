@@ -6,116 +6,113 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import io.ampznetwork.lunararc.common.LunarArcPlatform;
-import org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer;
+import io.ampznetwork.lunararc.common.bridge.EntityBridge;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerPlayer;
+import org.bukkit.Server;
 import org.bukkit.command.Command;
+import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
-import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-@SuppressWarnings("all")
-public class BukkitCommandWrapper {
-    private final Command command;
-    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger("LunarArc");
+/**
+ * Thin Brigadier facade over Bukkit's authoritative CommandMap.
+ * Command ownership, aliases, permissions and execution stay in Bukkit.
+ */
+public final class BukkitCommandWrapper {
+    private final CommandMap commandMap;
+    private final String label;
 
-    public BukkitCommandWrapper(Command command) {
-        this.command = command;
+    public BukkitCommandWrapper(CommandMap commandMap, String label) {
+        this.commandMap = commandMap;
+        this.label = normalize(label);
     }
 
     public void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        String name = command.getName();
-        registerLiteral(dispatcher, name);
+        if (label.isEmpty()) return;
 
-        for (String alias : command.getAliases()) {
-            registerLiteral(dispatcher, alias);
-        }
-    }
-
-    private void registerLiteral(CommandDispatcher<CommandSourceStack> dispatcher, @NotNull String label) {
         dispatcher.register(
                 Commands.literal(label)
-                        .requires(stack -> {
-                            CommandSender sender = getSender(stack);
-                            boolean hasPerm = command.testPermissionSilent(sender);
-                            if (!hasPerm) {
-                                logger.debug("[LunarArc] Command '" + label + "' permission check FAILED for " + sender.getName());
-                            }
-                            return hasPerm;
-                        })
+                        .requires(source -> canUse(source, label))
                         .then(Commands.argument("args", StringArgumentType.greedyString())
-                                .suggests(this::getSuggestions)
-                                .executes(ctx -> execute(ctx, label)))
-                        .executes(ctx -> execute(ctx, label)));
+                                .suggests(this::suggest)
+                                .executes(context -> execute(context, true)))
+                        .executes(context -> execute(context, false)));
     }
 
-    private CommandSender getSender(CommandSourceStack stack) {
-        if (stack.getEntity() instanceof ServerPlayer player) {
-            org.bukkit.entity.Entity bukkitEntity = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity();
-            if (bukkitEntity instanceof CommandSender sender) {
-                return sender;
-            }
-            // Fallback for early command registration or unbridged entities
-            return new CraftPlayer((org.bukkit.craftbukkit.v1_21_R1.CraftServer) org.bukkit.Bukkit.getServer(), player);
-        }
-        return LunarArcPlatform.getServer().getConsoleSender();
+    private boolean canUse(CommandSourceStack source, String commandLabel) {
+        Command command = commandMap.getCommand(commandLabel);
+        return command != null && command.testPermissionSilent(sender(source));
     }
 
-    private int execute(CommandContext<CommandSourceStack> context, String label) {
-        CommandSender sender = getSender(context.getSource());
-        String args = "";
-        try {
-            args = StringArgumentType.getString(context, "args");
-        } catch (IllegalArgumentException ignored) {
+    private int execute(CommandContext<CommandSourceStack> context, boolean hasArguments) {
+        String line = label;
+        if (hasArguments) {
+            String args = StringArgumentType.getString(context, "args");
+            if (!args.isBlank()) line += " " + args;
         }
 
-        String[] splitArgs = args.isEmpty() ? new String[0] : args.split(" ");
-        
-        logger.info("[LunarArc] Executing command '" + label + "' (original: '" + command.getName() + "') for " + sender.getName() + " with args: [" + String.join(", ", splitArgs) + "]");
-        
-        try {
-            boolean success = command.execute(sender, label, splitArgs);
-            logger.info("[LunarArc] Command '" + label + "' execution returned: " + success);
-        } catch (Throwable t) {
-            logger.error("[LunarArc] Exception executing command '" + label + "'", t);
-        }
-        return 1;
+        // This Brigadier node exists only because Bukkit already owns this exact label.
+        // Execute directly through the authoritative CommandMap so routing cannot recurse.
+        return commandMap.dispatch(sender(context.getSource()), line) ? 1 : 0;
     }
 
-
-    private CompletableFuture<Suggestions> getSuggestions(CommandContext<CommandSourceStack> context,
+    private CompletableFuture<Suggestions> suggest(
+            CommandContext<CommandSourceStack> context,
             SuggestionsBuilder builder) {
-        CommandSender sender = getSender(context.getSource());
-        String buffer = context.getInput();
-        if (buffer.startsWith("/")) {
-            buffer = buffer.substring(1);
+        CommandSender sender = sender(context.getSource());
+        String input = context.getInput();
+        Command command = commandMap.getCommand(label);
+
+        List<String> completions;
+        try {
+            String argumentText = input.length() <= label.length()
+                    ? ""
+                    : input.substring(label.length()).stripLeading();
+            String[] args = argumentText.isEmpty()
+                    ? new String[0]
+                    : argumentText.split(" ", -1);
+            completions = command == null ? List.of() : command.tabComplete(sender, label, args);
+        } catch (Throwable ignored) {
+            completions = List.of();
         }
 
-        String[] split = buffer.split(" ", -1);
-        String label = split[0];
-        String[] args = new String[split.length - 1];
-        System.arraycopy(split, 1, args, 0, args.length);
+        int lastSpace = input.lastIndexOf(' ');
+        SuggestionsBuilder target = lastSpace >= 0
+                ? builder.createOffset(lastSpace + 1)
+                : builder;
 
-        java.util.List<String> suggestions = command.tabComplete(sender, label, args);
-        if (suggestions == null) {
-            // Fallback to online players if no suggestions provided
-            suggestions = new java.util.ArrayList<>();
-            for (org.bukkit.entity.Player p : org.bukkit.Bukkit.getOnlinePlayers()) {
-                if (p.getName().toLowerCase().startsWith(split[split.length - 1].toLowerCase())) {
-                    suggestions.add(p.getName());
-                }
+        String remaining = target.getRemainingLowerCase();
+        for (String completion : completions) {
+            if (completion != null && completion.toLowerCase(java.util.Locale.ROOT).startsWith(remaining)) {
+                target.suggest(completion);
+            }
+        }
+        return target.buildFuture();
+    }
+
+    private static CommandSender sender(CommandSourceStack source) {
+        if (source.getEntity() instanceof ServerPlayer player) {
+            Object bukkit = ((EntityBridge) player).lunararc$getBukkitEntity();
+            if (bukkit instanceof CommandSender commandSender) {
+                return commandSender;
             }
         }
 
-        if (suggestions != null) {
-            String lastArg = split[split.length - 1];
-            builder = builder.createOffset(context.getInput().length() - lastArg.length());
-            for (String s : suggestions) {
-                builder.suggest(s);
-            }
+        Server server = LunarArcPlatform.getServer();
+        if (server == null) {
+            throw new IllegalStateException("Bukkit server is not initialized");
         }
-        return builder.buildFuture();
+        return server.getConsoleSender();
+    }
+
+    private static String normalize(String value) {
+        if (value == null) return "";
+        // Preserve a slash that is part of the actual Bukkit label (not the
+        // client's command introducer). This is required for WorldEdit // commands.
+        return value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }

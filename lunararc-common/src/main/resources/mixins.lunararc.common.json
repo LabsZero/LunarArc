@@ -5,7 +5,6 @@
   "compatibilityLevel": "JAVA_21",
   "refmap": "mixins.lunararc.common.refmap.json",
   "mixins": [
-    "core.server.CraftPlayerMixin",
     "core.server.MinecraftServerMixin",
     "core.server.MinecraftServerAccessor",
     "core.server.PlayerListAccessor",
@@ -17,6 +16,7 @@
     "core.network.ConnectionMixin",
     "core.network.ClientboundPlayerInfoUpdatePacketMixin",
     "core.player.FoodDataAccessor",
+    "core.player.FoodDataMixin",
     "core.command.CommandsMixin",
     "core.command.CommandsAccessor",
     "core.command.CommandSourceStackMixin",

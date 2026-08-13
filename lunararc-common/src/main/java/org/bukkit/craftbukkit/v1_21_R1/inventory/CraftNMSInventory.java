@@ -24,10 +24,16 @@ public class CraftNMSInventory implements Inventory {
 
     private final Container handle;
     private final InventoryHolder owner;
+    private final InventoryType type;
 
     public CraftNMSInventory(Container handle, InventoryHolder owner) {
-        this.handle = handle;
+        this(handle, owner, InventoryType.CHEST);
+    }
+
+    public CraftNMSInventory(Container handle, InventoryHolder owner, InventoryType type) {
+        this.handle = java.util.Objects.requireNonNull(handle, "handle");
         this.owner = owner;
+        this.type = java.util.Objects.requireNonNull(type, "type");
     }
 
     public Container getHandle() { return handle; }
@@ -57,13 +63,13 @@ public class CraftNMSInventory implements Inventory {
             for (int slot = 0; slot < getSize() && remaining > 0; slot++) {
                 ItemStack existing = getItem(slot);
                 if (existing == null || existing.getType() == Material.AIR) {
-                    int toPlace = Math.min(remaining, item.getMaxStackSize());
+                    int toPlace = Math.min(remaining, Math.min(item.getMaxStackSize(), getMaxStackSize()));
                     ItemStack placed = item.clone();
                     placed.setAmount(toPlace);
                     setItem(slot, placed);
                     remaining -= toPlace;
                 } else if (existing.isSimilar(item)) {
-                    int space = existing.getMaxStackSize() - existing.getAmount();
+                    int space = Math.min(existing.getMaxStackSize(), getMaxStackSize()) - existing.getAmount();
                     if (space > 0) {
                         int toAdd = Math.min(remaining, space);
                         existing.setAmount(existing.getAmount() + toAdd);
@@ -154,7 +160,7 @@ public class CraftNMSInventory implements Inventory {
         int found = 0;
         for (int i = 0; i < getSize(); i++) {
             ItemStack slot = getItem(i);
-            if (item.isSimilar(slot)) found++;
+            if (slot != null && item.isSimilar(slot)) found += slot.getAmount();
             if (found >= amount) return true;
         }
         return false;
@@ -234,9 +240,11 @@ public class CraftNMSInventory implements Inventory {
         handle.setChanged();
     }
 
-    @Override public @NotNull List<HumanEntity> getViewers() { return Collections.emptyList(); }
+    @Override public @NotNull List<HumanEntity> getViewers() {
+        return owner instanceof HumanEntity h ? java.util.Collections.singletonList(h) : java.util.Collections.emptyList();
+    }
 
-    @Override public @NotNull InventoryType getType() { return InventoryType.CHEST; }
+    @Override public @NotNull InventoryType getType() { return type; }
 
     @Override public @Nullable InventoryHolder getHolder() { return owner; }
 

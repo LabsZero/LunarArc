@@ -26,6 +26,7 @@ public class CraftInventory implements Inventory {
     protected final InventoryHolder holder;
     protected net.kyori.adventure.text.Component title;
     protected int maxStackSize = 64;
+    private final java.util.Set<HumanEntity> viewers = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
 
     public CraftInventory(@Nullable InventoryHolder holder, @NotNull InventoryType type) {
         this(holder, type.getDefaultSize(), type, net.kyori.adventure.text.Component.text(type.name()));
@@ -81,13 +82,13 @@ public class CraftInventory implements Inventory {
             for (int slot = 0; slot < contents.length && remaining > 0; slot++) {
                 ItemStack existing = contents[slot];
                 if (existing == null || existing.getType() == Material.AIR) {
-                    int toPlace = Math.min(remaining, item.getMaxStackSize());
+                    int toPlace = Math.min(remaining, Math.min(item.getMaxStackSize(), getMaxStackSize()));
                     ItemStack placed = item.clone();
                     placed.setAmount(toPlace);
                     contents[slot] = placed;
                     remaining -= toPlace;
                 } else if (existing.isSimilar(item)) {
-                    int space = existing.getMaxStackSize() - existing.getAmount();
+                    int space = Math.min(existing.getMaxStackSize(), getMaxStackSize()) - existing.getAmount();
                     if (space > 0) {
                         int toAdd = Math.min(remaining, space);
                         existing.setAmount(existing.getAmount() + toAdd);
@@ -184,7 +185,7 @@ public class CraftInventory implements Inventory {
         if (item == null) return false;
         int found = 0;
         for (ItemStack slot : contents) {
-            if (item.isSimilar(slot)) found++;
+            if (slot != null && item.isSimilar(slot)) found += slot.getAmount();
             if (found >= amount) return true;
         }
         return false;
@@ -268,8 +269,13 @@ public class CraftInventory implements Inventory {
 
     @Override
     public @NotNull List<HumanEntity> getViewers() {
-        return Collections.emptyList();
+        return java.util.List.copyOf(viewers);
     }
+
+    public void onOpen(@NotNull HumanEntity viewer) { viewers.add(viewer); }
+    public void onClose(@NotNull HumanEntity viewer) { viewers.remove(viewer); }
+    public @NotNull net.kyori.adventure.text.Component title() { return title; }
+
 
     @Override
     public @NotNull InventoryType getType() {
@@ -305,7 +311,4 @@ public class CraftInventory implements Inventory {
         return null;
     }
 
-    public net.kyori.adventure.text.Component title() {
-        return title;
-    }
 }

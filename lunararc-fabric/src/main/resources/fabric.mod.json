@@ -25,6 +25,6 @@
   "depends": {
     "fabricloader": ">=${fabric_loader}",
     "minecraft": ">=${minecraft}",
-    "java": ">=21"
+    "java": ">=${java_runtime}"
   }
 }

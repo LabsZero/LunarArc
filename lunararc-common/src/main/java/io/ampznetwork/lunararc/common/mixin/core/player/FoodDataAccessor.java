@@ -17,4 +17,22 @@ public interface FoodDataAccessor {
 
     @Accessor("exhaustionLevel")
     void setExhaustionLevel(float value);
+    @Accessor("saturatedRegenRate")
+    int getSaturatedRegenRate();
+
+    @Accessor("saturatedRegenRate")
+    void setSaturatedRegenRate(int value);
+
+    @Accessor("unsaturatedRegenRate")
+    int getUnsaturatedRegenRate();
+
+    @Accessor("unsaturatedRegenRate")
+    void setUnsaturatedRegenRate(int value);
+
+    @Accessor("starvationRate")
+    int getStarvationRate();
+
+    @Accessor("starvationRate")
+    void setStarvationRate(int value);
+
 }

@@ -27,7 +27,7 @@ public record LunarArcServerBuildInfo(
                 LunarArcVersionInfo.projectName(), // "Paper"
                 LunarArcVersionInfo.minecraftVersion(),
                 LunarArcVersionInfo.minecraftVersion(),
-                OptionalInt.of(133),
+                LunarArcVersionInfo.paperBuild() > 0 ? OptionalInt.of(LunarArcVersionInfo.paperBuild()) : OptionalInt.empty(),
                 Instant.EPOCH,
                 Optional.of("main"),
                 Optional.of(LunarArcVersionInfo.projectVersion()));

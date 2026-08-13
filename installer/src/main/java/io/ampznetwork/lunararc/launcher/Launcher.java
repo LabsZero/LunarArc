@@ -55,11 +55,6 @@ public class Launcher {
             LibraryExtractor.extractLibraries();
 
             Path workingDir = Paths.get("").toAbsolutePath();
-            Path lunararcDir = workingDir.resolve(".lunararc");
-            if (!Files.exists(lunararcDir)) {
-                ConsoleUI.printStep("step.creating_dir", lunararcDir.getFileName());
-                Files.createDirectories(lunararcDir);
-            }
 
             // Platform selection. Each platform-specific jar bakes a
             // "LunarArc-Platform" manifest attribute, so when the user runs e.g.
@@ -103,22 +98,31 @@ public class Launcher {
             Path selfPath = Paths.get(Launcher.class.getProtectionDomain().getCodeSource().getLocation().toURI())
                     .toAbsolutePath();
 
+            String platformName = switch (choice) {
+                case "1" -> "neoforge";
+                case "2" -> "forge";
+                case "3" -> "fabric";
+                case "4" -> "quilt";
+                default -> "unknown";
+            };
+            LunarArcRuntime.Layout runtime = LunarArcRuntime.prepare(workingDir, selfPath, versions, platformName);
+
             switch (choice) {
                 case "1":
                     ConsoleUI.printHeader("NeoForge Boot Sequence");
-                    NeoForgeInstaller.install(lunararcDir, versions, selfPath);
+                    NeoForgeInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 case "2":
                     ConsoleUI.printHeader("Forge Boot Sequence");
-                    ForgeInstaller.install(lunararcDir, versions, selfPath);
+                    ForgeInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 case "3":
                     ConsoleUI.printHeader("Fabric Boot Sequence");
-                    FabricInstaller.install(lunararcDir, versions, selfPath);
+                    FabricInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 case "4":
                     ConsoleUI.printHeader("Quilt Boot Sequence");
-                    QuiltInstaller.install(lunararcDir, versions, selfPath);
+                    QuiltInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 default:
                     ConsoleUI.printError("error.invalid_selection");

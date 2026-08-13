@@ -1,7 +1,9 @@
 package io.ampznetwork.lunararc.api;
 
-public class LunarArcServer {
+public final class LunarArcServer {
+    private LunarArcServer() {
+    }
+
     public static void init() {
-        System.out.println("LunarArcServer: Initializing Paper API support...");
     }
 }

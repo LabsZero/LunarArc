@@ -22,6 +22,7 @@ public class CraftBanList<T> implements BanList<T> {
 
     public static final CraftBanList<String> NAME_BANS = new CraftBanList<>();
     public static final CraftBanList<java.net.InetAddress> IP_BANS = new CraftBanList<>();
+    public static final CraftBanList<com.destroystokyo.paper.profile.PlayerProfile> PROFILE_BANS = new CraftBanList<>();
 
     private final Map<String, Entry<T>> entries = new ConcurrentHashMap<>();
 
@@ -101,7 +102,13 @@ public class CraftBanList<T> implements BanList<T> {
     }
 
     private String key(T target) {
-        return target == null ? "" : target.toString();
+        if (target == null) return "";
+        if (target instanceof com.destroystokyo.paper.profile.PlayerProfile profile) {
+            java.util.UUID id = profile.getId();
+            return id == null ? String.valueOf(profile.getName()) : id.toString();
+        }
+        if (target instanceof java.net.InetAddress address) return address.getHostAddress();
+        return target.toString();
     }
 
     private static final class Entry<T> implements BanEntry<T> {

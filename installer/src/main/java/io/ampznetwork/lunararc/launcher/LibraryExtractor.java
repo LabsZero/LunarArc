@@ -22,7 +22,17 @@ public class LibraryExtractor {
                             Files.createDirectories(dest);
                         } else {
                             Files.createDirectories(dest.getParent());
-                            Files.copy(zin, dest, StandardCopyOption.REPLACE_EXISTING);
+                            long expectedSize = entry.getSize();
+                            if (Files.isRegularFile(dest) && expectedSize >= 0 && Files.size(dest) == expectedSize) {
+                                continue;
+                            }
+                            Path temp = dest.resolveSibling(dest.getFileName() + ".tmp");
+                            Files.copy(zin, temp, StandardCopyOption.REPLACE_EXISTING);
+                            try {
+                                Files.move(temp, dest, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                            } catch (AtomicMoveNotSupportedException ignored) {
+                                Files.move(temp, dest, StandardCopyOption.REPLACE_EXISTING);
+                            }
                         }
                     }
                     zin.closeEntry();

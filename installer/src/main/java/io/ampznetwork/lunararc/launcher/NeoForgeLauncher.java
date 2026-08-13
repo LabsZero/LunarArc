@@ -14,6 +14,8 @@ import java.util.jar.JarFile;
 public class NeoForgeLauncher {
 
     public static void launch(Path workingDir, Path selfPath) throws Exception {
+        removeLegacyBridgeCopy();
+
         Path libDir = Paths.get("libraries");
         if (!Files.exists(libDir)) {
             System.err.println("[LunarArc] Error: 'libraries' folder missing. Installation may have failed.");
@@ -30,23 +32,19 @@ public class NeoForgeLauncher {
         if (LunarArcAgent.instrumentation != null) {
             sameJvmLaunch(selfPath, argsFile);
         } else {
-            // Legacy child-process launch: FML classes not yet on classpath, must deploy bridge.
-            deployBridgeToModsDir(selfPath);
-            legacyLaunch(argsFile);
+            legacyLaunch(argsFile, selfPath);
         }
     }
 
-    private static void deployBridgeToModsDir(Path selfPath) {
+
+    private static void removeLegacyBridgeCopy() {
         try {
-            Path modsDir = Paths.get("mods");
-            Files.createDirectories(modsDir);
-            if (selfPath != null && Files.exists(selfPath)) {
-                Path target = modsDir.resolve("lunararc-bridge.jar");
-                Files.copy(selfPath, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                System.out.println("[LunarArc] Bridge deployed to " + target.toAbsolutePath());
+            Path oldBridge = Paths.get("mods", "lunararc-bridge.jar");
+            if (Files.deleteIfExists(oldBridge)) {
+                System.out.println("[LunarArc] Removed legacy mods/lunararc-bridge.jar; LunarArc now boots from the loader bootstrap layer.");
             }
         } catch (Exception e) {
-            System.err.println("[LunarArc] Warning: could not deploy bridge to mods/: " + e.getMessage());
+            System.err.println("[LunarArc] Warning: could not remove legacy mods/lunararc-bridge.jar: " + e.getMessage());
         }
     }
 
@@ -125,19 +123,13 @@ public class NeoForgeLauncher {
             LunarArcAgent.instrumentation.appendToSystemClassLoaderSearch(new JarFile(selfPath.toFile()));
         }
 
-        // Decide whether to rely on LunarArcModLocator.scanMods() (no mods/ copy needed)
-        // or fall back to the traditional bridge-in-mods/ approach.
-        if (!fmlClassesAvailable()) {
-            System.out.println("[LunarArc] FML internals not detectable; deploying bridge to mods/ as fallback.");
-            deployBridgeToModsDir(selfPath);
-        } else {
-            System.out.println("[LunarArc] LunarArcModLocator will self-register; skipping mods/ bridge deployment.");
+        if (fmlClassesAvailable()) {
+            System.out.println("[LunarArc] LunarArcModLocator available in bootstrap layer.");
         }
 
         if (mainClass == null) {
-            System.err.println("[LunarArc] Could not determine NeoForge main class. Falling back to legacy launch.");
-            deployBridgeToModsDir(selfPath); // ensure bridge is present for child process
-            legacyLaunch(argsFile);
+            System.err.println("[LunarArc] Could not determine NeoForge main class. Falling back to child-process launch.");
+            legacyLaunch(argsFile, selfPath);
             return;
         }
 
@@ -151,7 +143,7 @@ public class NeoForgeLauncher {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             System.err.println("[LunarArc] Same-JVM launch failed (" + cause.getClass().getSimpleName()
                     + ": " + cause.getMessage() + "); falling back to child process.");
-            legacyLaunch(argsFile);
+            legacyLaunch(argsFile, selfPath);
         }
     }
 
@@ -215,25 +207,89 @@ public class NeoForgeLauncher {
         }
     }
 
-    private static void legacyLaunch(Path argsFile) throws Exception {
+    private static void legacyLaunch(Path argsFile, Path selfPath) throws Exception {
         System.out.println("[LunarArc] Launching NeoForge via child process...");
-        List<String> jvmArgs = Files.readAllLines(argsFile);
-        List<String> command = new ArrayList<>();
-        command.add(LauncherUtils.getJavaExecutable());
-
-        for (String line : jvmArgs) {
+        List<String> tokens = new ArrayList<>();
+        for (String line : Files.readAllLines(argsFile)) {
             line = line.trim();
             if (line.isEmpty() || line.startsWith("#")) continue;
-            for (String part : line.split(" ")) {
-                if (!part.isEmpty()) command.add(part);
+            for (String part : line.split("\\s+")) {
+                if (!part.isEmpty()) tokens.add(part);
             }
+        }
+
+        List<String> command = new ArrayList<>();
+        command.add(LauncherUtils.getJavaExecutable());
+        Path lunararcHome = Paths.get(System.getProperty("lunararc.home", ".lunararc")).toAbsolutePath().normalize();
+        Path runtimeClasses = Paths.get(System.getProperty("lunararc.runtime.classes", lunararcHome.resolve("runtime/classes").toString()));
+        command.add("-Dlunararc.home=" + lunararcHome);
+        command.add("-Dlunararc.runtime.classes=" + runtimeClasses.toAbsolutePath());
+        // Do not attach the LunarArc fat JAR as a javaagent in the child process.
+        // The child uses NeoForge's normal mod classloader via the staged runtime JAR below.
+        // Supplying the same classes as both a javaagent/system-classloader entry and a mod
+        // gives Mixin two class identities for LunarArc classes and can abort during prepare().
+        for (String token : tokens) {
+            // Keep NeoForge's generated module/class path exactly as installed.
+            // LunarArc is supplied separately through the prepared runtime below.
+            command.add(token);
         }
         command.add("--nogui");
 
+        // Production FML does not reliably discover MOD_CLASSES entries. The previous
+        // child-process path therefore launched a perfectly healthy NeoForge server, but
+        // LunarArc itself never appeared in FML's mod list. Without the LunarArc mod the
+        // common MinecraftServerMixin is never applied, so CraftServer is never created
+        // and the Bukkit/Paper plugin lifecycle never starts.
+        //
+        // Stage the already-prepared internal core JAR as a transient hidden mod for the
+        // lifetime of the child process. This uses NeoForge's normal production discovery
+        // path while keeping the user's actual mod JARs untouched.
+        Path stagedRuntimeMod = stageRuntimeMod(lunararcHome, selfPath);
+        if (stagedRuntimeMod != null) {
+            System.out.println("[LunarArc] Staged internal runtime for NeoForge discovery: " + stagedRuntimeMod);
+        } else {
+            System.err.println("[LunarArc] Warning: could not stage internal NeoForge runtime; Bukkit plugins will not load.");
+        }
+
         System.out.println("[LunarArc] Booting NeoForge Core...");
         ProcessBuilder pb = new ProcessBuilder(command);
+        // Production child launches must expose LunarArc exactly once. MOD_CLASSES is a
+        // development/userdev mechanism and is intentionally not set here; the staged JAR
+        // is the sole LunarArc runtime source for FML and Mixin.
+        pb.environment().remove("MOD_CLASSES");
         pb.inheritIO();
         Process process = pb.start();
-        System.exit(process.waitFor());
+        int exitCode = process.waitFor();
+        cleanupRuntimeMod(stagedRuntimeMod);
+        System.exit(exitCode);
     }
+    private static Path stageRuntimeMod(Path lunararcHome, Path selfPath) {
+        try {
+            Path coreJar = lunararcHome.resolve("runtime/lunararc-core.jar").toAbsolutePath().normalize();
+            Path source = Files.isRegularFile(coreJar) ? coreJar
+                    : (selfPath != null && Files.isRegularFile(selfPath) ? selfPath.toAbsolutePath().normalize() : null);
+            if (source == null) return null;
+
+            Path modsDir = Paths.get("mods").toAbsolutePath().normalize();
+            Files.createDirectories(modsDir);
+            Path staged = modsDir.resolve(".lunararc-runtime.jar");
+            Files.copy(source, staged, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            staged.toFile().deleteOnExit();
+            return staged;
+        } catch (Exception e) {
+            System.err.println("[LunarArc] Failed to stage internal runtime mod: " + e);
+            return null;
+        }
+    }
+
+    private static void cleanupRuntimeMod(Path stagedRuntimeMod) {
+        if (stagedRuntimeMod == null) return;
+        try {
+            Files.deleteIfExists(stagedRuntimeMod);
+        } catch (Exception e) {
+            System.err.println("[LunarArc] Warning: could not remove staged runtime mod "
+                    + stagedRuntimeMod + ": " + e.getMessage());
+        }
+    }
+
 }

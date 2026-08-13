@@ -110,10 +110,8 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge {
                 com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher = ((io.ampznetwork.lunararc.common.mixin.core.command.CommandsAccessor) commands).getDispatcher();
 
                 org.bukkit.command.CommandMap commandMap = craftServer.getCommandMap();
-                if (commandMap instanceof org.bukkit.command.SimpleCommandMap scm) {
-                    for (org.bukkit.command.Command command : scm.getKnownCommands().values()) {
-                        new io.ampznetwork.lunararc.common.server.BukkitCommandWrapper(command).register(dispatcher);
-                    }
+                if (commandMap instanceof io.ampznetwork.lunararc.common.server.LunarArcCommandMap lunarArcMap) {
+                    lunarArcMap.syncToBrigadier(dispatcher);
                 }
             }
         } catch (Throwable t) {

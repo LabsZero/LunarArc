@@ -35,7 +35,10 @@ public abstract class ServerPlayerGameModeMixin {
             stack
         );
 
-        if (event != null && event.isCancelled()) {
+        if (event != null && event.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
+            // Paper exposes block-use and item-use as separate results. A denied
+            // clicked-block result must not suppress a bucket/mod item action; only
+            // an explicit item-use denial cancels the whole NMS interaction.
             cir.setReturnValue(InteractionResult.FAIL);
         }
     }
@@ -53,7 +56,10 @@ public abstract class ServerPlayerGameModeMixin {
             stack
         );
 
-        if (event != null && event.isCancelled()) {
+        if (event != null && event.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
+            // Paper exposes block-use and item-use as separate results. A denied
+            // clicked-block result must not suppress a bucket/mod item action; only
+            // an explicit item-use denial cancels the whole NMS interaction.
             cir.setReturnValue(InteractionResult.FAIL);
         }
     }

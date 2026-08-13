@@ -1,10 +1,9 @@
 package io.ampznetwork.lunararc.common.mixin.core.server;
 
 import io.ampznetwork.lunararc.common.LunarArcPlatform;
-import org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer;
-import org.bukkit.craftbukkit.v1_21_R1.event.CraftEventFactory;
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundChatPacket;
+import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,7 +12,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.HashSet;
 
 @Mixin(ServerGamePacketListenerImpl.class)
 public abstract class ServerGamePacketListenerImplMixin {
@@ -55,42 +53,51 @@ public abstract class ServerGamePacketListenerImplMixin {
 
     @Inject(method = "handleChatCommand", at = @At("HEAD"), cancellable = true)
     private void lunararc$onChatCommand(ServerboundChatCommandPacket packet, CallbackInfo ci) {
-        try {
-            org.bukkit.Server craftServer = LunarArcPlatform.getServer();
-            if (craftServer == null) return;
+        org.bukkit.Server craftServer = LunarArcPlatform.getServer();
+        if (craftServer == null) return;
 
-            org.bukkit.entity.Player bukkitPlayer =
-                (org.bukkit.entity.Player) ((io.ampznetwork.lunararc.common.bridge.EntityBridge) this.player)
-                    .lunararc$getBukkitEntity();
-
-            String command = "/" + packet.command();
-
-            org.bukkit.event.player.PlayerCommandPreprocessEvent event =
-                new org.bukkit.event.player.PlayerCommandPreprocessEvent(bukkitPlayer, command);
-            craftServer.getPluginManager().callEvent(event);
-
-            if (event.isCancelled()) {
+        // Network packets arrive on a Netty event-loop thread. Paper/Bukkit command
+        // preprocessing is synchronous-only, so never fire PlayerCommandPreprocessEvent
+        // from here until Minecraft has handed the packet to the main server thread.
+        // Re-entering handleChatCommand on that thread also preserves Minecraft's native
+        // command/signing path when LunarArcCommandRouter returns PASS.
+        if (craftServer instanceof org.bukkit.craftbukkit.v1_21_R1.CraftServer lunarArcServer) {
+            net.minecraft.server.MinecraftServer minecraftServer = lunarArcServer.getHandle();
+            if (!minecraftServer.isSameThread()) {
+                minecraftServer.execute(() ->
+                        ((ServerGamePacketListenerImpl) (Object) this).handleChatCommand(packet));
                 ci.cancel();
                 return;
             }
+        }
 
-            // If the message was modified by a plugin, re-dispatch through Bukkit's command map
-            // so the plugin's version of the command runs instead of the original packet command.
-            String modified = event.getMessage();
-            if (!modified.equals(command)) {
-                ci.cancel();
-                craftServer.dispatchCommand(bukkitPlayer,
-                    modified.startsWith("/") ? modified.substring(1) : modified);
+        Object bukkit = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) this.player)
+                .lunararc$getBukkitEntity();
+        if (!(bukkit instanceof org.bukkit.entity.Player bukkitPlayer)) return;
+
+        io.ampznetwork.lunararc.common.server.LunarArcCommandRouter.PacketResult result =
+                io.ampznetwork.lunararc.common.server.LunarArcCommandRouter.routePlayerPacket(
+                        craftServer, bukkitPlayer, packet.command());
+        if (result == io.ampznetwork.lunararc.common.server.LunarArcCommandRouter.PacketResult.CANCEL) {
+            ci.cancel();
+        }
+    }
+
+    // Fire InventoryCloseEvent(Reason.PLAYER) when the client closes its own screen.
+    // The vanilla handler still performs the actual close, so this only fires the
+    // Bukkit event; the menu id guard skips stale close packets from previous menus.
+    @Inject(method = "handleContainerClose", at = @At("HEAD"))
+    private void lunararc$onContainerClose(ServerboundContainerClosePacket packet, CallbackInfo ci) {
+        try {
+            if (this.player.containerMenu == this.player.inventoryMenu) return;
+            if (this.player.containerMenu.containerId != packet.getContainerId()) return;
+            Object bukkit = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) this.player).lunararc$getBukkitEntity();
+            if (bukkit instanceof org.bukkit.entity.Player) {
+                org.bukkit.craftbukkit.v1_21_R1.event.CraftEventFactory.handleInventoryCloseEvent(
+                        this.player, org.bukkit.event.inventory.InventoryCloseEvent.Reason.PLAYER);
             }
         } catch (Throwable ignored) {
         }
     }
 
-    @Inject(method = "onDisconnect", at = @At("HEAD"))
-    private void lunararc$onDisconnect(CallbackInfo ci) {
-        try {
-            CraftEventFactory.callPlayerQuitEvent(this.player);
-        } catch (Throwable ignored) {
-        }
-    }
 }

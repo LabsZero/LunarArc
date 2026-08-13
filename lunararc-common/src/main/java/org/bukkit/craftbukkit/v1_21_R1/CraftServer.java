@@ -55,6 +55,11 @@ public class CraftServer implements Server {
     private final ServicesManager servicesManager = new SimpleServicesManager();
     private final UnsafeValues unsafeValues;
     private final Map<UUID, Player> playerCache = new HashMap<>();
+    private final Map<NamespacedKey, KeyedBossBar> bossBars = new LinkedHashMap<>();
+    /** Bukkit-side views for server data that is ultimately backed by the live Minecraft managers. */
+    private final Map<Integer, MapView> mapViews = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicInteger nextMapId = new java.util.concurrent.atomic.AtomicInteger();
+    private final Map<NamespacedKey, Recipe> runtimeRecipes = new java.util.concurrent.ConcurrentHashMap<>();
     private final org.bukkit.metadata.MetadataStore<org.bukkit.entity.Entity> entityMetadata = (org.bukkit.metadata.MetadataStore<org.bukkit.entity.Entity>) java.lang.reflect.Proxy.newProxyInstance(
         org.bukkit.metadata.MetadataStore.class.getClassLoader(),
         new Class<?>[] { org.bukkit.metadata.MetadataStore.class },
@@ -293,7 +298,22 @@ public class CraftServer implements Server {
 
         Bukkit.setServer(this);
 
-        commandMap.register("bukkit", new org.bukkit.command.defaults.VersionCommand("version"));
+        // SimpleCommandMap may already contain Bukkit's stock version command. A
+        // second register() only creates a namespaced fallback, leaving /version
+        // pointed at the original command. Explicitly unregister it first so the
+        // visible command gains LunarArc branding while all version APIs remain Paper.
+        org.bukkit.command.Command existingVersion = commandMap.getCommand("version");
+        if (existingVersion != null) {
+            existingVersion.unregister(commandMap);
+            commandMap.getKnownCommands().entrySet().removeIf(e -> e.getValue() == existingVersion);
+        }
+        commandMap.register("bukkit", new io.ampznetwork.lunararc.common.server.LunarArcVersionCommand("version"));
+
+        org.bukkit.command.Command existingPlugins = commandMap.getCommand("plugins");
+        if (existingPlugins != null) {
+            existingPlugins.unregister(commandMap);
+            commandMap.getKnownCommands().entrySet().removeIf(e -> e.getValue() == existingPlugins);
+        }
         commandMap.register("bukkit", new org.bukkit.command.defaults.PluginsCommand("plugins"));
         commandMap.register("bukkit", new org.bukkit.command.defaults.ReloadCommand("reload"));
     }
@@ -442,7 +462,20 @@ public class CraftServer implements Server {
         return servicesManager;
     }
 
-    private final Map<UUID, World> worldCache = new HashMap<>();
+    private final Map<UUID, World> worldCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>, CraftWorld> worldByDimension = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Canonical CraftWorld wrapper. Paper keeps one CraftWorld object for the
+     * lifetime of a loaded ServerLevel; plugins rely on object/UUID identity.
+     */
+    private CraftWorld craftWorld(net.minecraft.server.level.ServerLevel level) {
+        CraftWorld craft = worldByDimension.computeIfAbsent(level.dimension(), ignored -> new CraftWorld(level));
+        worldCache.putIfAbsent(craft.getUID(), craft);
+        // Compatibility alias for locations written by older LunarArc builds.
+        worldCache.putIfAbsent(craft.getLegacyDimensionUID(), craft);
+        return craft;
+    }
 
     @Override
     public @NotNull Collection<? extends Player> getOnlinePlayers() {
@@ -476,77 +509,6 @@ public class CraftServer implements Server {
         return commandMap;
     }
 
-    @SuppressWarnings("unchecked")
-    private <T extends Keyed> Registry<T> createDummyRegistry(Class<T> type) {
-        final Class<T> finalType = type == null ? (Class<T>) Keyed.class : type;
-        return (Registry<T>) java.lang.reflect.Proxy.newProxyInstance(
-                Registry.class.getClassLoader(),
-                new Class<?>[] { Registry.class },
-                (proxy, method, args) -> {
-                    if (method.getName().equals("get") && args != null && args.length > 0
-                            && args[0] instanceof NamespacedKey key) {
-                        if (finalType == Material.class) {
-                            Material mat = Material.matchMaterial(key.getKey());
-                            if (mat != null && mat.isLegacy()) {
-                                Material modern = Material.getMaterial(mat.name());
-                                if (modern != null && !modern.isLegacy()) return modern;
-                            }
-                            return mat;
-                        }
-                        String name = key.getKey().toUpperCase(java.util.Locale.ROOT);
-                        if (finalType.isEnum()) {
-                            for (T constant : finalType.getEnumConstants()) {
-                                if (((Enum<?>) constant).name().equals(name))
-                                    return constant;
-                            }
-                        }
-                        try {
-                            java.lang.reflect.Field field = finalType.getDeclaredField(name);
-                            if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
-                                return field.get(null);
-                            }
-                        } catch (Exception ignored) {
-                        }
-                        return null;
-                    }
-                    if (method.getName().equals("iterator")) {
-                        List<T> values = new ArrayList<>();
-                        if (finalType.isEnum()) {
-                            for (T constant : finalType.getEnumConstants()) {
-                                try {
-                                    if (!(Boolean) constant.getClass().getMethod("isLegacy").invoke(constant))
-                                        values.add(constant);
-                                } catch (Exception e) {
-                                    values.add(constant);
-                                }
-                            }
-                        } else {
-                            for (java.lang.reflect.Field field : finalType.getDeclaredFields()) {
-                                if (java.lang.reflect.Modifier.isStatic(field.getModifiers())
-                                        && finalType.isAssignableFrom(field.getType())) {
-                                    try {
-                                        T value = (T) field.get(null);
-                                        if (value != null)
-                                            values.add(value);
-                                    } catch (Exception ignored) {
-                                    }
-                                }
-                            }
-                        }
-                        return values.iterator();
-                    }
-                    return null;
-                });
-    }
-
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    private Registry<?> createDummyRegistryUnchecked(Class<?> type) {
-        if (type == null || !Keyed.class.isAssignableFrom(type)) {
-            return createDummyRegistry(Keyed.class);
-        }
-        return createDummyRegistry((Class) type);
-    }
-
     public void loadPlugins() {
         logger.info("[LunarArc] Scanning plugins folder...");
         File pluginsFolder = new File("plugins");
@@ -571,12 +533,8 @@ public class CraftServer implements Server {
 
     public void syncCommands() {
         com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher = console.getCommands().getDispatcher();
-        for (org.bukkit.command.Command command : commandMap.getKnownCommands().values()) {
-            try {
-                new io.ampznetwork.lunararc.common.server.BukkitCommandWrapper(command).register(dispatcher);
-            } catch (Exception e) {
-                logger.log(java.util.logging.Level.SEVERE, "Failed to register command " + command.getName(), e);
-            }
+        if (commandMap instanceof io.ampznetwork.lunararc.common.server.LunarArcCommandMap lunarArcMap) {
+            lunarArcMap.syncToBrigadier(dispatcher);
         }
         for (net.minecraft.server.level.ServerPlayer player : console.getPlayerList().getPlayers()) {
             console.getCommands().sendCommands(player);
@@ -590,6 +548,14 @@ public class CraftServer implements Server {
 
     @Override
     public void setMaxPlayers(int maxPlayers) {
+        if (maxPlayers < 0) throw new IllegalArgumentException("maxPlayers must be >= 0");
+        try {
+            java.lang.reflect.Field field = PlayerList.class.getDeclaredField("maxPlayers");
+            field.setAccessible(true);
+            field.setInt(playerList, maxPlayers);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Unable to update max players", ex);
+        }
     }
 
     @Override
@@ -604,39 +570,93 @@ public class CraftServer implements Server {
         return -1;
     }
 
+
+    private Object dedicatedProperties() throws ReflectiveOperationException {
+        return console.getClass().getMethod("getProperties").invoke(console);
+    }
+
+    private int readDedicatedIntProperty(String fieldName, int fallback) {
+        try {
+            Object properties = dedicatedProperties();
+            java.lang.reflect.Field field = properties.getClass().getField(fieldName);
+            Object value = field.get(properties);
+            return value instanceof Number number ? number.intValue() : fallback;
+        } catch (ReflectiveOperationException ignored) {
+            return fallback;
+        }
+    }
+
+    private boolean readDedicatedBooleanProperty(String fieldName, boolean fallback) {
+        try {
+            Object properties = dedicatedProperties();
+            java.lang.reflect.Field field = properties.getClass().getField(fieldName);
+            Object value = field.get(properties);
+            return value instanceof Boolean bool ? bool : fallback;
+        } catch (ReflectiveOperationException ignored) {
+            return fallback;
+        }
+    }
+
+    private String readDedicatedStringProperty(String fieldName, String fallback) {
+        try {
+            Object properties = dedicatedProperties();
+            java.lang.reflect.Field field = properties.getClass().getField(fieldName);
+            Object value = field.get(properties);
+            return value == null ? fallback : value.toString();
+        } catch (ReflectiveOperationException ignored) {
+            return fallback;
+        }
+    }
+
     @Override
     public long getConnectionThrottle() {
-        return 4000;
+        return bukkitConfig.getLong("settings.connection-throttle", 4000L);
     }
 
     @Override
     public int getViewDistance() {
-        return 10;
+        return readDedicatedIntProperty("viewDistance", 10);
     }
 
     @Override
     public int getSimulationDistance() {
-        return 10;
+        return readDedicatedIntProperty("simulationDistance", 10);
     }
 
     @Override
     public @NotNull String getIp() {
-        return "";
+        try {
+            Object value = console.getClass().getMethod("getLocalIp").invoke(console);
+            return value == null ? "" : value.toString();
+        } catch (ReflectiveOperationException ignored) {
+            return "";
+        }
     }
 
     @Override
     public @NotNull String getWorldType() {
-        return "DEFAULT";
+        String configured = readDedicatedStringProperty("levelType", null);
+        if (configured != null) return configured;
+        try {
+            Object properties = dedicatedProperties();
+            Object raw = properties.getClass().getField("properties").get(properties);
+            if (raw instanceof java.util.Properties props) return props.getProperty("level-type", "minecraft:normal");
+        } catch (ReflectiveOperationException ignored) {}
+        return "minecraft:normal";
     }
 
     @Override
     public boolean getGenerateStructures() {
-        return true;
+        try {
+            return console.getWorldData().worldGenOptions().generateStructures();
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 
     @Override
     public int getSpawnRadius() {
-        return 10;
+        return readDedicatedIntProperty("spawnProtection", 16);
     }
 
     @Override
@@ -645,12 +665,20 @@ public class CraftServer implements Server {
 
     @Override
     public boolean isHardcore() {
-        return false;
+        try {
+            return console.getWorldData().isHardcore();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     @Override
     public boolean getAllowFlight() {
-        return true;
+        try {
+            return console.isFlightAllowed();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     @Override
@@ -660,17 +688,17 @@ public class CraftServer implements Server {
 
     @Override
     public boolean getHideOnlinePlayers() {
-        return false;
+        return readDedicatedBooleanProperty("hideOnlinePlayers", false);
     }
 
     @Override
     public boolean getAllowNether() {
-        return true;
+        return readDedicatedBooleanProperty("allowNether", true);
     }
 
     @Override
     public boolean getAllowEnd() {
-        return true;
+        return bukkitConfig.getBoolean("settings.allow-end", true);
     }
 
     @Override
@@ -685,16 +713,45 @@ public class CraftServer implements Server {
 
     @Override
     public boolean isWhitelistEnforced() {
-        return false;
+        try {
+            Object value = console.getClass().getMethod("isEnforceWhitelist").invoke(console);
+            if (value instanceof Boolean bool) return bool;
+        } catch (ReflectiveOperationException ignored) {}
+        return readDedicatedBooleanProperty("enforceWhitelist", false);
     }
 
     @Override
     public void setWhitelistEnforced(boolean value) {
+        try {
+            console.getClass().getMethod("setEnforceWhitelist", boolean.class).invoke(console, value);
+            return;
+        } catch (ReflectiveOperationException ignored) {}
+        throw new UnsupportedOperationException("This Minecraft server does not expose runtime whitelist-enforcement mutation");
     }
 
     @Override
     public @NotNull Set<OfflinePlayer> getWhitelistedPlayers() {
-        return Collections.emptySet();
+        Set<OfflinePlayer> result = new LinkedHashSet<>();
+        try {
+            Object whiteList = playerList.getWhiteList();
+            Object entries = whiteList.getClass().getMethod("getEntries").invoke(whiteList);
+            if (entries instanceof String[] ids) {
+                for (String raw : ids) {
+                    try { result.add(getOfflinePlayer(UUID.fromString(raw))); } catch (IllegalArgumentException ignored) {}
+                }
+            } else if (entries instanceof Collection<?> collection) {
+                for (Object raw : collection) {
+                    if (raw instanceof String id) {
+                        try { result.add(getOfflinePlayer(UUID.fromString(id))); } catch (IllegalArgumentException ignored) {}
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+            for (OfflinePlayer player : getOfflinePlayers()) {
+                if (player.isWhitelisted()) result.add(player);
+            }
+        }
+        return Collections.unmodifiableSet(result);
     }
 
     @Override
@@ -738,21 +795,45 @@ public class CraftServer implements Server {
 
     @Override
     public @Nullable Player getPlayer(@NotNull String name) {
+        Objects.requireNonNull(name, "name");
+        Player exact = getPlayerExact(name);
+        if (exact != null) return exact;
+
+        String lower = name.toLowerCase(Locale.ROOT);
+        Player best = null;
+        int bestDelta = Integer.MAX_VALUE;
+        for (Player player : getOnlinePlayers()) {
+            String candidate = player.getName();
+            if (candidate.toLowerCase(Locale.ROOT).startsWith(lower)) {
+                int delta = Math.abs(candidate.length() - name.length());
+                if (delta < bestDelta) {
+                    best = player;
+                    bestDelta = delta;
+                    if (delta == 0) break;
+                }
+            }
+        }
+        return best;
+    }
+
+    @Override
+    public @Nullable Player getPlayerExact(@NotNull String name) {
+        Objects.requireNonNull(name, "name");
         net.minecraft.server.level.ServerPlayer player = playerList.getPlayerByName(name);
         return player != null ? getPlayer(player.getUUID()) : null;
     }
 
     @Override
-    public @Nullable Player getPlayerExact(@NotNull String name) {
-        return getPlayer(name);
-    }
-
-    @Override
     public @NotNull List<Player> matchPlayer(@NotNull String name) {
-        Player player = getPlayer(name);
-        if (player != null)
-            return Collections.singletonList(player);
-        return Collections.emptyList();
+        Objects.requireNonNull(name, "name");
+        List<Player> matches = new ArrayList<>();
+        String lower = name.toLowerCase(Locale.ROOT);
+        for (Player player : getOnlinePlayers()) {
+            String candidate = player.getName();
+            if (candidate.equalsIgnoreCase(name)) return Collections.singletonList(player);
+            if (candidate.toLowerCase(Locale.ROOT).contains(lower)) matches.add(player);
+        }
+        return matches;
     }
 
     @Override
@@ -775,34 +856,41 @@ public class CraftServer implements Server {
 
     @Override
     public @Nullable World getWorld(@NotNull String name) {
-        // Accept both "world"/"world_nether"/"world_the_end" (Bukkit names) and
-        // "overworld"/"the_nether"/"the_end" (dimension paths) and full "minecraft:overworld"
-        String qualified = switch (name.toLowerCase()) {
+        if (name == null || name.isBlank()) return null;
+
+        // Paper resolves Bukkit world names, not just minecraft dimension paths.
+        // Search live worlds first so mod dimensions (Aether, Twilight, etc.) are
+        // addressable by the exact name exposed by CraftWorld#getName().
+        for (net.minecraft.server.level.ServerLevel level : console.getAllLevels()) {
+            CraftWorld craft = craftWorld(level);
+            if (craft.getName().equalsIgnoreCase(name)
+                    || level.dimension().location().toString().equalsIgnoreCase(name)
+                    || level.dimension().location().getPath().equalsIgnoreCase(name)) {
+                return craft;
+            }
+        }
+
+        String qualified = switch (name.toLowerCase(java.util.Locale.ROOT)) {
             case "world" -> "minecraft:overworld";
             case "world_nether" -> "minecraft:the_nether";
             case "world_the_end" -> "minecraft:the_end";
             default -> name.contains(":") ? name : "minecraft:" + name;
         };
         net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.tryParse(qualified);
-        if (rl == null)
-            return null;
-
+        if (rl == null) return null;
         net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> key = net.minecraft.resources.ResourceKey
                 .create(net.minecraft.core.registries.Registries.DIMENSION, rl);
         net.minecraft.server.level.ServerLevel level = console.getLevel(key);
-        if (level == null)
-            return null;
-
-        UUID uid = UUID.nameUUIDFromBytes(qualified.getBytes());
-        return worldCache.computeIfAbsent(uid, k -> new CraftWorld(level));
+        return level == null ? null : craftWorld(level);
     }
 
     @Override
     public @Nullable World getWorld(@NotNull UUID uid) {
-        for (World world : getWorlds()) {
-            if (world.getUID().equals(uid)) {
-                return world;
-            }
+        World cached = worldCache.get(uid);
+        if (cached != null) return cached;
+        for (net.minecraft.server.level.ServerLevel level : console.getAllLevels()) {
+            CraftWorld world = craftWorld(level);
+            if (world.getUID().equals(uid) || world.getLegacyDimensionUID().equals(uid)) return world;
         }
         return null;
     }
@@ -814,12 +902,54 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull MapView createMap(@NotNull World world) {
-        return null;
+        Objects.requireNonNull(world, "world");
+        final int id = nextMapId.getAndIncrement();
+        final class MapState {
+            World currentWorld = world;
+            int centerX = 0;
+            int centerZ = 0;
+            MapView.Scale scale = MapView.Scale.NORMAL;
+            boolean trackingPosition = true;
+            boolean unlimitedTracking = false;
+            boolean locked = false;
+            final List<org.bukkit.map.MapRenderer> renderers = new java.util.concurrent.CopyOnWriteArrayList<>();
+        }
+        final MapState state = new MapState();
+        MapView view = (MapView) java.lang.reflect.Proxy.newProxyInstance(
+                MapView.class.getClassLoader(), new Class<?>[] { MapView.class }, (proxy, method, args) -> {
+                    return switch (method.getName()) {
+                        case "getId" -> id;
+                        case "isVirtual" -> !state.renderers.isEmpty();
+                        case "getScale" -> state.scale;
+                        case "setScale" -> { state.scale = (MapView.Scale) args[0]; yield null; }
+                        case "getCenterX" -> state.centerX;
+                        case "getCenterZ" -> state.centerZ;
+                        case "setCenterX" -> { state.centerX = (Integer) args[0]; yield null; }
+                        case "setCenterZ" -> { state.centerZ = (Integer) args[0]; yield null; }
+                        case "getWorld" -> state.currentWorld;
+                        case "setWorld" -> { state.currentWorld = (World) args[0]; yield null; }
+                        case "isTrackingPosition" -> state.trackingPosition;
+                        case "setTrackingPosition" -> { state.trackingPosition = (Boolean) args[0]; yield null; }
+                        case "isUnlimitedTracking" -> state.unlimitedTracking;
+                        case "setUnlimitedTracking" -> { state.unlimitedTracking = (Boolean) args[0]; yield null; }
+                        case "isLocked" -> state.locked;
+                        case "setLocked" -> { state.locked = (Boolean) args[0]; yield null; }
+                        case "getRenderers" -> Collections.unmodifiableList(new ArrayList<>(state.renderers));
+                        case "addRenderer" -> { state.renderers.add((org.bukkit.map.MapRenderer) args[0]); yield null; }
+                        case "removeRenderer" -> state.renderers.remove(args[0]);
+                        case "toString" -> "LunarArcMapView{id=" + id + ",world=" + state.currentWorld.getName() + "}";
+                        case "hashCode" -> id;
+                        case "equals" -> proxy == args[0];
+                        default -> defaultValue(method.getReturnType());
+                    };
+                });
+        mapViews.put(id, view);
+        return view;
     }
 
     @Override
     public @Nullable MapView getMap(int id) {
-        return null;
+        return mapViews.get(id);
     }
 
     @Override
@@ -828,6 +958,24 @@ public class CraftServer implements Server {
 
     @Override
     public void reloadData() {
+        Object repository = invokeNoArg(console, "getPackRepository");
+        Object selected = repository == null ? null : invokeNoArg(repository, "getSelectedIds");
+        if (!(selected instanceof Collection<?> packs)) {
+            selected = repository == null ? null : invokeNoArg(repository, "getSelectedPacks");
+            if (selected instanceof Collection<?> selectedPacks) {
+                List<String> ids = new ArrayList<>();
+                for (Object pack : selectedPacks) {
+                    Object id = invokeNoArg(pack, "getId");
+                    if (id == null) id = invokeNoArg(pack, "getPackId");
+                    if (id != null) ids.add(String.valueOf(id));
+                }
+                selected = ids;
+            }
+        }
+        if (selected instanceof Collection<?> packs) {
+            Object future = invokeCompatible(console, "reloadResources", packs);
+            if (future instanceof java.util.concurrent.CompletableFuture<?> completable) completable.join();
+        }
     }
 
     @Override
@@ -872,11 +1020,19 @@ public class CraftServer implements Server {
 
     @Override
     public void sendPluginMessage(@NotNull org.bukkit.plugin.Plugin source, @NotNull String channel, byte[] message) {
+        StandardMessenger.validatePluginMessage(messenger, source, channel, message);
+        for (Player player : getOnlinePlayers()) {
+            player.sendPluginMessage(source, channel, message);
+        }
     }
 
     @Override
     public @NotNull Set<String> getListeningPluginChannels() {
-        return Collections.emptySet();
+        Set<String> channels = new HashSet<>();
+        for (Player player : getOnlinePlayers()) {
+            channels.addAll(player.getListeningPluginChannels());
+        }
+        return Collections.unmodifiableSet(channels);
     }
 
     @Override
@@ -973,7 +1129,28 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull OfflinePlayer[] getOfflinePlayers() {
-        return new OfflinePlayer[0];
+        Map<UUID, OfflinePlayer> players = new LinkedHashMap<>();
+        for (Player online : getOnlinePlayers()) players.put(online.getUniqueId(), online);
+
+        Set<File> dataDirs = new LinkedHashSet<>();
+        for (World world : getWorlds()) {
+            File folder = world.getWorldFolder();
+            if (folder != null) dataDirs.add(new File(folder, "playerdata"));
+        }
+        dataDirs.add(new File(getWorldContainer(), "world/playerdata"));
+
+        for (File dir : dataDirs) {
+            File[] files = dir.listFiles((d, name) -> name.endsWith(".dat") && name.length() > 4);
+            if (files == null) continue;
+            for (File file : files) {
+                String id = file.getName().substring(0, file.getName().length() - 4);
+                try {
+                    UUID uuid = UUID.fromString(id);
+                    players.putIfAbsent(uuid, getOfflinePlayer(uuid));
+                } catch (IllegalArgumentException ignored) {}
+            }
+        }
+        return players.values().toArray(new OfflinePlayer[0]);
     }
 
     @Override
@@ -1023,28 +1200,50 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull Set<String> getIPBans() {
-        return Collections.emptySet();
+        Set<String> result = new LinkedHashSet<>();
+        for (Object raw : CraftBanList.IP_BANS.getBanEntries()) {
+            if (raw instanceof BanEntry<?> entry) result.add(entry.getTarget());
+        }
+        return Collections.unmodifiableSet(result);
     }
 
     @Override
     public void banIP(@NotNull String address) {
+        Objects.requireNonNull(address, "address");
+        try {
+            CraftBanList.IP_BANS.addBan(java.net.InetAddress.getByName(address), null, (java.util.Date) null, null);
+        } catch (java.net.UnknownHostException ex) {
+            throw new IllegalArgumentException("Invalid IP address: " + address, ex);
+        }
     }
 
     @Override
     public void unbanIP(@NotNull String address) {
+        Objects.requireNonNull(address, "address");
+        try {
+            CraftBanList.IP_BANS.pardon(java.net.InetAddress.getByName(address));
+        } catch (java.net.UnknownHostException ex) {
+            throw new IllegalArgumentException("Invalid IP address: " + address, ex);
+        }
     }
 
     @Override
     public void banIP(@NotNull java.net.InetAddress address) {
+        CraftBanList.IP_BANS.addBan(Objects.requireNonNull(address, "address"), null, (java.util.Date) null, null);
     }
 
     @Override
     public void unbanIP(@NotNull java.net.InetAddress address) {
+        CraftBanList.IP_BANS.pardon(Objects.requireNonNull(address, "address"));
     }
 
     @Override
     public @NotNull Set<OfflinePlayer> getBannedPlayers() {
-        return Collections.emptySet();
+        Set<OfflinePlayer> result = new LinkedHashSet<>();
+        for (OfflinePlayer player : getOfflinePlayers()) {
+            if (player.isBanned()) result.add(player);
+        }
+        return Collections.unmodifiableSet(result);
     }
 
     @Override
@@ -1061,7 +1260,11 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull Set<OfflinePlayer> getOperators() {
-        return Collections.emptySet();
+        Set<OfflinePlayer> result = new LinkedHashSet<>();
+        for (OfflinePlayer player : getOfflinePlayers()) {
+            if (player.isOp()) result.add(player);
+        }
+        return Collections.unmodifiableSet(result);
     }
 
     @Override
@@ -1086,11 +1289,23 @@ public class CraftServer implements Server {
 
     @Override
     public void setIdleTimeout(int threshold) {
+        if (threshold < 0) throw new IllegalArgumentException("Idle timeout cannot be negative");
+        try {
+            java.lang.reflect.Method method = console.getClass().getMethod("setPlayerIdleTimeout", int.class);
+            method.invoke(console, threshold);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Minecraft server does not expose player idle timeout", e);
+        }
     }
 
     @Override
     public int getIdleTimeout() {
-        return 0;
+        try {
+            java.lang.reflect.Method method = console.getClass().getMethod("getPlayerIdleTimeout");
+            return ((Number) method.invoke(console)).intValue();
+        } catch (ReflectiveOperationException e) {
+            return 0;
+        }
     }
 
     @Override
@@ -1204,7 +1419,22 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull org.bukkit.entity.EntityFactory getEntityFactory() {
-        return null;
+        return (org.bukkit.entity.EntityFactory) java.lang.reflect.Proxy.newProxyInstance(
+                org.bukkit.entity.EntityFactory.class.getClassLoader(),
+                new Class<?>[] { org.bukkit.entity.EntityFactory.class }, (proxy, method, args) -> {
+                    if ((method.getName().equals("createEntity") || method.getName().equals("spawn"))
+                            && args != null && args.length >= 2 && args[0] instanceof Location location
+                            && args[1] instanceof Class<?> entityClass) {
+                        World world = Objects.requireNonNull(location.getWorld(), "location world");
+                        try {
+                            java.lang.reflect.Method spawn = world.getClass().getMethod("spawn", Location.class, Class.class);
+                            return spawn.invoke(world, location, entityClass);
+                        } catch (ReflectiveOperationException ex) {
+                            throw new IllegalArgumentException("Unable to create entity " + entityClass.getName(), ex);
+                        }
+                    }
+                    return defaultValue(method.getReturnType());
+                });
     }
 
     @Override
@@ -1214,7 +1444,17 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull org.bukkit.potion.PotionBrewer getPotionBrewer() {
-        return null;
+        return (org.bukkit.potion.PotionBrewer) java.lang.reflect.Proxy.newProxyInstance(
+                org.bukkit.potion.PotionBrewer.class.getClassLoader(),
+                new Class<?>[] { org.bukkit.potion.PotionBrewer.class }, (proxy, method, args) -> {
+                    if (method.getName().equals("createEffect") && args != null && args.length >= 3
+                            && args[0] instanceof org.bukkit.potion.PotionEffectType type
+                            && args[1] instanceof Integer duration && args[2] instanceof Integer amplifier) {
+                        return new org.bukkit.potion.PotionEffect(type, duration, amplifier);
+                    }
+                    if (Collection.class.isAssignableFrom(method.getReturnType())) return Collections.emptyList();
+                    return defaultValue(method.getReturnType());
+                });
     }
 
     @Override
@@ -1227,29 +1467,83 @@ public class CraftServer implements Server {
         return null;
     }
 
+    private Object dataPackManagerProxy(Class<?> api) {
+        return java.lang.reflect.Proxy.newProxyInstance(api.getClassLoader(), new Class<?>[] { api }, (proxy, method, args) -> {
+            String name = method.getName();
+            if (name.equals("getEnabledPacks") || name.equals("getEnabledDataPacks")) return getInitialEnabledPacks();
+            if (name.equals("getDisabledPacks") || name.equals("getDisabledDataPacks")) return getInitialDisabledPacks();
+            if (name.equals("getPacks") || name.equals("getDataPacks")) {
+                LinkedHashSet<String> all = new LinkedHashSet<>();
+                all.addAll(getInitialEnabledPacks());
+                all.addAll(getInitialDisabledPacks());
+                return Collections.unmodifiableSet(all);
+            }
+            if ((name.equals("isEnabled") || name.equals("isDataPackEnabled")) && args != null && args.length > 0) {
+                return getInitialEnabledPacks().contains(String.valueOf(args[0]));
+            }
+            if (name.toLowerCase(Locale.ROOT).contains("reload")) {
+                reloadData();
+                return defaultValue(method.getReturnType());
+            }
+            if (Collection.class.isAssignableFrom(method.getReturnType())) return Collections.emptyList();
+            return defaultValue(method.getReturnType());
+        });
+    }
+
     @Override
     public @Nullable org.bukkit.packs.DataPackManager getDataPackManager() {
-        return null;
+        return (org.bukkit.packs.DataPackManager) dataPackManagerProxy(org.bukkit.packs.DataPackManager.class);
     }
 
     @Override
     public @NotNull io.papermc.paper.datapack.DatapackManager getDatapackManager() {
-        return null;
+        return (io.papermc.paper.datapack.DatapackManager) dataPackManagerProxy(io.papermc.paper.datapack.DatapackManager.class);
+    }
+
+    private List<String> readInitialDataPacks(String methodName) {
+        try {
+            Object properties = dedicatedProperties();
+            java.lang.reflect.Field field = properties.getClass().getField("initialDataPackConfiguration");
+            Object configuration = field.get(properties);
+            Object value = configuration.getClass().getMethod(methodName).invoke(configuration);
+            if (value instanceof Collection<?> collection) {
+                List<String> result = new ArrayList<>(collection.size());
+                for (Object entry : collection) result.add(String.valueOf(entry));
+                return Collections.unmodifiableList(result);
+            }
+        } catch (ReflectiveOperationException ignored) {}
+        return Collections.emptyList();
     }
 
     @Override
     public @NotNull List<String> getInitialDisabledPacks() {
-        return Collections.emptyList();
+        return readInitialDataPacks("getDisabled");
     }
 
     @Override
     public @NotNull List<String> getInitialEnabledPacks() {
-        return Collections.emptyList();
+        return readInitialDataPacks("getEnabled");
     }
 
     @Override
     public @NotNull org.bukkit.ServerTickManager getServerTickManager() {
-        return null;
+        return (org.bukkit.ServerTickManager) java.lang.reflect.Proxy.newProxyInstance(
+                org.bukkit.ServerTickManager.class.getClassLoader(), new Class<?>[] { org.bukkit.ServerTickManager.class },
+                (proxy, method, args) -> {
+                    Object tickRateManager = invokeNoArg(console, "tickRateManager");
+                    if (tickRateManager == null) tickRateManager = invokeNoArg(console, "getTickRateManager");
+                    String n = method.getName();
+                    if (n.equals("getTickRate")) {
+                        Object v = invokeNoArg(tickRateManager, "tickrate");
+                        if (v instanceof Number number) return number.floatValue();
+                        return 20.0F;
+                    }
+                    if (n.equals("isFrozen")) {
+                        Object v = invokeNoArg(tickRateManager, "isFrozen");
+                        return v instanceof Boolean b && b;
+                    }
+                    return defaultValue(method.getReturnType());
+                });
     }
 
     @Override
@@ -1259,32 +1553,106 @@ public class CraftServer implements Server {
 
     @Override
     public boolean isLoggingIPs() {
-        return true;
+        try {
+            Object value = console.getClass().getMethod("logIPs").invoke(console);
+            if (value instanceof Boolean bool) return bool;
+        } catch (ReflectiveOperationException ignored) {}
+        return readDedicatedBooleanProperty("logIPs", true);
     }
 
     @Override
     public boolean isTickingWorlds() {
+        try {
+            java.lang.reflect.Field field = MinecraftServer.class.getDeclaredField("isIteratingOverLevels");
+            field.setAccessible(true);
+            Object value = field.get(console);
+            if (value instanceof Boolean bool) return bool;
+        } catch (ReflectiveOperationException ignored) {}
         return true;
+    }
+
+    private Object serverResourcePackInfo() {
+        try {
+            Object optional = console.getClass().getMethod("getServerResourcePack").invoke(console);
+            if (optional instanceof java.util.Optional<?> opt) return opt.orElse(null);
+            return optional;
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
+    private Object invokeNoArg(Object target, String methodName) {
+        if (target == null) return null;
+        try {
+            return target.getClass().getMethod(methodName).invoke(target);
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
+
+    private static Object defaultValue(Class<?> type) {
+        if (!type.isPrimitive()) return null;
+        if (type == boolean.class) return false;
+        if (type == byte.class) return (byte) 0;
+        if (type == short.class) return (short) 0;
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == float.class) return 0.0F;
+        if (type == double.class) return 0.0D;
+        if (type == char.class) return '\0';
+        return null;
+    }
+
+    private Object invokeCompatible(Object target, String name, Object... args) {
+        if (target == null) return null;
+        outer: for (java.lang.reflect.Method method : target.getClass().getMethods()) {
+            if (!method.getName().equals(name) || method.getParameterCount() != args.length) continue;
+            Class<?>[] types = method.getParameterTypes();
+            for (int i = 0; i < types.length; i++) {
+                if (args[i] != null && !types[i].isInstance(args[i]) && !types[i].isPrimitive()) continue outer;
+            }
+            try { return method.invoke(target, args); } catch (ReflectiveOperationException ignored) {}
+        }
+        return null;
     }
 
     @Override
     public boolean isResourcePackRequired() {
-        return false;
+        try {
+            Object value = console.getClass().getMethod("isResourcePackRequired").invoke(console);
+            if (value instanceof Boolean bool) return bool;
+        } catch (ReflectiveOperationException ignored) {}
+        Object info = serverResourcePackInfo();
+        Object required = invokeNoArg(info, "isRequired");
+        if (!(required instanceof Boolean)) required = invokeNoArg(info, "required");
+        return required instanceof Boolean bool && bool;
     }
 
     @Override
     public @NotNull String getResourcePackHash() {
-        return "";
+        Object value = invokeNoArg(serverResourcePackInfo(), "hash");
+        return value == null ? "" : value.toString().toUpperCase(Locale.ROOT);
     }
 
     @Override
     public @Nullable String getResourcePack() {
-        return "";
+        Object value = invokeNoArg(serverResourcePackInfo(), "url");
+        return value == null ? "" : value.toString();
     }
 
     @Override
     public @Nullable String getResourcePackPrompt() {
-        return null;
+        Object value = invokeNoArg(serverResourcePackInfo(), "prompt");
+        if (value instanceof java.util.Optional<?> optional) value = optional.orElse(null);
+        if (value == null) return null;
+        try {
+            Class<?> craftChat = Class.forName("org.bukkit.craftbukkit.v1_21_R1.util.CraftChatMessage");
+            return String.valueOf(craftChat.getMethod("fromComponent", net.minecraft.network.chat.Component.class)
+                    .invoke(null, value));
+        } catch (ReflectiveOperationException ignored) {
+            return value.toString();
+        }
     }
 
     @Override
@@ -1304,22 +1672,67 @@ public class CraftServer implements Server {
 
     @Override
     public double[] getTPS() {
-        return new double[] { 20.0, 20.0, 20.0 };
+        // Vanilla does not keep Paper's 1/5/15-minute rolling TPS samples. Prefer
+        // Paper-injected recentTps when present; otherwise derive a useful current
+        // rate from the server's rolling tick-time window rather than hard-coding 20.
+        try {
+            java.lang.reflect.Field field = console.getClass().getField("recentTps");
+            Object value = field.get(console);
+            if (value instanceof double[] tps && tps.length >= 3) return tps.clone();
+        } catch (ReflectiveOperationException ignored) {}
+        double avg = getAverageTickTime();
+        double current = avg <= 0.0 ? 20.0 : Math.min(20.0, 1000.0 / avg);
+        return new double[] { current, current, current };
     }
 
     @Override
     public long[] getTickTimes() {
+        try {
+            java.lang.reflect.Field field;
+            try {
+                field = console.getClass().getField("tickTimes");
+            } catch (NoSuchFieldException ex) {
+                field = MinecraftServer.class.getDeclaredField("tickTimes");
+                field.setAccessible(true);
+            }
+            Object value = field.get(console);
+            if (value instanceof long[] times) return times.clone();
+        } catch (ReflectiveOperationException ignored) {}
         return new long[0];
     }
 
     @Override
     public double getAverageTickTime() {
-        return 0.0;
+        try {
+            Object value = console.getClass().getMethod("getAverageTickTimeNanos").invoke(console);
+            if (value instanceof Number number) return number.doubleValue() / 1_000_000.0D;
+        } catch (ReflectiveOperationException ignored) {}
+        long[] times = getTickTimes();
+        if (times.length == 0) return 0.0D;
+        long total = 0L;
+        int count = 0;
+        for (long time : times) {
+            if (time > 0L) {
+                total += time;
+                count++;
+            }
+        }
+        return count == 0 ? 0.0D : (total / (double) count) / 1_000_000.0D;
     }
 
     @Override
     public int getCurrentTick() {
-        return 0;
+        try {
+            Object value = console.getClass().getMethod("getTickCount").invoke(console);
+            if (value instanceof Number number) return number.intValue();
+        } catch (ReflectiveOperationException ignored) {}
+        try {
+            java.lang.reflect.Field field = MinecraftServer.class.getDeclaredField("tickCount");
+            field.setAccessible(true);
+            return field.getInt(console);
+        } catch (ReflectiveOperationException ignored) {
+            return 0;
+        }
     }
 
     @Override
@@ -1333,7 +1746,23 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull <T extends Keyed> Iterable<Tag<T>> getTags(@NotNull String registry, @NotNull Class<T> clazz) {
-        return Collections.emptyList();
+        Objects.requireNonNull(registry, "registry");
+        Objects.requireNonNull(clazz, "clazz");
+        List<Tag<T>> tags = new ArrayList<>();
+        if (clazz == Material.class && "items".equals(registry)) {
+            net.minecraft.core.registries.BuiltInRegistries.ITEM.getTags().forEach(pair -> {
+                net.minecraft.resources.ResourceLocation id = pair.getFirst().location();
+                Tag<T> tag = getTag(registry, NamespacedKey.fromString(id.toString()), clazz);
+                if (tag != null) tags.add(tag);
+            });
+        } else if (clazz == Material.class && "blocks".equals(registry)) {
+            net.minecraft.core.registries.BuiltInRegistries.BLOCK.getTags().forEach(pair -> {
+                net.minecraft.resources.ResourceLocation id = pair.getFirst().location();
+                Tag<T> tag = getTag(registry, NamespacedKey.fromString(id.toString()), clazz);
+                if (tag != null) tags.add(tag);
+            });
+        }
+        return Collections.unmodifiableList(tags);
     }
 
     @Override
@@ -1370,6 +1799,8 @@ public class CraftServer implements Server {
 
     @Override
     public void motd(@NotNull net.kyori.adventure.text.Component motd) {
+        Objects.requireNonNull(motd, "motd");
+        setMotd(net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection().serialize(motd));
     }
 
     @Override
@@ -1379,11 +1810,21 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull org.bukkit.GameMode getDefaultGameMode() {
-        return org.bukkit.GameMode.SURVIVAL;
+        try {
+            return org.bukkit.GameMode.getByValue(console.getDefaultGameType().getId());
+        } catch (Throwable ignored) {
+            return org.bukkit.GameMode.SURVIVAL;
+        }
     }
 
     @Override
     public void setDefaultGameMode(@NotNull org.bukkit.GameMode mode) {
+        Objects.requireNonNull(mode, "mode");
+        try {
+            console.setDefaultGameType(net.minecraft.world.level.GameType.byId(mode.getValue()));
+        } catch (Throwable ex) {
+            throw new IllegalStateException("Unable to set the default game mode", ex);
+        }
     }
 
     @Override
@@ -1393,6 +1834,12 @@ public class CraftServer implements Server {
 
     @Override
     public void setMotd(@NotNull String motd) {
+        Objects.requireNonNull(motd, "motd");
+        try {
+            console.getClass().getMethod("setMotd", String.class).invoke(console, motd);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("This Minecraft server does not expose runtime MOTD mutation", ex);
+        }
     }
 
     @Override
@@ -1469,7 +1916,7 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull File getUpdateFolderFile() {
-        return new File("plugins");
+        return new File(getPluginsFolder(), getUpdateFolder());
     }
 
     @Override
@@ -1483,89 +1930,99 @@ public class CraftServer implements Server {
 
     @Override
     public boolean dispatchCommand(@NotNull CommandSender sender, @NotNull String commandLine) {
-        logger.info("[LunarArc] Dispatching command for " + sender.getName() + ": " + commandLine);
-        try {
-            boolean result = commandMap.dispatch(sender, commandLine);
-            if (!result) {
-                logger.warning("[LunarArc] Command map failed to dispatch: " + commandLine);
-            }
-            return result;
-        } catch (Exception e) {
-            logger.log(java.util.logging.Level.SEVERE, "Error dispatching command: " + commandLine, e);
-            return false;
-        }
+        return io.ampznetwork.lunararc.common.server.LunarArcCommandRouter.dispatch(
+                this, sender, commandLine);
     }
+
 
     @Override
     public @NotNull List<Entity> selectEntities(@NotNull CommandSender sender, @NotNull String selector) {
-        return Collections.emptyList();
+        Objects.requireNonNull(sender, "sender");
+        Objects.requireNonNull(selector, "selector");
+        try {
+            net.minecraft.commands.CommandSourceStack source = console.createCommandSourceStack();
+            if (sender instanceof CraftPlayer craftPlayer) source = craftPlayer.getHandle().createCommandSourceStack();
+            Class<?> parserClass = Class.forName("net.minecraft.commands.arguments.selector.EntitySelectorParser");
+            Object parser = parserClass.getConstructor(com.mojang.brigadier.StringReader.class, boolean.class)
+                    .newInstance(new com.mojang.brigadier.StringReader(selector), true);
+            Object entitySelector = parserClass.getMethod("parse").invoke(parser);
+            Object entities = entitySelector.getClass().getMethod("findEntities", net.minecraft.commands.CommandSourceStack.class)
+                    .invoke(entitySelector, source);
+            List<Entity> result = new ArrayList<>();
+            if (entities instanceof Iterable<?> iterable) {
+                for (Object nmsEntity : iterable) {
+                    Object bukkit = invokeNoArg(nmsEntity, "getBukkitEntity");
+                    if (bukkit instanceof Entity entity) result.add(entity);
+                }
+            }
+            return Collections.unmodifiableList(result);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalArgumentException("Invalid or unsupported entity selector: " + selector, ex);
+        }
     }
 
     @Override
     public @Nullable <T extends Keyed> Registry<T> getRegistry(@NotNull Class<T> type) {
         if (type == null) return null;
-        return (Registry<T>) java.lang.reflect.Proxy.newProxyInstance(
-                Registry.class.getClassLoader(),
-                new Class<?>[] { Registry.class },
-                (proxy, method, args) -> {
-                    String methodName = method.getName();
-                    if (methodName.equals("get") && args != null && args.length > 0) {
-                        if (args[0] instanceof NamespacedKey key) {
-                            if (type == Material.class) {
-                                Material mat = Material.matchMaterial(key.getKey());
-                                if (mat != null) return mat;
-                                net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation
-                                        .fromNamespaceAndPath(key.getNamespace(), key.getKey());
-                                if (net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(rl)
-                                        || net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(rl)) {
-                                    return Material.matchMaterial(key.getKey().toUpperCase(java.util.Locale.ROOT));
-                                }
-                            }
-                            if (type.isEnum()) {
-                                String name = key.getKey().toUpperCase(java.util.Locale.ROOT);
-                                for (T constant : type.getEnumConstants()) {
-                                    if (((Enum<?>) constant).name().equalsIgnoreCase(name)) return constant;
-                                }
-                            }
-                        }
-                        return null;
-                    }
-                    if (methodName.equals("iterator")) {
-                        List<T> values = new ArrayList<>();
-                        if (type.isEnum()) {
-                            for (T constant : type.getEnumConstants()) {
-                                try {
-                                    java.lang.reflect.Method isLegacy = constant.getClass().getMethod("isLegacy");
-                                    if (!(Boolean) isLegacy.invoke(constant)) values.add(constant);
-                                } catch (Exception e) {
-                                    values.add(constant);
-                                }
-                            }
-                        }
-                        return values.iterator();
-                    }
-                    if (methodName.equals("stream")) {
-                        List<T> values = new ArrayList<>();
-                        if (type.isEnum()) {
-                            Collections.addAll(values, type.getEnumConstants());
-                        }
-                        return values.stream();
-                    }
-                    if (methodName.equals("hashCode")) return System.identityHashCode(proxy);
-                    if (methodName.equals("equals")) return proxy == args[0];
-                    return null;
-                });
+        return io.ampznetwork.lunararc.common.server.LunarArcRegistryAccess.INSTANCE.getRegistry(type);
     }
 
     @Override
     public @Nullable <T extends Keyed> Tag<T> getTag(@NotNull String registry, @NotNull NamespacedKey tag,
             @NotNull Class<T> clazz) {
-        return null;
+        java.util.LinkedHashSet<T> values = new java.util.LinkedHashSet<>();
+        net.minecraft.resources.ResourceLocation location = net.minecraft.resources.ResourceLocation.parse(tag.toString());
+
+        if (clazz == Material.class && ("items".equals(registry) || "blocks".equals(registry))) {
+            if ("items".equals(registry)) {
+                var key = net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.ITEM, location);
+                var holders = net.minecraft.core.registries.BuiltInRegistries.ITEM.getTag(key);
+                if (holders.isEmpty()) return null;
+                for (var holder : holders.get()) {
+                    var id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(holder.value());
+                    Material material = Material.matchMaterial(id.toString());
+                    if (material != null) values.add(clazz.cast(material));
+                }
+            } else {
+                var key = net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.BLOCK, location);
+                var holders = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getTag(key);
+                if (holders.isEmpty()) return null;
+                for (var holder : holders.get()) {
+                    var id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(holder.value());
+                    Material material = Material.matchMaterial(id.toString());
+                    if (material != null) values.add(clazz.cast(material));
+                }
+            }
+        } else {
+            return null;
+        }
+
+        java.util.Set<T> immutable = java.util.Collections.unmodifiableSet(values);
+        return new Tag<>() {
+            @Override public @NotNull NamespacedKey getKey() { return tag; }
+            @Override public boolean isTagged(@NotNull T item) { return immutable.contains(item); }
+            @Override public @NotNull java.util.Set<T> getValues() { return immutable; }
+        };
     }
 
     @Override
     public @Nullable LootTable getLootTable(@NotNull NamespacedKey key) {
-        return null;
+        Objects.requireNonNull(key, "key");
+        final net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(key.getNamespace(), key.getKey());
+        Object reloadable = invokeNoArg(console, "reloadableRegistries");
+        Object lookup = reloadable == null ? null : invokeNoArg(reloadable, "getLootTable");
+        // Lookup shape differs between vanilla/Paper mappings. If a direct key lookup is available, reject missing tables.
+        Object nms = invokeCompatible(lookup, "get", id);
+        if (nms instanceof Optional<?> optional) nms = optional.orElse(null);
+        final Object handle = nms;
+        if (lookup != null && handle == null) return null;
+        return (LootTable) java.lang.reflect.Proxy.newProxyInstance(
+                LootTable.class.getClassLoader(), new Class<?>[] { LootTable.class }, (proxy, method, args) -> {
+                    if (method.getName().equals("getKey")) return key;
+                    if (method.getName().equals("toString")) return "LunarArcLootTable{" + key + "}";
+                    if (Collection.class.isAssignableFrom(method.getReturnType())) return Collections.emptyList();
+                    return defaultValue(method.getReturnType());
+                });
     }
 
     @Override
@@ -1635,35 +2092,129 @@ public class CraftServer implements Server {
         return null;
     }
 
+    private Advancement wrapAdvancement(Object holder) {
+        if (holder == null) return null;
+        return (Advancement) java.lang.reflect.Proxy.newProxyInstance(
+                Advancement.class.getClassLoader(), new Class<?>[] { Advancement.class }, (proxy, method, args) -> {
+                    Object id = invokeNoArg(holder, "id");
+                    NamespacedKey key = id == null ? null : namespacedKey(String.valueOf(id));
+                    Object value = invokeNoArg(holder, "value");
+                    return switch (method.getName()) {
+                        case "getKey" -> key;
+                        case "getCriteria" -> {
+                            Object criteria = value == null ? null : invokeNoArg(value, "criteria");
+                            if (criteria instanceof Map<?, ?> map) {
+                                List<String> names = new ArrayList<>();
+                                for (Object entry : map.keySet()) names.add(String.valueOf(entry));
+                                yield Collections.unmodifiableList(names);
+                            }
+                            yield Collections.emptyList();
+                        }
+                        case "toString" -> "LunarArcAdvancement{" + key + "}";
+                        case "hashCode" -> Objects.hashCode(key);
+                        case "equals" -> proxy == args[0] || (args[0] instanceof Advancement a && Objects.equals(key, a.getKey()));
+                        default -> defaultValue(method.getReturnType());
+                    };
+                });
+    }
+
+    private NamespacedKey namespacedKey(String value) {
+        if (value == null) return null;
+        int split = value.indexOf(':');
+        return split < 0 ? new NamespacedKey("minecraft", value)
+                : new NamespacedKey(value.substring(0, split), value.substring(split + 1));
+    }
+
+    private Collection<?> liveAdvancementHolders() {
+        try {
+            Object manager = console.getClass().getMethod("getAdvancements").invoke(console);
+            for (String methodName : List.of("getAllAdvancements", "getAllAdvancementsIterable", "getAllAdvancementsCollection")) {
+                try {
+                    Object value = manager.getClass().getMethod(methodName).invoke(manager);
+                    if (value instanceof Collection<?> c) return c;
+                    if (value instanceof Iterable<?> iterable) {
+                        List<Object> all = new ArrayList<>();
+                        iterable.forEach(all::add);
+                        return all;
+                    }
+                } catch (NoSuchMethodException ignored) {}
+            }
+            // 1.21.x AdvancementTree stores all nodes; expose their holders if that is the available shape.
+            Object tree = invokeNoArg(manager, "tree");
+            if (tree != null) {
+                for (String methodName : List.of("nodes", "all", "roots")) {
+                    Object nodes = invokeNoArg(tree, methodName);
+                    if (nodes instanceof Iterable<?> iterable) {
+                        List<Object> holders = new ArrayList<>();
+                        for (Object node : iterable) {
+                            Object holder = invokeNoArg(node, "holder");
+                            if (holder != null) holders.add(holder);
+                        }
+                        if (!holders.isEmpty()) return holders;
+                    }
+                }
+            }
+        } catch (ReflectiveOperationException ignored) {}
+        return Collections.emptyList();
+    }
+
     @Override
     public @Nullable Advancement getAdvancement(@NotNull NamespacedKey key) {
+        Objects.requireNonNull(key, "key");
+        for (Object holder : liveAdvancementHolders()) {
+            Object id = invokeNoArg(holder, "id");
+            if (id != null && key.toString().equals(String.valueOf(id))) return wrapAdvancement(holder);
+        }
+        try {
+            Object manager = console.getClass().getMethod("getAdvancements").invoke(console);
+            net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(key.getNamespace(), key.getKey());
+            for (String methodName : List.of("get", "getAdvancement")) {
+                try {
+                    Object holder = manager.getClass().getMethod(methodName, net.minecraft.resources.ResourceLocation.class).invoke(manager, id);
+                    if (holder instanceof Optional<?> optional) holder = optional.orElse(null);
+                    if (holder != null) return wrapAdvancement(holder);
+                } catch (NoSuchMethodException ignored) {}
+            }
+        } catch (ReflectiveOperationException ignored) {}
         return null;
     }
 
     @Override
     public @NotNull Iterator<Advancement> advancementIterator() {
-        return Collections.emptyIterator();
+        List<Advancement> advancements = new ArrayList<>();
+        for (Object holder : liveAdvancementHolders()) {
+            Advancement advancement = wrapAdvancement(holder);
+            if (advancement != null) advancements.add(advancement);
+        }
+        return Collections.unmodifiableList(advancements).iterator();
     }
 
     @Override
     public boolean removeBossBar(@NotNull NamespacedKey key) {
-        return false;
+        Objects.requireNonNull(key, "key");
+        KeyedBossBar removed = bossBars.remove(key);
+        if (removed != null) removed.removeAll();
+        return removed != null;
     }
 
     @Override
     public @Nullable KeyedBossBar getBossBar(@NotNull NamespacedKey key) {
-        return null;
+        return bossBars.get(Objects.requireNonNull(key, "key"));
     }
 
     @Override
     public @NotNull Iterator<KeyedBossBar> getBossBars() {
-        return Collections.emptyIterator();
+        return Collections.unmodifiableCollection(new ArrayList<>(bossBars.values())).iterator();
     }
 
     @Override
     public @NotNull KeyedBossBar createBossBar(@NotNull NamespacedKey key, @Nullable String title,
             @NotNull BarColor color, @NotNull BarStyle style, @NotNull BarFlag... flags) {
-        return io.ampznetwork.lunararc.common.server.LunarArcBossBar.createKeyed(key, title, color, style, flags);
+        Objects.requireNonNull(key, "key");
+        if (bossBars.containsKey(key)) throw new IllegalArgumentException("Boss bar already exists: " + key);
+        KeyedBossBar bar = io.ampznetwork.lunararc.common.server.LunarArcBossBar.createKeyed(key, title, color, style, flags);
+        bossBars.put(key, bar);
+        return bar;
     }
 
     @Override
@@ -1756,98 +2307,247 @@ public class CraftServer implements Server {
         return Collections.emptyMap();
     }
 
-    @Override
-    public boolean addRecipe(@Nullable Recipe recipe) {
-        return false;
+    private NamespacedKey recipeKey(Recipe recipe) {
+        return recipe instanceof Keyed keyed ? keyed.getKey() : null;
     }
 
     @Override
-    public boolean addRecipe(@Nullable Recipe recipe, boolean b) {
-        return false;
+    public boolean addRecipe(@Nullable Recipe recipe) {
+        return addRecipe(recipe, true);
+    }
+
+    @Override
+    public boolean addRecipe(@Nullable Recipe recipe, boolean update) {
+        if (recipe == null) return false;
+        NamespacedKey key = recipeKey(recipe);
+        if (key == null) throw new IllegalArgumentException("Recipe must implement Keyed");
+        if (runtimeRecipes.putIfAbsent(key, recipe) != null) return false;
+        if (update) updateRecipes();
+        return true;
     }
 
     @Override
     public boolean removeRecipe(@NotNull NamespacedKey key) {
-        return false;
+        return removeRecipe(key, true);
     }
 
     @Override
-    public boolean removeRecipe(@NotNull NamespacedKey key, boolean b) {
-        return false;
+    public boolean removeRecipe(@NotNull NamespacedKey key, boolean update) {
+        Objects.requireNonNull(key, "key");
+        boolean removed = runtimeRecipes.remove(key) != null;
+        if (removed && update) updateRecipes();
+        return removed;
     }
 
     @Override
     public @Nullable Recipe getRecipe(@NotNull NamespacedKey key) {
+        Objects.requireNonNull(key, "key");
+        Recipe runtime = runtimeRecipes.get(key);
+        if (runtime != null) return runtime;
         return null;
     }
 
     @Override
     public @NotNull List<Recipe> getRecipesFor(@NotNull ItemStack result) {
-        return Collections.emptyList();
+        Objects.requireNonNull(result, "result");
+        List<Recipe> matches = new ArrayList<>();
+        for (Recipe recipe : runtimeRecipes.values()) {
+            ItemStack recipeResult = recipe.getResult();
+            if (recipeResult != null && recipeResult.isSimilar(result)) matches.add(recipe);
+        }
+        return Collections.unmodifiableList(matches);
     }
 
     @Override
     public @NotNull Iterator<Recipe> recipeIterator() {
-        return Collections.emptyIterator();
+        return Collections.unmodifiableCollection(new ArrayList<>(runtimeRecipes.values())).iterator();
     }
 
     @Override
     public void clearRecipes() {
+        runtimeRecipes.clear();
+        updateRecipes();
     }
 
     @Override
     public void resetRecipes() {
+        runtimeRecipes.clear();
+        try {
+            Object resources = invokeNoArg(console, "getServerResources");
+            if (resources != null) {
+                Object recipes = invokeNoArg(resources, "getRecipeManager");
+                if (recipes != null) {
+                    try { recipes.getClass().getMethod("finalizeRecipeLoading").invoke(recipes); }
+                    catch (ReflectiveOperationException ignored) {}
+                }
+            }
+        } finally {
+            updateRecipes();
+        }
     }
 
     @Override
     public void updateRecipes() {
+        try {
+            playerList.getClass().getMethod("reloadRecipeData").invoke(playerList);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Unable to refresh recipes for connected players", ex);
+        }
+    }
+
+    private boolean emptyCraftSlot(ItemStack item) {
+        return item == null || item.getType().isAir() || item.getAmount() <= 0;
+    }
+
+    private boolean choiceMatches(RecipeChoice choice, ItemStack item) {
+        if (choice == null) return emptyCraftSlot(item);
+        if (emptyCraftSlot(item)) return false;
+        try { return choice.test(item); } catch (Throwable ignored) { return false; }
+    }
+
+    private boolean matchesShapeless(ShapelessRecipe recipe, ItemStack[] items) {
+        List<RecipeChoice> remaining = new ArrayList<>(recipe.getChoiceList());
+        for (ItemStack item : items) {
+            if (emptyCraftSlot(item)) continue;
+            int hit = -1;
+            for (int i = 0; i < remaining.size(); i++) {
+                if (choiceMatches(remaining.get(i), item)) { hit = i; break; }
+            }
+            if (hit < 0) return false;
+            remaining.remove(hit);
+        }
+        return remaining.isEmpty();
+    }
+
+    private boolean matchesShaped(ShapedRecipe recipe, ItemStack[] items) {
+        String[] shape = recipe.getShape();
+        Map<Character, RecipeChoice> choices = recipe.getChoiceMap();
+        int width = 0;
+        for (String row : shape) width = Math.max(width, row.length());
+        int height = shape.length;
+        // Paper's crafting API receives a 3x3 matrix. Try every legal translation of the recipe.
+        for (int oy = 0; oy <= 3 - height; oy++) {
+            for (int ox = 0; ox <= 3 - width; ox++) {
+                boolean ok = true;
+                for (int y = 0; y < 3 && ok; y++) {
+                    for (int x = 0; x < 3; x++) {
+                        ItemStack item = items[y * 3 + x];
+                        int sx = x - ox, sy = y - oy;
+                        char symbol = (sy >= 0 && sy < height && sx >= 0 && sx < shape[sy].length())
+                                ? shape[sy].charAt(sx) : ' ';
+                        RecipeChoice choice = symbol == ' ' ? null : choices.get(symbol);
+                        if (choice == null ? !emptyCraftSlot(item) : !choiceMatches(choice, item)) { ok = false; break; }
+                    }
+                }
+                if (ok) return true;
+            }
+        }
+        return false;
     }
 
     @Override
     public @NotNull org.bukkit.inventory.ItemCraftResult craftItemResult(@NotNull ItemStack[] items,
             @NotNull World world) {
-        return null;
+        return craftItemResult(items, world, null);
     }
 
     @Override
     public @NotNull org.bukkit.inventory.ItemCraftResult craftItemResult(@NotNull ItemStack[] items,
-            @NotNull World world, @NotNull Player player) {
-        return null;
+            @NotNull World world, @Nullable Player player) {
+        Objects.requireNonNull(items, "items");
+        Objects.requireNonNull(world, "world");
+        ItemStack result = craftItem(items, world, player);
+        final ItemStack crafted = result == null ? new ItemStack(Material.AIR) : result;
+        final List<ItemStack> remaining = java.util.stream.IntStream.range(0, items.length)
+                .mapToObj(i -> new ItemStack(Material.AIR)).toList();
+        return (org.bukkit.inventory.ItemCraftResult) java.lang.reflect.Proxy.newProxyInstance(
+                org.bukkit.inventory.ItemCraftResult.class.getClassLoader(),
+                new Class<?>[] { org.bukkit.inventory.ItemCraftResult.class }, (proxy, method, args) -> switch (method.getName()) {
+                    case "getResult", "result" -> crafted.clone();
+                    case "getRemainingItems", "remainingItems" -> remaining;
+                    default -> defaultValue(method.getReturnType());
+                });
     }
 
     @Override
     public @Nullable ItemStack craftItem(@NotNull ItemStack[] items, @NotNull World world) {
-        return null;
+        return craftItem(items, world, null);
     }
 
     @Override
-    public @Nullable ItemStack craftItem(@NotNull ItemStack[] items, @NotNull World world, @NotNull Player player) {
-        return null;
+    public @Nullable ItemStack craftItem(@NotNull ItemStack[] items, @NotNull World world, @Nullable Player player) {
+        Recipe recipe = getCraftingRecipe(items, world);
+        return recipe == null ? null : recipe.getResult().clone();
     }
 
     @Override
     public @Nullable Recipe getCraftingRecipe(@NotNull ItemStack[] items, @NotNull World world) {
+        Objects.requireNonNull(items, "items");
+        Objects.requireNonNull(world, "world");
+        if (items.length != 9) throw new IllegalArgumentException("Crafting matrix must contain exactly 9 items");
+        for (Recipe recipe : runtimeRecipes.values()) {
+            if (recipe instanceof ShapedRecipe shaped && matchesShaped(shaped, items)) return recipe;
+            if (recipe instanceof ShapelessRecipe shapeless && matchesShapeless(shapeless, items)) return recipe;
+        }
         return null;
     }
 
     @Override
     public @NotNull World createWorld(@NotNull WorldCreator creator) {
-        return null;
+        Objects.requireNonNull(creator, "creator");
+        World existing = getWorld(creator.name());
+        if (existing != null) return existing;
+        // Dynamic world creation requires constructing a ServerLevel with the active loader's
+        // registry/dimension lifecycle. Keep that operation below the shared Bukkit layer.
+        Object bridge = console instanceof io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge b ? b : null;
+        if (bridge != null) {
+            Object created = invokeCompatible(bridge, "lunararc$createWorld", creator);
+            if (created instanceof World world) return world;
+            if (created instanceof net.minecraft.server.level.ServerLevel level) return craftWorld(level);
+        }
+        throw new IllegalStateException("This LunarArc platform adapter does not expose dynamic world creation yet: " + creator.name());
     }
 
     @Override
     public boolean unloadWorld(@NotNull String name, boolean save) {
-        return false;
+        World world = getWorld(Objects.requireNonNull(name, "name"));
+        return world != null && unloadWorld(world, save);
     }
 
     @Override
     public boolean unloadWorld(@NotNull World world, boolean save) {
+        Objects.requireNonNull(world, "world");
+        net.minecraft.server.level.ServerLevel level = null;
+        for (net.minecraft.server.level.ServerLevel candidate : console.getAllLevels()) {
+            if (craftWorld(candidate).getUID().equals(world.getUID())) { level = candidate; break; }
+        }
+        if (level == null || level.dimension() == net.minecraft.world.level.Level.OVERWORLD) return false;
+        if (!world.getPlayers().isEmpty()) return false;
+        if (save) {
+            try { level.save(null, true, false); }
+            catch (Throwable ex) { logger.log(java.util.logging.Level.WARNING, "Failed to save world " + world.getName(), ex); return false; }
+        }
+        try {
+            java.lang.reflect.Field levelsField = MinecraftServer.class.getDeclaredField("levels");
+            levelsField.setAccessible(true);
+            Object levels = levelsField.get(console);
+            if (levels instanceof Map<?, ?> raw) {
+                @SuppressWarnings("unchecked") Map<Object,Object> map = (Map<Object,Object>) raw;
+                Object removed = map.remove(level.dimension());
+                if (removed != null) {
+                    worldCache.remove(world.getUID());
+                    return true;
+                }
+            }
+        } catch (ReflectiveOperationException ex) {
+            logger.log(java.util.logging.Level.WARNING, "Unable to remove world from live server registry: " + world.getName(), ex);
+        }
         return false;
     }
 
     @Override
     public @NotNull WorldBorder createWorldBorder() {
-        return null;
+        return new CraftWorldBorder(new net.minecraft.world.level.border.WorldBorder());
     }
 
     @Override
@@ -1885,6 +2585,11 @@ public class CraftServer implements Server {
 
     @Override
     public void updateResources() {
+        try {
+            playerList.getClass().getMethod("reloadResources").invoke(playerList);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Unable to refresh server resources for connected players", ex);
+        }
     }
 
     public @NotNull FeatureFlagConfig getFeatureFlagConfig() {

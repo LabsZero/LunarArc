@@ -64,10 +64,7 @@ body:
     attributes:
       label: Java Version
       description: Output of `java --version` in the command line
-      placeholder: |
-        openjdk 21.0.5 2024-10-15 LTS
-        OpenJDK Runtime Environment Temurin-21.0.5+11 (build 21.0.5+11-LTS)
-        OpenJDK 64-Bit Server VM Temurin-21.0.5+11 (build 21.0.5+11-LTS, mixed mode, sharing)
+      placeholder: Paste the complete output of `java --version` here.
     validations:
       required: true
 

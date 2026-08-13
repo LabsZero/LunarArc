@@ -19,7 +19,9 @@ import java.util.UUID;
 
 public class CraftConsoleCommandSender implements ConsoleCommandSender {
     private final MinecraftServer server;
-    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger("Console");
+    private static final String ANSI_RESET = "\u001B[0m";
+    private static final boolean ANSI_ENABLED = detectAnsi();
+    private static final Object CONSOLE_LOCK = new Object();
 
     public CraftConsoleCommandSender(MinecraftServer server) {
         this.server = server;
@@ -34,12 +36,15 @@ public class CraftConsoleCommandSender implements ConsoleCommandSender {
 
     @Override
     public void sendMessage(@NotNull String message) {
-        logger.info(translate(message));
+        writeConsole(message);
     }
 
     @Override
     public void sendMessage(net.kyori.adventure.text.Component message) {
-        sendMessage(net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+        // Preserve Adventure styling in the terminal instead of flattening it through
+        // the SLF4J Console logger. legacySection retains colours/decorations, which
+        // translateLegacy converts to ANSI (including 24-bit RGB).
+        writeConsole(net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
                 .legacySection().serialize(message));
     }
 
@@ -50,37 +55,168 @@ public class CraftConsoleCommandSender implements ConsoleCommandSender {
         sendMessage(message);
     }
 
-    private String translate(String text) {
-        if (text == null)
-            return null;
+    private static void writeConsole(String text) {
+        if (text == null) {
+            return;
+        }
 
-        // Handle hex colors: <#RRGGBB> or &x&r&r&g&g&b&b or §x§r§r§g§g§b§b
-        // For console, we just map them to the closest standard color or strip them if not supported
-        // But for now, we just handle the standard § codes
-        
-        return text.replace("§0", "\u001B[30m") // Black
-                .replace("§1", "\u001B[34m") // Dark Blue
-                .replace("§2", "\u001B[32m") // Dark Green
-                .replace("§3", "\u001B[36m") // Dark Aqua
-                .replace("§4", "\u001B[31m") // Dark Red
-                .replace("§5", "\u001B[35m") // Dark Purple
-                .replace("§6", "\u001B[33m") // Gold
-                .replace("§7", "\u001B[37m") // Gray
-                .replace("§8", "\u001B[90m") // Dark Gray
-                .replace("§9", "\u001B[94m") // Blue
-                .replace("§a", "\u001B[92m") // Green
-                .replace("§b", "\u001B[96m") // Aqua
-                .replace("§c", "\u001B[91m") // Red
-                .replace("§d", "\u001B[95m") // Light Purple
-                .replace("§e", "\u001B[93m") // Yellow
-                .replace("§f", "\u001B[97m") // White
-                .replace("§k", "") // Obfuscated (Skip)
-                .replace("§l", "\u001B[1m") // Bold
-                .replace("§m", "\u001B[9m") // Strikethrough
-                .replace("§n", "\u001B[4m") // Underline
-                .replace("§o", "\u001B[3m") // Italic
-                .replace("§r", "\u001B[0m") // Reset
-                + "\u001B[0m"; // Force reset at end
+        String rendered = ANSI_ENABLED ? translateLegacy(text) : stripLegacy(text);
+        // Plugin console output is intentionally written directly. Sending it through
+        // SLF4J produced a second Minecraft/FML prefix such as
+        // "[Server thread/INFO] [Console/]", which made normal plugin output noisy.
+        synchronized (CONSOLE_LOCK) {
+            System.out.println(rendered);
+        }
+    }
+
+    private static boolean detectAnsi() {
+        String override = System.getProperty("lunararc.console.ansi");
+        if (override != null) {
+            return Boolean.parseBoolean(override);
+        }
+        if (System.getenv("NO_COLOR") != null) {
+            return false;
+        }
+        String term = System.getenv("TERM");
+        if (term != null && "dumb".equalsIgnoreCase(term)) {
+            return false;
+        }
+        // Windows 10/11 terminals and the common server consoles used with Java 21
+        // support VT/ANSI sequences. Users can force plain output with
+        // -Dlunararc.console.ansi=false.
+        return true;
+    }
+
+    private static String translateLegacy(String text) {
+        StringBuilder out = new StringBuilder(text.length() + 32);
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if ((ch == '§' || ch == '&') && i + 1 < text.length()) {
+                char code = Character.toLowerCase(text.charAt(i + 1));
+
+                // Bukkit/Bungee 1.16+ RGB sequence: §x§R§R§G§G§B§B
+                if (code == 'x') {
+                    String hex = readLegacyHex(text, i);
+                    if (hex != null) {
+                        int rgb = Integer.parseInt(hex, 16);
+                        out.append("\u001B[38;2;")
+                                .append((rgb >> 16) & 0xff).append(';')
+                                .append((rgb >> 8) & 0xff).append(';')
+                                .append(rgb & 0xff).append('m');
+                        i += 13;
+                        continue;
+                    }
+                }
+
+                // Common plugin shorthand: &#RRGGBB / §#RRGGBB
+                if (code == '#' && i + 7 < text.length()) {
+                    String hex = text.substring(i + 2, i + 8);
+                    if (isHex(hex)) {
+                        int rgb = Integer.parseInt(hex, 16);
+                        out.append("\u001B[38;2;")
+                                .append((rgb >> 16) & 0xff).append(';')
+                                .append((rgb >> 8) & 0xff).append(';')
+                                .append(rgb & 0xff).append('m');
+                        i += 7;
+                        continue;
+                    }
+                }
+
+                String ansi = ansiFor(code);
+                if (ansi != null) {
+                    out.append(ansi);
+                    i++;
+                    continue;
+                }
+            }
+            out.append(ch);
+        }
+        if (out.length() > 0) {
+            out.append(ANSI_RESET);
+        }
+        return out.toString();
+    }
+
+    private static String stripLegacy(String text) {
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if ((ch == '§' || ch == '&') && i + 1 < text.length()) {
+                char code = Character.toLowerCase(text.charAt(i + 1));
+                if (code == 'x' && readLegacyHex(text, i) != null) {
+                    i += 13;
+                    continue;
+                }
+                if (code == '#' && i + 7 < text.length() && isHex(text.substring(i + 2, i + 8))) {
+                    i += 7;
+                    continue;
+                }
+                if (ansiFor(code) != null) {
+                    i++;
+                    continue;
+                }
+            }
+            out.append(ch);
+        }
+        return out.toString();
+    }
+
+    private static String readLegacyHex(String text, int start) {
+        if (start + 13 >= text.length()) {
+            return null;
+        }
+        StringBuilder hex = new StringBuilder(6);
+        for (int n = 0; n < 6; n++) {
+            int marker = start + 2 + (n * 2);
+            int digit = marker + 1;
+            char markerChar = text.charAt(marker);
+            char digitChar = text.charAt(digit);
+            if ((markerChar != '§' && markerChar != '&') || Character.digit(digitChar, 16) < 0) {
+                return null;
+            }
+            hex.append(digitChar);
+        }
+        return hex.toString();
+    }
+
+    private static boolean isHex(String value) {
+        if (value.length() != 6) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (Character.digit(value.charAt(i), 16) < 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String ansiFor(char code) {
+        return switch (code) {
+            case '0' -> "\u001B[30m";
+            case '1' -> "\u001B[34m";
+            case '2' -> "\u001B[32m";
+            case '3' -> "\u001B[36m";
+            case '4' -> "\u001B[31m";
+            case '5' -> "\u001B[35m";
+            case '6' -> "\u001B[33m";
+            case '7' -> "\u001B[37m";
+            case '8' -> "\u001B[90m";
+            case '9' -> "\u001B[94m";
+            case 'a' -> "\u001B[92m";
+            case 'b' -> "\u001B[96m";
+            case 'c' -> "\u001B[91m";
+            case 'd' -> "\u001B[95m";
+            case 'e' -> "\u001B[93m";
+            case 'f' -> "\u001B[97m";
+            case 'k' -> ""; // terminal-safe: do not emulate obfuscated text
+            case 'l' -> "\u001B[1m";
+            case 'm' -> "\u001B[9m";
+            case 'n' -> "\u001B[4m";
+            case 'o' -> "\u001B[3m";
+            case 'r' -> ANSI_RESET;
+            default -> null;
+        };
     }
 
     @Override

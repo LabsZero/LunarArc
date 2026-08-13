@@ -50,6 +50,11 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         return (EntityBridge) entity;
     }
 
+    /** Returns the live native entity backing this Bukkit wrapper. */
+    public Entity getHandle() {
+        return entity;
+    }
+
     // --- Identity and Basic Info ---
 
     @Override
@@ -471,7 +476,15 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
     @Override public void setFireTicks(int ticks) { ((EntityBridge) entity).lunararc$setRemainingFireTicks(ticks); }
     @Override public int getMaxFireTicks() { return 1000; }
     @Override public int getFireTicks() { return ((EntityBridge) entity).lunararc$getRemainingFireTicks(); }
-    @Override public @NotNull List<org.bukkit.entity.Entity> getNearbyEntities(double x, double y, double z) { return Collections.emptyList(); }
+    @Override public @NotNull List<org.bukkit.entity.Entity> getNearbyEntities(double x, double y, double z) {
+        java.util.List<org.bukkit.entity.Entity> result = new java.util.ArrayList<>();
+        net.minecraft.world.phys.AABB box = entity.getBoundingBox().inflate(x, y, z);
+        for (net.minecraft.world.entity.Entity candidate : entity.level().getEntities(entity, box)) {
+            org.bukkit.entity.Entity bukkit = getEntity(server, candidate);
+            if (bukkit != null) result.add(bukkit);
+        }
+        return result;
+    }
     @Override public void sendMessage(@Nullable UUID sender, @NotNull String... message) {}
     @Override public void sendMessage(@Nullable UUID sender, @NotNull String message) {}
     @Override public void sendMessage(@NotNull String... message) {}
@@ -630,12 +643,18 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
 
     @Override
     public boolean wouldCollideUsing(@NotNull BoundingBox boundingBox) {
-        return false;
+        net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
+                boundingBox.getMinX(), boundingBox.getMinY(), boundingBox.getMinZ(),
+                boundingBox.getMaxX(), boundingBox.getMaxY(), boundingBox.getMaxZ());
+        return !entity.level().noCollision(entity, box);
     }
 
     @Override
     public boolean collidesAt(@NotNull Location location) {
-        return false;
+        if (location.getWorld() != getWorld()) return false;
+        net.minecraft.world.phys.AABB box = entity.getBoundingBox().move(
+                location.getX() - entity.getX(), location.getY() - entity.getY(), location.getZ() - entity.getZ());
+        return !entity.level().noCollision(entity, box);
     }
 
     @Override

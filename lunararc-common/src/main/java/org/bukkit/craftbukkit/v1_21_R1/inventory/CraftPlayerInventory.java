@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Objects;
 
 /**
  * Bukkit PlayerInventory backed by the NMS Inventory.
@@ -27,7 +28,7 @@ import java.util.ListIterator;
  *  39    helmet
  *  40    off-hand
  */
-public class CraftPlayerInventory implements PlayerInventory {
+public class CraftPlayerInventory implements PlayerInventory, org.bukkit.inventory.EntityEquipment {
 
     private static final int SIZE = 41;
     private final Inventory handle;
@@ -53,13 +54,21 @@ public class CraftPlayerInventory implements PlayerInventory {
     }
 
     private void setNms(int slot, net.minecraft.world.item.ItemStack item) {
+        setNmsNoSync(slot, item);
+        finishMutation();
+    }
+
+    private void setNmsNoSync(int slot, net.minecraft.world.item.ItemStack item) {
         if (item == null) item = net.minecraft.world.item.ItemStack.EMPTY;
-        if (slot < 36) { handle.items.set(slot, item); }
+        if (slot >= 0 && slot < 36) { handle.items.set(slot, item); }
         else if (slot == 36) { handle.armor.set(0, item); }
         else if (slot == 37) { handle.armor.set(1, item); }
         else if (slot == 38) { handle.armor.set(2, item); }
         else if (slot == 39) { handle.armor.set(3, item); }
         else if (slot == 40) { handle.offhand.set(0, item); }
+    }
+
+    private void finishMutation() {
         handle.setChanged();
         syncToClient();
     }
@@ -84,9 +93,13 @@ public class CraftPlayerInventory implements PlayerInventory {
     @Override public @Nullable ItemStack getBoots()       { return CraftItemStack.asBukkitCopy(nms(36)); }
 
     @Override public void setHelmet(@Nullable ItemStack helmet)         { setNms(39, CraftItemStack.asNMSCopy(helmet)); }
+    public void setHelmet(@Nullable ItemStack helmet, boolean silent) { setHelmet(helmet); }
     @Override public void setChestplate(@Nullable ItemStack chestplate) { setNms(38, CraftItemStack.asNMSCopy(chestplate)); }
+    public void setChestplate(@Nullable ItemStack chestplate, boolean silent) { setChestplate(chestplate); }
     @Override public void setLeggings(@Nullable ItemStack leggings)     { setNms(37, CraftItemStack.asNMSCopy(leggings)); }
+    public void setLeggings(@Nullable ItemStack leggings, boolean silent) { setLeggings(leggings); }
     @Override public void setBoots(@Nullable ItemStack boots)           { setNms(36, CraftItemStack.asNMSCopy(boots)); }
+    public void setBoots(@Nullable ItemStack boots, boolean silent) { setBoots(boots); }
 
     @Override
     public @NotNull ItemStack[] getArmorContents() {
@@ -115,6 +128,7 @@ public class CraftPlayerInventory implements PlayerInventory {
     @Override public void setItemInMainHand(@Nullable ItemStack item) {
         setNms(handle.selected, CraftItemStack.asNMSCopy(item));
     }
+    public void setItemInMainHand(@Nullable ItemStack item, boolean silent) { setItemInMainHand(item); }
 
     @Override public @NotNull ItemStack getItemInOffHand() {
         net.minecraft.world.item.ItemStack nmsItem = nms(40);
@@ -126,14 +140,41 @@ public class CraftPlayerInventory implements PlayerInventory {
     @Override public void setItemInOffHand(@Nullable ItemStack item) {
         setNms(40, CraftItemStack.asNMSCopy(item));
     }
+    public void setItemInOffHand(@Nullable ItemStack item, boolean silent) { setItemInOffHand(item); }
 
     @Override public @NotNull ItemStack getItemInHand() { return getItemInMainHand(); }
     @Override public void setItemInHand(@Nullable ItemStack stack) { setItemInMainHand(stack); }
 
     @Override public int getHeldItemSlot() { return handle.selected; }
-    @Override public void setHeldItemSlot(int slot) { handle.selected = slot; }
+    @Override public void setHeldItemSlot(int slot) {
+        if (slot < 0 || slot > 8) throw new IllegalArgumentException("Held item slot must be between 0 and 8");
+        handle.selected = slot;
+        if (owner instanceof org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer cp && cp.getHandle().connection != null) {
+            cp.getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket(slot));
+        }
+        syncToClient();
+    }
 
     @Override public @Nullable Player getHolder() { return owner; }
+
+    // Player equipment is the player inventory itself in CraftBukkit/Paper.
+    // Drop chances are mob-only state; players do not expose configurable equipment drop chances.
+    @Override public float getDropChance(@NotNull EquipmentSlot slot) { Objects.requireNonNull(slot, "slot"); return 1.0F; }
+    @Override public void setDropChance(@NotNull EquipmentSlot slot, float chance) { throw new UnsupportedOperationException("Cannot set equipment drop chance for players"); }
+    @Override public float getItemInMainHandDropChance() { return getDropChance(EquipmentSlot.HAND); }
+    @Override public void setItemInMainHandDropChance(float chance) { setDropChance(EquipmentSlot.HAND, chance); }
+    @Override public float getItemInOffHandDropChance() { return getDropChance(EquipmentSlot.OFF_HAND); }
+    @Override public void setItemInOffHandDropChance(float chance) { setDropChance(EquipmentSlot.OFF_HAND, chance); }
+    @Override public float getItemInHandDropChance() { return getItemInMainHandDropChance(); }
+    @Override public void setItemInHandDropChance(float chance) { setItemInMainHandDropChance(chance); }
+    @Override public float getHelmetDropChance() { return getDropChance(EquipmentSlot.HEAD); }
+    @Override public void setHelmetDropChance(float chance) { setDropChance(EquipmentSlot.HEAD, chance); }
+    @Override public float getChestplateDropChance() { return getDropChance(EquipmentSlot.CHEST); }
+    @Override public void setChestplateDropChance(float chance) { setDropChance(EquipmentSlot.CHEST, chance); }
+    @Override public float getLeggingsDropChance() { return getDropChance(EquipmentSlot.LEGS); }
+    @Override public void setLeggingsDropChance(float chance) { setDropChance(EquipmentSlot.LEGS, chance); }
+    @Override public float getBootsDropChance() { return getDropChance(EquipmentSlot.FEET); }
+    @Override public void setBootsDropChance(float chance) { setDropChance(EquipmentSlot.FEET, chance); }
 
     // Not @Override — may not be abstract in all 1.21.1 builds
     public @Nullable org.bukkit.entity.HumanEntity getHolder(boolean useSnapshot) { return owner; }
@@ -154,27 +195,33 @@ public class CraftPlayerInventory implements PlayerInventory {
         if (items != null && items.length > 0) setItemInOffHand(items[0]);
     }
 
-    @Override public @Nullable ItemStack getItem(@NotNull EquipmentSlot slot) {
-        return switch (slot) {
+    @Override public @NotNull ItemStack getItem(@NotNull EquipmentSlot slot) {
+        if (slot == null) throw new IllegalArgumentException("slot must not be null");
+        ItemStack result = switch (slot) {
             case HEAD -> getHelmet();
             case CHEST -> getChestplate();
             case LEGS -> getLeggings();
             case FEET -> getBoots();
             case OFF_HAND -> getItemInOffHand();
-            default -> getItemInMainHand();
+            case HAND -> getItemInMainHand();
+            case BODY -> throw new IllegalArgumentException("BODY is not valid for players!");
         };
+        return result == null ? new CraftItemStack(net.minecraft.world.item.ItemStack.EMPTY) : result;
     }
 
     @Override public void setItem(@NotNull EquipmentSlot slot, @Nullable ItemStack item) {
+        if (slot == null) throw new IllegalArgumentException("slot must not be null");
         switch (slot) {
             case HEAD -> setHelmet(item);
             case CHEST -> setChestplate(item);
             case LEGS -> setLeggings(item);
             case FEET -> setBoots(item);
             case OFF_HAND -> setItemInOffHand(item);
-            default -> setItemInMainHand(item);
+            case HAND -> setItemInMainHand(item);
+            case BODY -> throw new IllegalArgumentException("BODY is not valid for players!");
         }
     }
+    public void setItem(@NotNull EquipmentSlot slot, @Nullable ItemStack item, boolean silent) { setItem(slot, item); }
 
     // -----------------------------------------------------------------------
     // Inventory
@@ -205,13 +252,13 @@ public class CraftPlayerInventory implements PlayerInventory {
             for (int slot = 0; slot < 36 && remaining > 0; slot++) {
                 ItemStack existing = getItem(slot);
                 if (existing == null || existing.getType() == Material.AIR) {
-                    int toPlace = Math.min(remaining, item.getMaxStackSize());
+                    int toPlace = Math.min(remaining, Math.min(item.getMaxStackSize(), getMaxStackSize()));
                     ItemStack placed = item.clone();
                     placed.setAmount(toPlace);
                     setItem(slot, placed);
                     remaining -= toPlace;
                 } else if (existing.isSimilar(item)) {
-                    int space = existing.getMaxStackSize() - existing.getAmount();
+                    int space = Math.min(existing.getMaxStackSize(), getMaxStackSize()) - existing.getAmount();
                     if (space > 0) {
                         int toAdd = Math.min(remaining, space);
                         existing.setAmount(existing.getAmount() + toAdd);
@@ -260,7 +307,17 @@ public class CraftPlayerInventory implements PlayerInventory {
     }
 
     @Override public void setContents(@NotNull ItemStack[] items) {
-        for (int i = 0; i < Math.min(items.length, SIZE); i++) setItem(i, items[i]);
+        if (items.length > SIZE) {
+            throw new IllegalArgumentException("Invalid inventory size; expected " + SIZE + " or less");
+        }
+        // Mutate the live NMS lists directly and perform one client/menu sync at the end.
+        for (int i = 0; i < SIZE; i++) {
+            net.minecraft.world.item.ItemStack value = i < items.length
+                    ? CraftItemStack.asNMSCopy(items[i])
+                    : net.minecraft.world.item.ItemStack.EMPTY;
+            setNmsNoSync(i, value);
+        }
+        finishMutation();
     }
 
     @Override public @NotNull ItemStack[] getStorageContents() {
@@ -270,7 +327,15 @@ public class CraftPlayerInventory implements PlayerInventory {
     }
 
     @Override public void setStorageContents(@NotNull ItemStack[] items) {
-        for (int i = 0; i < Math.min(items.length, 36); i++) setItem(i, items[i]);
+        if (items.length > 36) {
+            throw new IllegalArgumentException("Invalid inventory size; expected 36 or less");
+        }
+        for (int i = 0; i < 36; i++) {
+            setNmsNoSync(i, i < items.length
+                    ? CraftItemStack.asNMSCopy(items[i])
+                    : net.minecraft.world.item.ItemStack.EMPTY);
+        }
+        finishMutation();
     }
 
     @Override public boolean contains(@NotNull Material material) {
@@ -305,7 +370,7 @@ public class CraftPlayerInventory implements PlayerInventory {
         int found = 0;
         for (int i = 0; i < SIZE; i++) {
             ItemStack slot = getItem(i);
-            if (item.isSimilar(slot)) found++;
+            if (slot != null && item.isSimilar(slot)) found += slot.getAmount();
             if (found >= amount) return true;
         }
         return false;
@@ -383,10 +448,15 @@ public class CraftPlayerInventory implements PlayerInventory {
     @Override public void clear(int index) { setItem(index, null); }
 
     @Override public void clear() {
-        for (int i = 0; i < SIZE; i++) setItem(i, null);
+        for (int i = 0; i < SIZE; i++) {
+            setNmsNoSync(i, net.minecraft.world.item.ItemStack.EMPTY);
+        }
+        finishMutation();
     }
 
-    @Override public @NotNull List<HumanEntity> getViewers() { return Collections.emptyList(); }
+    @Override public @NotNull List<HumanEntity> getViewers() {
+        return java.util.Collections.singletonList(owner);
+    }
 
     @Override public @NotNull InventoryType getType() { return InventoryType.PLAYER; }
 
@@ -401,7 +471,11 @@ public class CraftPlayerInventory implements PlayerInventory {
             @Override public int previousIndex() { return cursor - 1; }
             @Override public void remove() { setItem(cursor - 1, null); }
             @Override public void set(ItemStack item) { setItem(cursor - 1, item); }
-            @Override public void add(ItemStack item) {}
+            @Override public void add(ItemStack item) {
+                if (cursor >= SIZE) throw new IllegalStateException("No inventory slot available at iterator cursor");
+                setItem(cursor, item);
+                cursor++;
+            }
         };
     }
 

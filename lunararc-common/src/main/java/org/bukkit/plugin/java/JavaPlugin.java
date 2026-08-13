@@ -27,8 +27,6 @@ import java.util.logging.Level;
  * Hybrid Bridge JavaPlugin implementation.
  */
 public abstract class JavaPlugin extends PluginBase implements org.bukkit.command.TabExecutor {
-    private static final java.util.Map<Class<? extends JavaPlugin>, JavaPlugin> PLUGIN_INSTANCES = new java.util.concurrent.ConcurrentHashMap<>();
-
     private boolean isEnabled = false;
     protected org.bukkit.plugin.PluginLoader loader;
     protected Server server;
@@ -59,7 +57,7 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
     @Override
     public final @NotNull PluginDescriptionFile getDescription() {
         if (description == null) {
-            return new PluginDescriptionFile("Unknown", "0.0.0", "unknown.main");
+            throw new IllegalStateException("Plugin has not been initialized");
         }
         return description;
     }
@@ -74,6 +72,9 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
 
     @Override
     public void reloadConfig() {
+        if (configFile == null) {
+            throw new IllegalStateException("Plugin configuration is not available before plugin initialization");
+        }
         newConfig = YamlConfiguration.loadConfiguration(configFile);
     }
 
@@ -88,6 +89,9 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
 
     @Override
     public void saveDefaultConfig() {
+        if (configFile == null) {
+            throw new IllegalStateException("Plugin configuration is not available before plugin initialization");
+        }
         if (!configFile.exists()) {
             saveResource("config.yml", false);
         }
@@ -209,9 +213,10 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
         this.configFile = new File(dataFolder, "config.yml");
 
         this.lifecycleManager = io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventManager.create();
-        this.loader = (org.bukkit.plugin.PluginLoader) null; // Will be set by caller if needed, but init handles it
-
-        PLUGIN_INSTANCES.put(this.getClass(), this);
+        if (!(classLoader instanceof PluginClassLoader pluginClassLoader)) {
+            throw new IllegalArgumentException("Plugin class loader is not a PluginClassLoader");
+        }
+        this.loader = pluginClassLoader.getPluginLoaderInstance();
     }
 
     @NotNull
@@ -219,32 +224,42 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
         if (clazz == null) {
             throw new IllegalArgumentException("Class cannot be null");
         }
-        JavaPlugin instance = PLUGIN_INSTANCES.get(clazz);
-        if (instance == null) {
-            // Fallback: search for instance by class name if exact class match fails
-            // (common with multiple loaders)
-            for (JavaPlugin jp : PLUGIN_INSTANCES.values()) {
-                if (clazz.isInstance(jp)) {
-                    return clazz.cast(jp);
-                }
-            }
-            throw new IllegalStateException("Plugin is not enabled or not registered: " + clazz.getName());
+        ClassLoader classLoader = clazz.getClassLoader();
+        if (!(classLoader instanceof PluginClassLoader pluginClassLoader)) {
+            throw new IllegalArgumentException(clazz + " is not initialized by " + PluginClassLoader.class.getName());
         }
-        return clazz.cast(instance);
+        JavaPlugin plugin = pluginClassLoader.getPluginInstance();
+        if (plugin == null) {
+            throw new IllegalStateException("Cannot get plugin for " + clazz + " before it is initialized");
+        }
+        return clazz.cast(plugin);
     }
 
-    /**
-     * Non-generic version for bytecode compatibility.
-     */
-    public static JavaPlugin getPlugin(Class<?> clazz, boolean dummy) {
-        return PLUGIN_INSTANCES.get(clazz);
+    @NotNull
+    public static JavaPlugin getProvidingPlugin(@NotNull Class<?> clazz) {
+        if (clazz == null) {
+            throw new IllegalArgumentException("Class cannot be null");
+        }
+        ClassLoader classLoader = clazz.getClassLoader();
+        if (!(classLoader instanceof PluginClassLoader pluginClassLoader)) {
+            throw new IllegalArgumentException(clazz + " is not provided by a plugin");
+        }
+        JavaPlugin plugin = pluginClassLoader.getPluginInstance();
+        if (plugin == null) {
+            throw new IllegalStateException("Cannot get providing plugin for " + clazz + " before it is initialized");
+        }
+        return plugin;
     }
 
     @Nullable
     public org.bukkit.command.PluginCommand getCommand(@NotNull String name) {
         String search = name.toLowerCase(java.util.Locale.ENGLISH);
         org.bukkit.command.Command command = server.getCommandMap().getCommand(search);
-        if (command instanceof org.bukkit.command.PluginCommand pc) {
+        if (command instanceof org.bukkit.command.PluginCommand pc && pc.getPlugin() == this) {
+            return pc;
+        }
+        command = server.getCommandMap().getCommand(description.getName().toLowerCase(java.util.Locale.ENGLISH) + ":" + search);
+        if (command instanceof org.bukkit.command.PluginCommand pc && pc.getPlugin() == this) {
             return pc;
         }
         // Fallback: try to find it in the description if it's not registered yet

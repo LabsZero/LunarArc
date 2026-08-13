@@ -30,9 +30,47 @@ import org.bukkit.block.BlockState;
 
 public class CraftWorld implements World {
     private final ServerLevel world;
+    private final UUID uid;
+    private final CraftWorldBorder worldBorder;
+    private final java.util.concurrent.ConcurrentMap<String, java.util.concurrent.CopyOnWriteArrayList<org.bukkit.metadata.MetadataValue>> metadata = new java.util.concurrent.ConcurrentHashMap<>();
 
     public CraftWorld(ServerLevel world) {
         this.world = world;
+        this.uid = loadOrCreateWorldUid(world);
+        this.worldBorder = new CraftWorldBorder(this);
+    }
+
+    private static UUID loadOrCreateWorldUid(ServerLevel world) {
+        String dim = world.dimension().location().toString();
+        String bukkitName = switch (dim) {
+            case "minecraft:overworld" -> "world";
+            case "minecraft:the_nether" -> "world_nether";
+            case "minecraft:the_end" -> "world_the_end";
+            default -> world.dimension().location().getNamespace() + "_" + world.dimension().location().getPath().replace('/', '_');
+        };
+        java.nio.file.Path uidPath = java.nio.file.Path.of(bukkitName, "uid.dat");
+        try {
+            if (java.nio.file.Files.isRegularFile(uidPath)) {
+                byte[] bytes = java.nio.file.Files.readAllBytes(uidPath);
+                if (bytes.length >= 16) {
+                    java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(bytes);
+                    return new UUID(buf.getLong(), buf.getLong());
+                }
+            }
+            UUID generated = UUID.randomUUID();
+            java.nio.file.Files.createDirectories(uidPath.getParent());
+            java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(16);
+            buf.putLong(generated.getMostSignificantBits()).putLong(generated.getLeastSignificantBits());
+            java.nio.file.Files.write(uidPath, buf.array());
+            return generated;
+        } catch (Throwable ignored) {
+            // Deterministic fallback preserves identity if the filesystem is read-only.
+            return UUID.nameUUIDFromBytes(dim.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
+    public UUID getLegacyDimensionUID() {
+        return UUID.nameUUIDFromBytes(world.dimension().location().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     public ServerLevel getHandle() {
@@ -53,7 +91,7 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull UUID getUID() {
-        return UUID.nameUUIDFromBytes(world.dimension().location().toString().getBytes());
+        return uid;
     }
 
     @Override
@@ -159,7 +197,7 @@ public class CraftWorld implements World {
 
     @Override
     public boolean isChunkLoaded(@NotNull org.bukkit.Chunk chunk) {
-        return false;
+        return chunk.getWorld() == this && isChunkLoaded(chunk.getX(), chunk.getZ());
     }
 
     @Override
@@ -169,15 +207,20 @@ public class CraftWorld implements World {
 
     @Override
     public void loadChunk(int x, int z) {
+        world.getChunk(x, z);
     }
 
     @Override
     public void loadChunk(@NotNull org.bukkit.Chunk chunk) {
+        if (chunk.getWorld() != this) throw new IllegalArgumentException("Chunk belongs to another world");
+        loadChunk(chunk.getX(), chunk.getZ());
     }
 
     @Override
     public boolean loadChunk(int x, int z, boolean generate) {
-        return false;
+        if (!generate && !world.hasChunk(x, z)) return false;
+        world.getChunk(x, z);
+        return true;
     }
 
     @Override
@@ -213,7 +256,7 @@ public class CraftWorld implements World {
 
     @Override
     public boolean isChunkGenerated(int x, int z) {
-        return false;
+        return world.hasChunk(x, z);
     }
 
     @Override
@@ -267,10 +310,15 @@ public class CraftWorld implements World {
 
     @Override
     public void setType(int x, int y, int z, @NotNull Material type) {
+        net.minecraft.resources.ResourceLocation key = net.minecraft.resources.ResourceLocation.withDefaultNamespace(
+                type.name().toLowerCase(java.util.Locale.ROOT));
+        net.minecraft.world.level.block.Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(key);
+        if (block != null) world.setBlock(new net.minecraft.core.BlockPos(x, y, z), block.defaultBlockState(), 3);
     }
 
     @Override
     public void setType(@NotNull Location location, @NotNull Material type) {
+        setType(location.getBlockX(), location.getBlockY(), location.getBlockZ(), type);
     }
 
     @Override
@@ -395,26 +443,57 @@ public class CraftWorld implements World {
 
     @Override
     public int getPlayerCount() {
-        return 0;
+        return world.players().size();
     }
 
     @Override
     public int getChunkCount() {
-        return 0;
+        return world.getChunkSource().getLoadedChunksCount();
     }
 
     @Override
     public @NotNull Collection<org.bukkit.Chunk> getForceLoadedChunks() {
-        return Collections.emptyList();
+        java.util.List<org.bukkit.Chunk> chunks = new java.util.ArrayList<>();
+        try {
+            Object forced = world.getClass().getMethod("getForcedChunks").invoke(world);
+            if (forced instanceof Iterable<?> iterable) {
+                for (Object value : iterable) {
+                    if (!(value instanceof Number number)) continue;
+                    net.minecraft.world.level.ChunkPos pos = new net.minecraft.world.level.ChunkPos(number.longValue());
+                    chunks.add(getChunkAt(pos.x, pos.z));
+                }
+            }
+        } catch (ReflectiveOperationException ignored) {
+            // Loader-specific ServerLevel implementations may not expose this method publicly.
+        }
+        return java.util.List.copyOf(chunks);
     }
 
     @Override
     public void setChunkForceLoaded(int x, int z, boolean forced) {
+        try {
+            world.getClass().getMethod("setChunkForced", int.class, int.class, boolean.class).invoke(world, x, z, forced);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("The active Minecraft backend does not expose forced-chunk control", e);
+        }
     }
 
     @Override
     public boolean isChunkForceLoaded(int x, int z) {
-        return false;
+        long packed = net.minecraft.world.level.ChunkPos.asLong(x, z);
+        try {
+            Object forced = world.getClass().getMethod("getForcedChunks").invoke(world);
+            if (forced instanceof java.util.Set<?> set) return set.contains(packed);
+            try {
+                java.lang.reflect.Method contains = forced.getClass().getMethod("contains", long.class);
+                Object result = contains.invoke(forced, packed);
+                return result instanceof Boolean b && b;
+            } catch (ReflectiveOperationException ignored) {
+                return false;
+            }
+        } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
     }
 
     @Override
@@ -473,12 +552,25 @@ public class CraftWorld implements World {
 
     @Override
     public boolean hasCollisionsIn(@NotNull BoundingBox boundingBox) {
-        return false;
+        net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
+                boundingBox.getMinX(), boundingBox.getMinY(), boundingBox.getMinZ(),
+                boundingBox.getMaxX(), boundingBox.getMaxY(), boundingBox.getMaxZ());
+        return !world.noCollision(box);
     }
 
     @Override
     public boolean lineOfSightExists(@NotNull Location from, @NotNull Location to) {
-        return true;
+        if (from.getWorld() != this || to.getWorld() != this) {
+            throw new IllegalArgumentException("Both locations must be in this world");
+        }
+        net.minecraft.world.phys.Vec3 start = new net.minecraft.world.phys.Vec3(from.getX(), from.getY(), from.getZ());
+        net.minecraft.world.phys.Vec3 end = new net.minecraft.world.phys.Vec3(to.getX(), to.getY(), to.getZ());
+        net.minecraft.world.phys.BlockHitResult hit = world.clip(new net.minecraft.world.level.ClipContext(
+                start, end,
+                net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                net.minecraft.world.level.ClipContext.Fluid.NONE,
+                net.minecraft.world.phys.shapes.CollisionContext.empty()));
+        return hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS;
     }
 
     @Override
@@ -508,21 +600,27 @@ public class CraftWorld implements World {
 
     @Override
     public long getTime() {
-        return world.getDayTime();
+        return Math.floorMod(world.getDayTime(), 24000L);
     }
 
     @Override
     public void setTime(long time) {
-        world.setDayTime(time);
+        long current = world.getDayTime();
+        long currentDay = Math.floorDiv(current, 24000L);
+        long requested = Math.floorMod(time, 24000L);
+        long next = currentDay * 24000L + requested;
+        if (next < current) next += 24000L;
+        world.setDayTime(next);
     }
 
     @Override
     public long getFullTime() {
-        return world.getGameTime();
+        return world.getDayTime();
     }
 
     @Override
     public void setFullTime(long time) {
+        world.setDayTime(time);
     }
 
     @Override
@@ -547,6 +645,9 @@ public class CraftWorld implements World {
 
     @Override
     public void setWeatherDuration(int duration) {
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            data.setRainTime(Math.max(0, duration));
+        }
     }
 
     @Override
@@ -563,7 +664,9 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull MoonPhase getMoonPhase() {
-        return MoonPhase.FULL_MOON;
+        MoonPhase[] phases = MoonPhase.values();
+        int index = (int) Math.floorMod(getFullTime() / 24000L, 8L);
+        return phases[index % phases.length];
     }
 
     @Override
@@ -601,6 +704,27 @@ public class CraftWorld implements World {
 
     @Override
     public void setDifficulty(@NotNull Difficulty difficulty) {
+        if (difficulty == null) throw new IllegalArgumentException("difficulty cannot be null");
+        net.minecraft.world.Difficulty nms = switch (difficulty) {
+            case PEACEFUL -> net.minecraft.world.Difficulty.PEACEFUL;
+            case EASY -> net.minecraft.world.Difficulty.EASY;
+            case HARD -> net.minecraft.world.Difficulty.HARD;
+            default -> net.minecraft.world.Difficulty.NORMAL;
+        };
+        try {
+            java.lang.reflect.Method method = world.getServer().getClass().getMethod(
+                    "setDifficulty", net.minecraft.server.level.ServerLevel.class, net.minecraft.world.Difficulty.class, boolean.class);
+            method.invoke(world.getServer(), world, nms, true);
+        } catch (ReflectiveOperationException primary) {
+            try {
+                Object levelData = world.getLevelData();
+                java.lang.reflect.Method method = levelData.getClass().getMethod("setDifficulty", net.minecraft.world.Difficulty.class);
+                method.invoke(levelData, nms);
+            } catch (ReflectiveOperationException fallback) {
+                primary.addSuppressed(fallback);
+                throw new IllegalStateException("Unable to change world difficulty on the active backend", primary);
+            }
+        }
     }
 
     @Override
@@ -611,7 +735,7 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull WorldBorder getWorldBorder() {
-        return null;
+        return worldBorder;
     }
 
     @Override
@@ -822,20 +946,29 @@ public class CraftWorld implements World {
 
     @Override
     public void setMetadata(@NotNull String metadataKey, @NotNull org.bukkit.metadata.MetadataValue newMetadataValue) {
+        metadata.computeIfAbsent(metadataKey, ignored -> new java.util.concurrent.CopyOnWriteArrayList<>())
+                .removeIf(value -> value.getOwningPlugin() == newMetadataValue.getOwningPlugin());
+        metadata.get(metadataKey).add(newMetadataValue);
     }
 
     @Override
     public @NotNull List<org.bukkit.metadata.MetadataValue> getMetadata(@NotNull String metadataKey) {
-        return Collections.emptyList();
+        var values = metadata.get(metadataKey);
+        return values == null ? Collections.emptyList() : java.util.List.copyOf(values);
     }
 
     @Override
     public boolean hasMetadata(@NotNull String metadataKey) {
-        return false;
+        var values = metadata.get(metadataKey);
+        return values != null && !values.isEmpty();
     }
 
     @Override
     public void removeMetadata(@NotNull String metadataKey, @NotNull org.bukkit.plugin.Plugin owningPlugin) {
+        var values = metadata.get(metadataKey);
+        if (values == null) return;
+        values.removeIf(value -> value.getOwningPlugin() == owningPlugin);
+        if (values.isEmpty()) metadata.remove(metadataKey, values);
     }
 
     private org.bukkit.persistence.PersistentDataContainer persistentDataContainer;
@@ -914,11 +1047,13 @@ public class CraftWorld implements World {
 
     @Override
     public void playSound(@NotNull org.bukkit.entity.Entity entity, @NotNull String sound, float volume, float pitch) {
+        playSound(entity.getLocation(), sound, org.bukkit.SoundCategory.MASTER, volume, pitch, world.random.nextLong());
     }
 
     @Override
     public void playSound(@NotNull org.bukkit.entity.Entity entity, @NotNull org.bukkit.Sound sound, float volume,
             float pitch) {
+        playSound(entity.getLocation(), sound, volume, pitch);
     }
 
     @Override
@@ -1418,11 +1553,17 @@ public class CraftWorld implements World {
 
     @Override
     public int getClearWeatherDuration() {
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            return data.getClearWeatherTime();
+        }
         return 0;
     }
 
     @Override
     public void setClearWeatherDuration(int duration) {
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            data.setClearWeatherTime(Math.max(0, duration));
+        }
     }
 
     @Override
@@ -1432,16 +1573,22 @@ public class CraftWorld implements World {
 
     @Override
     public void setThunderDuration(int duration) {
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            data.setThunderTime(Math.max(0, duration));
+        }
     }
 
     @Override
     public int getThunderDuration() {
+        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
+            return data.getThunderTime();
+        }
         return 0;
     }
 
     @Override
     public long getGameTime() {
-        return 0;
+        return world.getGameTime();
     }
 
     @Override
@@ -1451,17 +1598,21 @@ public class CraftWorld implements World {
 
     @Override
     public boolean setSpawnLocation(int x, int y, int z) {
-        return false;
+        return setSpawnLocation(x, y, z, 0.0F);
     }
 
     @Override
     public boolean setSpawnLocation(int x, int y, int z, float angle) {
-        return false;
+        world.setDefaultSpawnPos(new net.minecraft.core.BlockPos(x, y, z), angle);
+        return true;
     }
 
     @Override
     public boolean setSpawnLocation(@NotNull org.bukkit.Location location) {
-        return false;
+        if (location.getWorld() != null && location.getWorld() != this) {
+            throw new IllegalArgumentException("Spawn location must belong to this world");
+        }
+        return setSpawnLocation(location.getBlockX(), location.getBlockY(), location.getBlockZ(), location.getYaw());
     }
 
     @Override
@@ -1470,7 +1621,18 @@ public class CraftWorld implements World {
             @NotNull org.bukkit.FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks, double raySize,
             @Nullable java.util.function.Predicate<? super org.bukkit.entity.Entity> filter,
             @Nullable java.util.function.Predicate<? super org.bukkit.block.Block> blockFilter) {
-        return null;
+        org.bukkit.Location location = new org.bukkit.Location(this, start.x(), start.y(), start.z());
+        org.bukkit.util.RayTraceResult block = rayTraceBlocks(location, direction, maxDistance, fluidCollisionMode,
+                ignorePassableBlocks);
+        if (block != null && blockFilter != null && block.getHitBlock() != null && !blockFilter.test(block.getHitBlock())) {
+            block = null;
+        }
+        org.bukkit.util.RayTraceResult entity = rayTraceEntities(location, direction, maxDistance, raySize, filter);
+        if (block == null) return entity;
+        if (entity == null) return block;
+        double blockDistance = block.getHitPosition().distanceSquared(location.toVector());
+        double entityDistance = entity.getHitPosition().distanceSquared(location.toVector());
+        return entityDistance < blockDistance ? entity : block;
     }
 
     @Override
@@ -1478,7 +1640,14 @@ public class CraftWorld implements World {
             @NotNull org.bukkit.util.Vector direction, double maxDistance,
             @NotNull org.bukkit.FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks, double raySize,
             @Nullable java.util.function.Predicate<? super org.bukkit.entity.Entity> filter) {
-        return null;
+        org.bukkit.util.RayTraceResult block = rayTraceBlocks(start, direction, maxDistance, fluidCollisionMode,
+                ignorePassableBlocks);
+        org.bukkit.util.RayTraceResult entity = rayTraceEntities(start, direction, maxDistance, raySize, filter);
+        if (block == null) return entity;
+        if (entity == null) return block;
+        double blockDistance = block.getHitPosition().distanceSquared(start.toVector());
+        double entityDistance = entity.getHitPosition().distanceSquared(start.toVector());
+        return entityDistance < blockDistance ? entity : block;
     }
 
     @Override
@@ -1486,60 +1655,108 @@ public class CraftWorld implements World {
             @NotNull org.bukkit.util.Vector direction, double maxDistance,
             @NotNull org.bukkit.FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks,
             @Nullable java.util.function.Predicate<? super org.bukkit.block.Block> filter) {
-        return null;
+        org.bukkit.util.RayTraceResult result = rayTraceBlocks(
+                new org.bukkit.Location(this, start.x(), start.y(), start.z()), direction, maxDistance,
+                fluidCollisionMode, ignorePassableBlocks);
+        return result != null && filter != null && result.getHitBlock() != null && !filter.test(result.getHitBlock())
+                ? null : result;
     }
 
     @Override
     public @Nullable org.bukkit.util.RayTraceResult rayTraceBlocks(@NotNull org.bukkit.Location start,
             @NotNull org.bukkit.util.Vector direction, double maxDistance,
             @NotNull org.bukkit.FluidCollisionMode fluidCollisionMode, boolean ignorePassableBlocks) {
-        return null;
+        if (maxDistance < 0.0D || direction.lengthSquared() == 0.0D) return null;
+        org.bukkit.util.Vector normalized = direction.clone().normalize();
+        net.minecraft.world.phys.Vec3 from = new net.minecraft.world.phys.Vec3(start.getX(), start.getY(), start.getZ());
+        net.minecraft.world.phys.Vec3 to = from.add(normalized.getX() * maxDistance,
+                normalized.getY() * maxDistance, normalized.getZ() * maxDistance);
+        net.minecraft.world.level.ClipContext.Fluid fluid = switch (fluidCollisionMode) {
+            case NEVER -> net.minecraft.world.level.ClipContext.Fluid.NONE;
+            case SOURCE_ONLY -> net.minecraft.world.level.ClipContext.Fluid.SOURCE_ONLY;
+            case ALWAYS -> net.minecraft.world.level.ClipContext.Fluid.ANY;
+        };
+        net.minecraft.world.phys.BlockHitResult hit = world.clip(new net.minecraft.world.level.ClipContext(
+                from, to,
+                ignorePassableBlocks ? net.minecraft.world.level.ClipContext.Block.COLLIDER
+                        : net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                fluid, net.minecraft.world.phys.shapes.CollisionContext.empty()));
+        if (hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS) return null;
+        org.bukkit.block.Block block = getBlockAt(hit.getBlockPos().getX(), hit.getBlockPos().getY(), hit.getBlockPos().getZ());
+        org.bukkit.block.BlockFace face = org.bukkit.block.BlockFace.valueOf(hit.getDirection().name());
+        net.minecraft.world.phys.Vec3 point = hit.getLocation();
+        return new org.bukkit.util.RayTraceResult(new org.bukkit.util.Vector(point.x, point.y, point.z), block, face);
     }
 
     @Override
     public @Nullable org.bukkit.util.RayTraceResult rayTraceBlocks(@NotNull org.bukkit.Location start,
             @NotNull org.bukkit.util.Vector direction, double maxDistance,
             @NotNull org.bukkit.FluidCollisionMode fluidCollisionMode) {
-        return null;
+        return rayTraceBlocks(start, direction, maxDistance, fluidCollisionMode, false);
     }
 
     @Override
     public @Nullable org.bukkit.util.RayTraceResult rayTraceBlocks(@NotNull org.bukkit.Location start,
             @NotNull org.bukkit.util.Vector direction, double maxDistance) {
-        return null;
+        return rayTraceBlocks(start, direction, maxDistance, org.bukkit.FluidCollisionMode.NEVER, false);
     }
 
     @Override
     public @Nullable org.bukkit.util.RayTraceResult rayTraceEntities(@NotNull io.papermc.paper.math.Position start,
             @NotNull org.bukkit.util.Vector direction, double maxDistance, double raySize,
             @Nullable java.util.function.Predicate<? super org.bukkit.entity.Entity> filter) {
-        return null;
+        return rayTraceEntities(new org.bukkit.Location(this, start.x(), start.y(), start.z()), direction,
+                maxDistance, raySize, filter);
     }
 
     @Override
     public @Nullable org.bukkit.util.RayTraceResult rayTraceEntities(@NotNull org.bukkit.Location start,
             @NotNull org.bukkit.util.Vector direction, double maxDistance, double raySize,
             @Nullable java.util.function.Predicate<? super org.bukkit.entity.Entity> filter) {
-        return null;
+        if (maxDistance < 0.0D || direction.lengthSquared() == 0.0D) return null;
+        org.bukkit.util.Vector normalized = direction.clone().normalize();
+        net.minecraft.world.phys.Vec3 from = new net.minecraft.world.phys.Vec3(start.getX(), start.getY(), start.getZ());
+        net.minecraft.world.phys.Vec3 to = from.add(normalized.getX() * maxDistance,
+                normalized.getY() * maxDistance, normalized.getZ() * maxDistance);
+        net.minecraft.world.phys.AABB search = new net.minecraft.world.phys.AABB(from, to).inflate(Math.max(0.0D, raySize) + 1.0D);
+        org.bukkit.craftbukkit.v1_21_R1.CraftServer craftServer =
+                (org.bukkit.craftbukkit.v1_21_R1.CraftServer) org.bukkit.Bukkit.getServer();
+        org.bukkit.entity.Entity bestEntity = null;
+        net.minecraft.world.phys.Vec3 bestPoint = null;
+        double bestDistance = maxDistance * maxDistance;
+        for (net.minecraft.world.entity.Entity candidate : world.getEntities((net.minecraft.world.entity.Entity) null, search)) {
+            org.bukkit.entity.Entity bukkit = org.bukkit.craftbukkit.v1_21_R1.entity.CraftEntity.getEntity(craftServer, candidate);
+            if (bukkit == null || (filter != null && !filter.test(bukkit))) continue;
+            java.util.Optional<net.minecraft.world.phys.Vec3> hit = candidate.getBoundingBox().inflate(raySize).clip(from, to);
+            if (hit.isEmpty()) continue;
+            double distance = hit.get().distanceToSqr(from);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestEntity = bukkit;
+                bestPoint = hit.get();
+            }
+        }
+        return bestEntity == null ? null : new org.bukkit.util.RayTraceResult(
+                new org.bukkit.util.Vector(bestPoint.x, bestPoint.y, bestPoint.z), bestEntity);
     }
 
     @Override
     public @Nullable org.bukkit.util.RayTraceResult rayTraceEntities(@NotNull org.bukkit.Location start,
             @NotNull org.bukkit.util.Vector direction, double maxDistance,
             @Nullable java.util.function.Predicate<? super org.bukkit.entity.Entity> filter) {
-        return null;
+        return rayTraceEntities(start, direction, maxDistance, 0.0D, filter);
     }
 
     @Override
     public @Nullable org.bukkit.util.RayTraceResult rayTraceEntities(@NotNull org.bukkit.Location start,
             @NotNull org.bukkit.util.Vector direction, double maxDistance) {
-        return null;
+        return rayTraceEntities(start, direction, maxDistance, 0.0D, null);
     }
 
     @Override
     public @Nullable org.bukkit.util.RayTraceResult rayTraceEntities(@NotNull org.bukkit.Location start,
             @NotNull org.bukkit.util.Vector direction, double maxDistance, double raySize) {
-        return null;
+        return rayTraceEntities(start, direction, maxDistance, raySize, null);
     }
 
     private java.util.List<org.bukkit.entity.Entity> entitiesInAABB(net.minecraft.world.phys.AABB aabb,

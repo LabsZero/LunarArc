@@ -15,10 +15,9 @@ import java.util.*;
 import java.util.logging.Level;
 
 /**
- * Stub implementation of PaperPluginManagerImpl to satisfy Paper 1.21.1
- * requirements.
- * This class serves as the bridge between legacy Spigot loading and modern
- * Paper loading.
+ * Plugin manager shared by legacy Bukkit/Spigot and modern Paper plugins.
+ * LunarArc keeps dependency ordering, lifecycle, permissions and event dispatch
+ * in this layer so plugin behavior remains independent from the active modloader.
  */
 public class PaperPluginManagerImpl implements PluginManager {
     private final Server server;
@@ -29,6 +28,10 @@ public class PaperPluginManagerImpl implements PluginManager {
     private final Map<String, PluginDescriptionFile> descriptions = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     private final List<Plugin> pluginList = new ArrayList<>();
     private final Map<String, Permission> permissions = new HashMap<>();
+    private final Map<String, Set<org.bukkit.permissions.Permissible>> permissionSubscriptions =
+            new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    private final Map<Boolean, Set<org.bukkit.permissions.Permissible>> defaultPermissionSubscriptions =
+            new HashMap<>();
     private static final Logger logger = LoggerFactory.getLogger("LunarArc");
 
     public PaperPluginManagerImpl(Server server, SimpleCommandMap commandMap,
@@ -41,11 +44,12 @@ public class PaperPluginManagerImpl implements PluginManager {
 
     @Override
     public void callEvent(@NotNull org.bukkit.event.Event event) {
-        // Async events must not be fired on the primary thread; sync events may be
-        // fired from any thread in our hybrid (Mixin injections can run on server or
-        // Netty threads before the server considers itself "primary").
-        if (event.isAsynchronous() && server.isPrimaryThread()) {
-            throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
+        if (event.isAsynchronous()) {
+            if (server.isPrimaryThread()) {
+                throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
+            }
+        } else if (!server.isPrimaryThread()) {
+            throw new IllegalStateException(event.getEventName() + " may only be triggered synchronously.");
         }
 
         HandlerList handlers = event.getHandlers();
@@ -125,7 +129,6 @@ public class PaperPluginManagerImpl implements PluginManager {
 
     @Override
     public Plugin[] loadPlugins(@NotNull java.io.File directory) {
-        logger.info("[LunarArc] Scanning directory for plugins: " + directory.getAbsolutePath());
         if (!directory.isDirectory()) {
             logger.warn("[LunarArc] " + directory.getAbsolutePath() + " is not a directory!");
             return new Plugin[0];
@@ -133,29 +136,23 @@ public class PaperPluginManagerImpl implements PluginManager {
         java.io.File[] files = directory.listFiles(file -> file.isFile()
                 && file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".jar"));
         if (files == null || files.length == 0) {
-            logger.info("[LunarArc] No plugin jars found in " + directory.getAbsolutePath());
             return new Plugin[0];
         }
-        logger.info("[LunarArc] Found " + files.length + " jar files in " + directory.getAbsolutePath());
         java.util.Arrays.sort(files,
                 java.util.Comparator.comparing(java.io.File::getName, String.CASE_INSENSITIVE_ORDER));
         return loadPlugins(files);
     }
 
     public Plugin[] loadPlugins(@NotNull java.io.File[] files) {
-        logger.info("[LunarArc] Loading " + files.length + " plugin jars...");
         java.util.List<Plugin> loaded = new java.util.ArrayList<>();
         java.util.Map<String, PluginCandidate> candidates = discoverPluginCandidates(files);
 
-        logger.info("[LunarArc] Discovered " + candidates.size() + " plugin candidates.");
         java.util.Map<String, String> candidateAliases = buildCandidateAliases(candidates);
         for (PluginCandidate candidate : sortCandidates(candidates, candidateAliases)) {
             try {
-                logger.info("[LunarArc] Attempting to load plugin: " + candidate.file.getName());
                 Plugin plugin = loadPlugin(candidate.file);
                 if (plugin != null) {
                     loaded.add(plugin);
-                    logger.info("[LunarArc] Successfully loaded: " + plugin.getName());
                 }
             } catch (Throwable e) {
                 logger.error("[LunarArc] Could not load plugin from " + candidate.file.getName(), e);
@@ -214,8 +211,13 @@ public class PaperPluginManagerImpl implements PluginManager {
                         long start = System.currentTimeMillis();
                         enablePlugin(plugin);
                         long end = System.currentTimeMillis();
-                        logger.info("[LunarArc] Enabled plugin {} (took {}ms)", plugin.getDescription().getFullName(),
-                                (end - start));
+                        if (plugin.isEnabled()) {
+                            logger.info("[LunarArc] Enabled plugin {} (took {}ms)",
+                                    plugin.getDescription().getFullName(), (end - start));
+                        } else {
+                            logger.warn("[LunarArc] Plugin {} did not remain enabled (took {}ms; see plugin log above)",
+                                    plugin.getDescription().getFullName(), (end - start));
+                        }
                         it.remove();
                         changed = true;
                     } catch (Throwable e) {
@@ -396,34 +398,55 @@ public class PaperPluginManagerImpl implements PluginManager {
 
     @Override
     public void recalculatePermissionDefaults(@NotNull Permission perm) {
+        for (Set<org.bukkit.permissions.Permissible> subscribers : defaultPermissionSubscriptions.values()) {
+            for (org.bukkit.permissions.Permissible permissible : new HashSet<>(subscribers)) {
+                permissible.recalculatePermissions();
+            }
+        }
     }
 
     @Override
     public void subscribeToPermission(@NotNull String permission,
             @NotNull org.bukkit.permissions.Permissible permissible) {
+        permissionSubscriptions
+                .computeIfAbsent(permission, ignored -> Collections.newSetFromMap(new IdentityHashMap<>()))
+                .add(permissible);
     }
 
     @Override
     public void unsubscribeFromPermission(@NotNull String permission,
             @NotNull org.bukkit.permissions.Permissible permissible) {
+        Set<org.bukkit.permissions.Permissible> subscribers = permissionSubscriptions.get(permission);
+        if (subscribers == null) return;
+        subscribers.remove(permissible);
+        if (subscribers.isEmpty()) permissionSubscriptions.remove(permission);
     }
 
     @Override
     public Set<org.bukkit.permissions.Permissible> getPermissionSubscriptions(@NotNull String permission) {
-        return java.util.Collections.emptySet();
+        Set<org.bukkit.permissions.Permissible> subscribers = permissionSubscriptions.get(permission);
+        return subscribers == null ? Collections.emptySet() : Collections.unmodifiableSet(new HashSet<>(subscribers));
     }
 
     @Override
     public void subscribeToDefaultPerms(boolean op, @NotNull org.bukkit.permissions.Permissible permissible) {
+        defaultPermissionSubscriptions
+                .computeIfAbsent(op, ignored -> Collections.newSetFromMap(new IdentityHashMap<>()))
+                .add(permissible);
     }
 
     @Override
     public void unsubscribeFromDefaultPerms(boolean op, @NotNull org.bukkit.permissions.Permissible permissible) {
+        Set<org.bukkit.permissions.Permissible> subscribers = defaultPermissionSubscriptions.get(op);
+        if (subscribers == null) return;
+        subscribers.remove(permissible);
+        if (subscribers.isEmpty()) defaultPermissionSubscriptions.remove(op);
     }
 
     @Override
     public Set<org.bukkit.permissions.Permissible> getDefaultPermSubscriptions(boolean op) {
-        return java.util.Collections.emptySet();
+        Set<org.bukkit.permissions.Permissible> subscribers = defaultPermissionSubscriptions.get(op);
+        return subscribers == null ? Collections.emptySet() : Collections.unmodifiableSet(new HashSet<>(subscribers));
     }
 
     @Override
@@ -444,19 +467,40 @@ public class PaperPluginManagerImpl implements PluginManager {
     @Override
     public boolean isTransitiveDependency(@NotNull io.papermc.paper.plugin.configuration.PluginMeta plugin,
             @NotNull io.papermc.paper.plugin.configuration.PluginMeta dependency) {
+        String target = normalizePluginName(dependency.getName());
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
+        java.util.HashSet<String> visited = new java.util.HashSet<>();
+        queue.addAll(plugin.getPluginDependencies());
+        queue.addAll(plugin.getPluginSoftDependencies());
+        while (!queue.isEmpty()) {
+            String name = normalizePluginName(queue.removeFirst());
+            if (!visited.add(name)) continue;
+            if (name.equals(target)) return true;
+            PluginDescriptionFile description = descriptions.get(name);
+            if (description == null) continue;
+            queue.addAll(description.getDepend());
+            queue.addAll(description.getSoftDepend());
+        }
         return false;
     }
 
     @Override
     public void clearPermissions() {
+        permissions.clear();
+        for (Set<org.bukkit.permissions.Permissible> subscribers : defaultPermissionSubscriptions.values()) {
+            for (org.bukkit.permissions.Permissible permissible : new HashSet<>(subscribers)) {
+                permissible.recalculatePermissions();
+            }
+        }
     }
 
     @Override
     public void addPermissions(@NotNull java.util.List<Permission> perms) {
+        for (Permission permission : perms) addPermission(permission);
     }
 
     private String normalizePluginName(String name) {
-        return name.replace(' ', '_');
+        return name.replace(' ', '_').toLowerCase(java.util.Locale.ROOT);
     }
 
     private java.util.Map<String, PluginCandidate> discoverPluginCandidates(java.io.File[] files) {
@@ -557,6 +601,19 @@ public class PaperPluginManagerImpl implements PluginManager {
         PluginCandidate candidate = candidates.get(name);
         if (candidate == null) {
             return;
+        }
+
+        // If another plugin declares loadbefore: this plugin, visit it first.
+        // This also preserves Paper dependency entries translated from load: AFTER.
+        for (java.util.Map.Entry<String, PluginCandidate> otherEntry : candidates.entrySet()) {
+            if (otherEntry.getKey().equals(name)) continue;
+            for (String loadBefore : otherEntry.getValue().description.getLoadBefore()) {
+                String target = aliases.getOrDefault(normalizePluginName(loadBefore), normalizePluginName(loadBefore));
+                if (target.equals(name)) {
+                    visitCandidate(otherEntry.getKey(), candidates, aliases, visiting, visited, sorted);
+                    break;
+                }
+            }
         }
 
         for (String dependency : candidate.description.getDepend()) {

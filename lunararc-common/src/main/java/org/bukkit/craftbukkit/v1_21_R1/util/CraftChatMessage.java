@@ -8,6 +8,16 @@ public final class CraftChatMessage {
 
     public static Component fromStringOrNull(String message) {
         if (message == null || message.isEmpty()) return null;
+        try {
+            net.kyori.adventure.text.Component adventure =
+                    net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+                            .legacySection().deserialize(message);
+            String json = net.kyori.adventure.text.serializer.gson.GsonComponentSerializer
+                    .gson().serialize(adventure);
+            MutableComponent parsed = fromJSON(json);
+            if (parsed != null) return parsed;
+        } catch (Throwable ignored) {
+        }
         return Component.literal(message);
     }
 
@@ -20,12 +30,22 @@ public final class CraftChatMessage {
         return component.getString();
     }
     
+    private static net.minecraft.core.HolderLookup.Provider lookupProvider() {
+        try {
+            io.ampznetwork.lunararc.common.LunarArcPlatform.getServer().getServer().registryAccess();
+            return io.ampznetwork.lunararc.common.LunarArcPlatform.getServer().getServer().registryAccess();
+        } catch (Throwable ignored) {
+            return net.minecraft.core.HolderLookup.Provider.create(java.util.stream.Stream.empty());
+        }
+    }
+
     public static MutableComponent fromJSON(String json) {
-        return Component.Serializer.fromJson(json, net.minecraft.core.HolderLookup.Provider.create(java.util.stream.Stream.empty()));
+        if (json == null || json.isEmpty()) return Component.empty();
+        return Component.Serializer.fromJson(json, lookupProvider());
     }
     
     public static String toJSON(Component component) {
-        return Component.Serializer.toJson(component, net.minecraft.core.HolderLookup.Provider.create(java.util.stream.Stream.empty()));
+        return Component.Serializer.toJson(component, lookupProvider());
     }
     
     public static final class ChatSerializer {

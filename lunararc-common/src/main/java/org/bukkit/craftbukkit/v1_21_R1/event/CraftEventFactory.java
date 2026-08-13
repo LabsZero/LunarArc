@@ -1,15 +1,23 @@
 package org.bukkit.craftbukkit.v1_21_R1.event;
 
+import com.mojang.datafixers.util.Pair;
+import net.kyori.adventure.text.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.craftbukkit.v1_21_R1.block.CraftBlock;
 import org.bukkit.craftbukkit.v1_21_R1.inventory.CraftItemStack;
@@ -173,5 +181,44 @@ public class CraftEventFactory {
                 new ArrayList<org.bukkit.inventory.ItemStack>());
         Bukkit.getPluginManager().callEvent(event);
         return event;
+    }
+
+    // Inventory open event. Mirrors Paper's CraftEventFactory semantics against the
+    // live NMS container menu. The caller passes the already-built Bukkit view because
+    // the vanilla AbstractContainerMenu has no getBukkitView() in LunarArc's runtime.
+    public static AbstractContainerMenu callInventoryOpenEvent(ServerPlayer player,
+            AbstractContainerMenu container, InventoryView view) {
+        return callInventoryOpenEventWithTitle(player, container, view, false).getSecond();
+    }
+
+    public static AbstractContainerMenu callInventoryOpenEvent(ServerPlayer player,
+            AbstractContainerMenu container, InventoryView view, boolean cancelled) {
+        return callInventoryOpenEventWithTitle(player, container, view, cancelled).getSecond();
+    }
+
+    public static Pair<Component, AbstractContainerMenu> callInventoryOpenEventWithTitle(
+            ServerPlayer player, AbstractContainerMenu container, InventoryView view, boolean cancelled) {
+        InventoryOpenEvent event = new InventoryOpenEvent(view);
+        event.setCancelled(cancelled);
+        Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            return Pair.of(null, null);
+        }
+        return Pair.of(event.titleOverride(), container);
+    }
+
+    // Inventory close event. Only fires when a real menu (not the player's own
+    // inventoryMenu) is open. Closing the native menu itself is left to the caller,
+    // which keeps the various close paths (plugin, client, disconnect) distinct.
+    public static void handleInventoryCloseEvent(ServerPlayer player) {
+        handleInventoryCloseEvent(player, InventoryCloseEvent.Reason.UNKNOWN);
+    }
+
+    public static void handleInventoryCloseEvent(ServerPlayer player, InventoryCloseEvent.Reason reason) {
+        if (player.containerMenu == player.inventoryMenu) return;
+        Object bukkit = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity();
+        if (!(bukkit instanceof HumanEntity human)) return;
+        InventoryCloseEvent event = new InventoryCloseEvent(human.getOpenInventory(), reason);
+        Bukkit.getPluginManager().callEvent(event);
     }
 }

@@ -85,7 +85,7 @@ public abstract class ServerLoginPacketListenerMixin implements ServerLoginPacke
                     this.lunararc$preLogin(offlineProfile);
                 } catch (Exception e) {
                     this.disconnect(Component.literal("Failed to verify offline player"));
-                    e.printStackTrace();
+                    lunararc$logger.error("Login processing failed", e);
                 }
             });
             ci.cancel();
@@ -144,7 +144,7 @@ public abstract class ServerLoginPacketListenerMixin implements ServerLoginPacke
                 this.lunararc$preLogin(this.authenticatedProfile);
             } catch (Exception e) {
                 this.disconnect(Component.literal("Exception verifying " + this.authenticatedProfile.getName()));
-                e.printStackTrace();
+                lunararc$logger.error("Login processing failed", e);
             }
         });
 
@@ -192,7 +192,7 @@ public abstract class ServerLoginPacketListenerMixin implements ServerLoginPacke
                 this.startClientVerification(profile);
             } catch (Exception e) {
                 this.disconnect(Component.literal("Error starting client verification"));
-                e.printStackTrace();
+                lunararc$logger.error("Login processing failed", e);
             }
         });
     }
@@ -220,7 +220,7 @@ public abstract class ServerLoginPacketListenerMixin implements ServerLoginPacke
                 this.lunararc$preLogin(profile);
             } catch (Exception e) {
                 this.disconnect(Component.literal("Error during pre-login event"));
-                e.printStackTrace();
+                lunararc$logger.error("Login processing failed", e);
             }
         });
         ci.cancel();

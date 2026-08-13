@@ -22,10 +22,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 21
+      - name: Read Java runtime requirement
+        id: java-runtime
+        shell: bash
+        run: |
+          java_runtime=$(awk -F '=' '/^java-runtime[[:space:]]*=/ {gsub(/[ "\r]/, "", $2); print $2; exit}' gradle/libs.versions.toml)
+          test -n "$java_runtime" || { echo "java-runtime is missing from gradle/libs.versions.toml" >&2; exit 1; }
+          echo "version=$java_runtime" >> "$GITHUB_OUTPUT"
+
+      - name: Set up required JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '${{ steps.java-runtime.outputs.version }}'
           distribution: 'temurin'
 
       - name: Setup Gradle

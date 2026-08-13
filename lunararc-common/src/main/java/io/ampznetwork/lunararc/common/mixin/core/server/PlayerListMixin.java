@@ -89,6 +89,12 @@ public abstract class PlayerListMixin {
         io.ampznetwork.lunararc.common.server.LunarArcContext.clear();
         lunararc$logger.info("Player {} disconnected, cleaning up...", player.getName().getString());
         try {
+            // Fire InventoryCloseEvent(Reason.DISCONNECT) while the menu is still open.
+            // The vanilla removal path handles the actual close/cleanup.
+            if (player.containerMenu != player.inventoryMenu) {
+                org.bukkit.craftbukkit.v1_21_R1.event.CraftEventFactory.handleInventoryCloseEvent(
+                        player, org.bukkit.event.inventory.InventoryCloseEvent.Reason.DISCONNECT);
+            }
             Object craftServer = io.ampznetwork.lunararc.common.LunarArcPlatform.getServer();
             if (craftServer != null) {
                 org.bukkit.entity.Player bukkitPlayer = (org.bukkit.entity.Player) ((io.ampznetwork.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity();

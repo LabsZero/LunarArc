@@ -28,6 +28,22 @@ dependencies {
     implementation libs.adventure.text.serializer.gson
     implementation libs.adventure.text.serializer.legacy
     implementation libs.adventure.text.serializer.plain
+    // Adventure JSON serializer 4.17.0 requires OptionState at runtime.
+    implementation 'net.kyori:option:1.0.0'
+    implementation libs.json.simple
+    implementation libs.commons.lang
+
+    // Paper's modern PluginLoader / MavenLibraryResolver runtime. Keep these on
+    // bootstrap runtimeClasspath so META-INF/libraries extraction can expose them
+    // before paper-plugin.yml loaders (for example VeinMiner) are instantiated.
+    implementation 'org.apache.maven.resolver:maven-resolver-api:1.9.18'
+    implementation 'org.apache.maven.resolver:maven-resolver-util:1.9.18'
+    implementation 'org.apache.maven.resolver:maven-resolver-impl:1.9.18'
+    implementation 'org.apache.maven.resolver:maven-resolver-supplier:1.9.18'
+    implementation 'org.apache.maven.resolver:maven-resolver-connector-basic:1.9.18'
+    implementation 'org.apache.maven.resolver:maven-resolver-transport-http:1.9.18'
+    implementation 'org.apache.maven.resolver:maven-resolver-transport-file:1.9.18'
+    implementation 'org.apache.maven:maven-resolver-provider:3.9.6'
 }
 
 // ── Generate version properties at build time ─────────────────────────────────
@@ -41,6 +57,7 @@ tasks.register('generateVersions') {
         props['projectName']     = rootProject.name
         props['version']         = libs.versions.project.version.get()
         props['minecraft']       = libs.versions.minecraft.get()
+        props['craftBukkitPackage'] = libs.versions.craftbukkit.package.get()
         props['neoforge']        = libs.versions.neoforge.get()
         props['forge']           = libs.versions.forge.get()
         props['fabric']          = libs.versions.fabric.loader.get()
@@ -51,7 +68,7 @@ tasks.register('generateVersions') {
         props['paperApi']        = libs.versions.paper.api.get()
         props['dataVersion']     = libs.versions.data.version.get()
         props['buildName']       = libs.versions.build.name.get()
-        props['javaVersion']     = project.java.toolchain.languageVersion.get().toString()
+        props['javaVersion']     = libs.versions.java.runtime.get()
         props['buildDate']       = new java.text.SimpleDateFormat('dd-MM-yyyy HH:mm').format(new Date())
         versionsFile.text = ''
         props.store(versionsFile.newWriter(), null)
@@ -59,6 +76,109 @@ tasks.register('generateVersions') {
 }
 
 processResources.dependsOn 'generateVersions'
+
+// Guard the breadth-first Paper compatibility model. Paper 1.20.5+ exposes CraftBukkit
+// under the unversioned org.bukkit.craftbukkit package. LunarArc separately keeps the
+// versioned package from libs.versions.toml as a legacy Spigot compatibility alias.
+// Fail early if the patched Paper runtime no longer exposes a plausible implementation surface.
+tasks.register('verifyPaperRuntimeSurface') {
+    dependsOn rootProject.tasks.named('setupPaperServer')
+    inputs.file(rootProject.ext.paperServerJar)
+    inputs.property('minecraftVersion', libs.versions.minecraft.get())
+    inputs.property('paperBuild', libs.versions.paper.build.get())
+    doLast {
+        File paperJar = rootProject.ext.paperServerJar
+        if (!paperJar.isFile()) {
+            throw new GradleException("Paper server JAR is missing: ${paperJar}")
+        }
+
+        int craftClasses = 0
+        int paperClasses = 0
+        int spigotClasses = 0
+        int legacyPaperClasses = 0
+        new java.util.jar.JarFile(paperJar).withCloseable { jar ->
+            def entries = jar.entries()
+            while (entries.hasMoreElements()) {
+                def entry = entries.nextElement()
+                if (entry.directory || !entry.name.endsWith('.class')) continue
+                if (entry.name.startsWith('org/bukkit/craftbukkit/')) craftClasses++
+                else if (entry.name.startsWith('io/papermc/paper/')) paperClasses++
+                else if (entry.name.startsWith('org/spigotmc/')) spigotClasses++
+                else if (entry.name.startsWith('co/aikar/')) legacyPaperClasses++
+            }
+        }
+
+        if (craftClasses < 250) {
+            throw new GradleException(
+                "Paper runtime exposed only ${craftClasses} CraftBukkit classes; " +
+                "refusing to assemble an incomplete hybrid compatibility surface."
+            )
+        }
+        logger.lifecycle(
+            "Paper runtime surface: ${craftClasses} CraftBukkit, ${paperClasses} Paper, " +
+            "${spigotClasses} Spigot, ${legacyPaperClasses} legacy Paper implementation classes " +
+            "from Paper ${libs.versions.paper.build.get()} / MC ${libs.versions.minecraft.get()}."
+        )
+    }
+}
+
+
+def generatedPaperRuntimeSurfaceDir = layout.buildDirectory.dir('generated/paperRuntimeSurface')
+
+tasks.register('generatePaperRuntimeSurfaceMetadata') {
+    dependsOn tasks.named('verifyPaperRuntimeSurface')
+    def outputFile = generatedPaperRuntimeSurfaceDir.map {
+        it.file('META-INF/lunararc/paper-runtime.properties').asFile
+    }
+    outputs.file(outputFile)
+    inputs.file(rootProject.ext.paperServerJar)
+    inputs.property('minecraftVersion', libs.versions.minecraft.get())
+    inputs.property('paperBuild', libs.versions.paper.build.get())
+
+    doLast {
+        File paperJar = rootProject.ext.paperServerJar
+        File target = outputFile.get()
+        target.parentFile.mkdirs()
+
+        int craftClasses = 0
+        int paperClasses = 0
+        int spigotClasses = 0
+        int legacyPaperClasses = 0
+        new java.util.jar.JarFile(paperJar).withCloseable { jar ->
+            def entries = jar.entries()
+            while (entries.hasMoreElements()) {
+                def entry = entries.nextElement()
+                if (entry.directory || !entry.name.endsWith('.class')) continue
+                if (entry.name.startsWith('org/bukkit/craftbukkit/')) craftClasses++
+                else if (entry.name.startsWith('io/papermc/paper/')) paperClasses++
+                else if (entry.name.startsWith('org/spigotmc/')) spigotClasses++
+                else if (entry.name.startsWith('com/destroystokyo/paper/')) legacyPaperClasses++
+                else if (entry.name.startsWith('co/aikar/')) legacyPaperClasses++
+            }
+        }
+
+        def digest = java.security.MessageDigest.getInstance('SHA-256')
+        paperJar.withInputStream { input ->
+            byte[] buffer = new byte[64 * 1024]
+            int read
+            while ((read = input.read(buffer)) >= 0) {
+                if (read > 0) digest.update(buffer, 0, read)
+            }
+        }
+        String sha256 = digest.digest().collect { String.format('%02x', it) }.join('')
+
+        def props = new Properties()
+        props['minecraft'] = libs.versions.minecraft.get()
+        props['paperBuild'] = libs.versions.paper.build.get()
+        props['paperRuntimeJar'] = paperJar.name
+        props['paperRuntimeSha256'] = sha256
+        props['craftBukkitClasses'] = craftClasses.toString()
+        props['paperClasses'] = paperClasses.toString()
+        props['spigotClasses'] = spigotClasses.toString()
+        props['legacyPaperClasses'] = legacyPaperClasses.toString()
+        target.withWriter('UTF-8') { writer -> props.store(writer, 'Generated by LunarArc') }
+    }
+}
 
 jar {
     manifest {
@@ -89,7 +209,6 @@ def createFatJar(String platform) {
         // ASM and Log4j are NOT relocated — they are provided by the mod loader / Minecraft at runtime.
         // Gson IS bundled (needed before any mod loader is active) and relocated to avoid
         // conflicts with Minecraft's own com.google.gson copy once the mod loader starts.
-        relocate 'net.kyori',               'io.ampznetwork.lunararc.libs.adventure'
         relocate 'com.google.gson',         'io.ampznetwork.lunararc.libs.gson'
 
         // ── Determine which platform JARs to include ───────────────────────
@@ -111,7 +230,7 @@ def createFatJar(String platform) {
             : "transformProduction${platform.capitalize()}"
         def commonJarTask = project(':lunararc-common').tasks.findByName(commonTaskName)
 
-        dependsOn commonJarTask, platformJarTask, 'generateVersions'
+        dependsOn commonJarTask, platformJarTask, 'generateVersions', tasks.named('verifyPaperRuntimeSurface'), tasks.named('generatePaperRuntimeSurfaceMetadata')
 
         // Common hybrid-server classes (mixins, bridges, Paper stubs)
         from(zipTree(commonJarTask.outputs.files.singleFile)) {
@@ -119,6 +238,22 @@ def createFatJar(String platform) {
             include 'io/papermc/paper/**'
             include 'org/bukkit/**'
             include 'META-INF/mixins.*.json'
+        }
+
+        // Fill the complete unversioned Paper/CraftBukkit/Spigot implementation surface from the
+        // exact Paper build selected in libs.versions.toml. LunarArc's hybrid-aware
+        // implementations are added above and therefore win duplicate resolution; all
+        // remaining implementation classes are inherited from Paper so plugins can link
+        // against the normal server class surface instead of failing class-by-class.
+        // NMS-touching upstream implementations can then be adapted only where the hybrid
+        // runtime differs from Paper's patched vanilla server.
+        from({ zipTree(rootProject.ext.paperServerJar) }) {
+            include 'org/bukkit/craftbukkit/**'
+            include 'io/papermc/paper/**'
+            include 'com/destroystokyo/paper/**'
+            include 'org/spigotmc/**'
+            include 'co/aikar/**'
+            exclude 'META-INF/**'
         }
 
         // Platform-specific classes and mod metadata
@@ -137,6 +272,7 @@ def createFatJar(String platform) {
         from project(':lunararc-common').sourceSets.main.resources
         from platformProject.sourceSets.main.resources
         from sourceSets.main.resources
+        from(layout.buildDirectory.dir('generated/paperRuntimeSurface'))
 
         // ── Runtime dependency filtering ───────────────────────────────────
         project.configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.each { artifact ->
@@ -147,7 +283,7 @@ def createFatJar(String platform) {
 
             // Provided by the mod loader or JVM — exclude to avoid split packages
             def providedByPlatform = id.group.startsWith('org.apache.commons') ||
-                id.group.startsWith('org.apache.maven') ||
+                (id.group.startsWith('org.apache.maven') && !(id.group == 'org.apache.maven.resolver' || (id.group == 'org.apache.maven' && id.name == 'maven-resolver-provider'))) ||
                 id.group.startsWith('org.codehaus.plexus') ||
                 id.group.startsWith('org.apache.logging') ||
                 id.group.startsWith('org.slf4j') ||
@@ -169,10 +305,42 @@ def createFatJar(String platform) {
             if (platform == 'forge'    && (id.group == 'net.neoforged' || id.group == 'net.fabricmc' || id.group == 'org.quiltmc')) return
 
             // Flatten Paper API and core bridge libs into JAR root
+            // Adventure 4.17's JSON serializer has a hard runtime dependency on
+            // net.kyori:option (OptionState).  It is part of LunarArc's own Adventure
+            // stack, not a plugin-private implementation detail, so it must be flattened
+            // into the staged runtime JAR alongside Adventure itself.  Excluding it makes
+            // GsonComponentSerializer fail during class initialization and permanently
+            // poisons LunarArcComponentPipeline with NoClassDefFoundError.
+            boolean lunarArcKyori = id.group.startsWith('net.kyori') &&
+                (id.name.startsWith('adventure-') || id.name.startsWith('examination-') || id.name == 'option')
+
+            // Other non-Adventure Kyori libraries remain plugin implementation details.
+            // Do not bundle those into LunarArc or they can create split packages with plugins.
+            if (id.group.startsWith('net.kyori') && !lunarArcKyori) return
+
+            // Commons Lang 2.x contains the legacy package org.apache.commons.lang.enum.
+            // Java's module system rejects that package name when its classes are flattened
+            // into a named/automatic module. Keep the dependency as a nested JAR instead;
+            // PluginClassLoader exposes it to Bukkit/Paper plugins at runtime.
+            if (id.group == 'commons-lang' && id.name == 'commons-lang') {
+                from(artifact.file) {
+                    into 'META-INF/lunararc-libs'
+                    rename { 'commons-lang-2.6.jar' }
+                }
+                return
+            }
+
             boolean flatten = (id.group == 'io.papermc.paper' && id.name == 'paper-api') ||
-                id.group.startsWith('net.kyori') ||
+                // Paper PluginLoader/MavenLibraryResolver is instantiated from the
+                // LunarArc mod classloader in the NeoForge child JVM. Nested jars are
+                // merely extracted by the parent launcher and are not on that module
+                // path, so resolver/provider classes must live in the runtime JAR.
+                id.group == 'org.apache.maven.resolver' ||
+                (id.group == 'org.apache.maven' && id.name == 'maven-resolver-provider') ||
+                lunarArcKyori ||
                 id.group.contains('net.md-5') ||
                 id.group == 'com.google.code.gson' ||
+                (id.group == 'com.googlecode.json-simple' && id.name == 'json-simple') ||
                 (id.group == 'org.yaml' && id.name == 'snakeyaml') ||
                 (id.group == 'org.xerial' && id.name == 'sqlite-jdbc')
 
@@ -204,6 +372,53 @@ def createFatJar(String platform) {
                 'LunarArc-Platform':       platform,
                 'Implementation-Version':  project.version
             )
+        }
+    }
+
+    // Compare the assembled hybrid JAR against the exact Paper runtime class set.
+    // This is an exact-name audit, not a minimum-count heuristic: if any inherited
+    // CraftBukkit/Paper/Spigot implementation class disappears during shading, fail
+    // the build and print the missing names.
+    tasks.register("verify${platform.capitalize()}PaperSurface") {
+        dependsOn tasks.named("${platform}Jar")
+        inputs.file(rootProject.ext.paperServerJar)
+        inputs.file(tasks.named("${platform}Jar").flatMap { it.archiveFile })
+        doLast {
+            File paperJar = rootProject.ext.paperServerJar
+            File hybridJar = tasks.named("${platform}Jar").get().archiveFile.get().asFile
+            def prefixes = [
+                'org/bukkit/craftbukkit/',
+                'io/papermc/paper/',
+                'com/destroystokyo/paper/',
+                'org/spigotmc/',
+                'co/aikar/'
+            ]
+
+            Set<String> expected = new LinkedHashSet<>()
+            new java.util.jar.JarFile(paperJar).withCloseable { jar ->
+                jar.entries().each { entry ->
+                    if (!entry.directory && entry.name.endsWith('.class') && prefixes.any { entry.name.startsWith(it) }) {
+                        expected.add(entry.name)
+                    }
+                }
+            }
+
+            Set<String> actual = new HashSet<>()
+            new java.util.jar.JarFile(hybridJar).withCloseable { jar ->
+                jar.entries().each { entry ->
+                    if (!entry.directory && entry.name.endsWith('.class')) actual.add(entry.name)
+                }
+            }
+
+            List<String> missing = expected.findAll { !actual.contains(it) }.sort()
+            if (!missing.isEmpty()) {
+                String sample = missing.take(50).join('\n  - ')
+                throw new GradleException(
+                    "${platform} hybrid JAR is missing ${missing.size()} Paper runtime classes.\n" +
+                    "  - ${sample}" + (missing.size() > 50 ? "\n  ... and ${missing.size() - 50} more" : '')
+                )
+            }
+            logger.lifecycle("${platform} Paper class-surface audit passed: ${expected.size()} inherited implementation classes present.")
         }
     }
 }

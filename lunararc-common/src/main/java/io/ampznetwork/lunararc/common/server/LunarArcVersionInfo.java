@@ -26,15 +26,33 @@ public final class LunarArcVersionInfo {
     }
 
     public static String projectVersion() {
-        return "git-Paper-133 (MC: " + minecraftVersion() + ")";
+        return "git-Paper-" + paperBuild() + " (MC: " + minecraftVersion() + ")";
+    }
+
+    /** LunarArc implementation version, kept separate from Paper's compatibility version. */
+    public static String lunarArcVersion() {
+        return property("version", "0.0.1-SNAPSHOT");
     }
 
     public static String minecraftVersion() {
-        return PROPERTIES.getProperty("minecraft", "1.21.1");
+        return property("minecraft", "unknown");
+    }
+
+    public static String craftBukkitPackage() {
+        return property("craftBukkitPackage", "v1_21_R1");
     }
 
     public static String paperApiVersion() {
-        return minecraftVersion() + "-R0.1-SNAPSHOT";
+        return property("paperApi", minecraftVersion() + "-R0.1-SNAPSHOT");
+    }
+
+    public static int paperBuild() {
+        String value = property("paperBuild", "0");
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     public static OptionalInt dataVersion() {

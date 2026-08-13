@@ -20,7 +20,9 @@ import java.util.Map;
 import java.util.Set;
 
 public abstract class CraftHumanEntity extends CraftEntity {
-    protected final PermissibleBase perm = new PermissibleBase(this);
+    // Deliberately replaceable: CraftBukkit-compatible permission plugins inject
+    // their Permissible implementation here at runtime.
+    protected PermissibleBase perm = new PermissibleBase(this);
 
     private static final Map<Attribute, Holder<net.minecraft.world.entity.ai.attributes.Attribute>> ATTRIBUTE_MAP =
             new EnumMap<>(Attribute.class);
@@ -91,8 +93,7 @@ public abstract class CraftHumanEntity extends CraftEntity {
                 Object ops = playerList.getClass().getMethod("getOps").invoke(playerList);
                 ops.getClass().getMethod("remove", Object.class).invoke(ops, getHandle().getGameProfile());
             }
-        } catch (Exception e) {
-             e.printStackTrace();
+        } catch (Exception ignored) {
         }
         perm.recalculatePermissions();
     }
