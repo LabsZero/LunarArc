@@ -5,17 +5,16 @@ import com.google.gson.JsonParser;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
 public class TranslationManager {
     private static final String DEFAULT_LOCALE = "en_gb";
-    private static final Map<String, JsonObject> cache = new HashMap<>();
-    private static String currentLocale = DEFAULT_LOCALE;
+    private static final Map<String, JsonObject> cache = new java.util.concurrent.ConcurrentHashMap<>();
+    private static volatile String currentLocale = DEFAULT_LOCALE;
 
     static {
-        // Attempt to set locale from system
+
         String lang = Locale.getDefault().getLanguage().toLowerCase();
         String country = Locale.getDefault().getCountry().toLowerCase();
         currentLocale = lang + "_" + country;
@@ -32,7 +31,7 @@ public class TranslationManager {
         if (cache.containsKey(locale))
             return;
 
-        try (InputStream in = TranslationManager.class.getResourceAsStream("/locale/" + locale + ".json")) {
+        try (InputStream in = openLocale(locale)) {
             if (in != null) {
                 JsonObject json = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8))
                         .getAsJsonObject();
@@ -45,6 +44,23 @@ public class TranslationManager {
                 loadLocale(DEFAULT_LOCALE);
             }
         }
+    }
+
+    private static InputStream openLocale(String locale) {
+        String resource = "locale/" + locale + ".json";
+        ClassLoader own = TranslationManager.class.getClassLoader();
+        if (own != null) {
+            InputStream in = own.getResourceAsStream(resource);
+            if (in != null) return in;
+        }
+
+        ClassLoader context = Thread.currentThread().getContextClassLoader();
+        if (context != null && context != own) {
+            InputStream in = context.getResourceAsStream(resource);
+            if (in != null) return in;
+        }
+
+        return ClassLoader.getSystemResourceAsStream(resource);
     }
 
     public static String get(String key, Object... args) {

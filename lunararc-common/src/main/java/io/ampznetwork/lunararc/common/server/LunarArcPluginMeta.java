@@ -10,6 +10,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 public class LunarArcPluginMeta implements PluginMeta {
     private final PluginDescriptionFile description;
@@ -75,7 +76,7 @@ public class LunarArcPluginMeta implements PluginMeta {
 
     @Override
     public @NotNull List<String> getContributors() {
-        return Collections.emptyList();
+        return stringListFromDescription("getContributors");
     }
 
     @Override
@@ -104,6 +105,21 @@ public class LunarArcPluginMeta implements PluginMeta {
     }
 
     public @NotNull List<String> getPluginLibraries() {
+        return stringListFromDescription("getLibraries", "getPluginLibraries");
+    }
+
+    @SuppressWarnings("unchecked")
+    private @NotNull List<String> stringListFromDescription(String... methods) {
+        for (String methodName : methods) {
+            try {
+                java.lang.reflect.Method method = description.getClass().getMethod(methodName);
+                Object value = method.invoke(description);
+                if (value instanceof List<?> list) {
+                    return list.stream().filter(Objects::nonNull).map(Object::toString).toList();
+                }
+            } catch (ReflectiveOperationException ignored) {
+            }
+        }
         return Collections.emptyList();
     }
 }

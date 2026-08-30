@@ -1,5 +1,9 @@
 package io.ampznetwork.lunararc.common.mod;
 
+import io.ampznetwork.lunararc.common.mod.server.LunarArcServer;
+import io.ampznetwork.lunararc.common.server.LunarArcVersionInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -7,240 +11,784 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.commons.ClassRemapper;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Bytecode remapper for Bukkit/Spigot plugins running on a Paper-based modded server.
- *
- * Placed in the io.ampznetwork.lunararc.common.mod package following the
- * arclight-common convention where mod utilities (remapper, velocity support, …)
- * live under the {@code mod} sub-package while server stubs live under
- * {@code server} and mixin bridges live under {@code bridge}.
- *
- * Responsibilities:
- *  - Remap versioned CraftBukkit class references (e.g. v1_16_R3 → v1_21_R1).
- *  - Remap legacy Spigot/NMS names to their modern Mojang-mapped equivalents so
- *    that plugins compiled against older server jars work alongside mods that use
- *    the current mappings.
- *  - Downgrade bytecode class-file version when a plugin was compiled on a newer
- *    JVM than the one running the server (prevents UnsupportedClassVersionError).
- */
+
 public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
+    private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc/Remapper");
+
+    private static final String CRAFTBUKKIT_PREFIX = "org/bukkit/craftbukkit/";
 
     private static final Map<String, String> CLASS_MAP = new HashMap<>();
 
-    // owner -> (srg-name -> mojang-name) for field remapping
-    private static final Map<String, Map<String, String>> FIELD_MAP = new HashMap<>();
+    private static final Map<String, String> MOJANG_TO_SPIGOT_CLASS = new HashMap<>();
+
+    private static final Map<MemberKey, String> FIELD_MAP = new HashMap<>();
+    private static final Map<MemberKey, String> METHOD_MAP = new HashMap<>();
+    private static final Map<MemberNameKey, String> FIELD_NAME_MAP = new HashMap<>();
+    private static final Map<MemberNameKey, String> METHOD_NAME_MAP = new HashMap<>();
+    // Indexes METHOD_MAP by (owner, name) so overload resolution by parameter
+    // descriptor never has to scan the full NMS method-mapping table (which can
+    // hold tens of thousands of entries). Built once alongside METHOD_MAP.
+    private static final Map<MemberNameKey, List<Map.Entry<MemberKey, String>>> METHOD_OVERLOAD_INDEX = new HashMap<>();
+    private static final Map<String, String> RUNTIME_FIELD_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, String> RUNTIME_METHOD_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, String> BYTECODE_FIELD_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, String> BYTECODE_METHOD_CACHE = new ConcurrentHashMap<>();
+    private static final int DYNAMIC_CACHE_LIMIT = 16_384;
+
+    private final boolean remapNms;
 
     static {
-        // TAB plugin: ServerPlayer.c (obfuscated) → connection (Mojang)
-        Map<String, String> serverPlayerFields = new HashMap<>();
-        serverPlayerFields.put("c", "connection");
-        serverPlayerFields.put("e", "gameMode");
-        FIELD_MAP.put("net/minecraft/server/level/ServerPlayer", serverPlayerFields);
-
-        // ServerGamePacketListenerImpl obfuscated field names
-        Map<String, String> listenerFields = new HashMap<>();
-        listenerFields.put("a", "player");
-        listenerFields.put("b", "connection");
-        FIELD_MAP.put("net/minecraft/server/network/ServerGamePacketListenerImpl", listenerFields);
+        loadMappings();
     }
 
-    @Override
-    public String mapFieldName(String owner, String name, String descriptor) {
-        String mappedOwner = map(owner);
-        Map<String, String> fields = FIELD_MAP.get(mappedOwner != null ? mappedOwner : owner);
-        if (fields != null) {
-            String remapped = fields.get(name);
-            if (remapped != null) return remapped;
+    public LunarArcRemapper() {
+        this(true);
+    }
+
+    public LunarArcRemapper(boolean remapNms) {
+        this.remapNms = remapNms;
+    }
+
+    public boolean isNmsRemappingEnabled() {
+        return this.remapNms;
+    }
+
+    /**
+     * Real, conservative post-transform sanity check, not part of upstream Paper — added because
+     * this project's plugin/library classloaders (PluginClassLoader,
+     * TransformingDelegatePluginLibraryClassLoader, TransformingPluginLibraryClassLoader) call it
+     * directly after producing remapped bytecode. Scans the class's constant pool for the one
+     * failure mode a silent remap bug would actually produce: a UTF8 constant that still looks
+     * like a legacy obfuscated NMS/CraftBukkit-versioned package reference
+     * (net/minecraft/server/v1_ or org/bukkit/craftbukkit/v1_) surviving into supposedly-remapped
+     * output. That should never happen post-transform on this Mojang-mapped, unversioned-package
+     * runtime; if it does, the transform silently failed for this class and every reference
+     * through it is likely broken. Logs rather than throws — a false positive here must not take
+     * down plugin/library loading, and the existing per-member remap logging already covers the
+     * more granular failure cases.
+     */
+    public static void verifyCompatibilityOutput(byte[] bytes, String className) {
+        if (bytes == null || bytes.length < 8) return;
+        if (containsAscii(bytes, "net/minecraft/server/v1_") || containsAscii(bytes, "org/bukkit/craftbukkit/v1_")) {
+            LOGGER.warn("Post-transform compatibility check failed for {}: remapped bytecode still "
+                            + "contains a legacy versioned NMS/CraftBukkit symbol — the transform likely "
+                            + "did not fully remap this class.", className);
         }
-        return name;
     }
 
-    static {
-        // Remap any versioned CraftBukkit package to the current target version.
-        for (int i = 13; i <= 21; i++) {
-            for (int r = 1; r <= 10; r++) {
-                CLASS_MAP.put("org/bukkit/craftbukkit/v1_" + i + "_R" + r,
-                        "org/bukkit/craftbukkit/v1_21_R1");
+    private static void loadMappings() {
+        String base = "mappings/" + LunarArcVersionInfo.minecraftVersion() + "/";
+        ClassLoader loader = LunarArcRemapper.class.getClassLoader();
+
+        try {
+
+            try (InputStream stream = loader.getResourceAsStream(base + "paper-reobf.tiny")) {
+                if (stream == null) {
+                    throw new IllegalStateException("Missing Paper reobf mappings " + base + "paper-reobf.tiny");
+                }
+                loadPaperMappings(stream);
+            }
+
+
+            try (InputStream stream = loader.getResourceAsStream(base + "plugin-remap.tsv")) {
+                if (stream != null) loadOverrides(stream);
+            }
+        } catch (Exception e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
+    private static void loadPaperMappings(InputStream stream) throws Exception {
+        List<String> lines;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            lines = reader.lines().toList();
+        }
+        if (lines.isEmpty()) throw new IllegalStateException("Paper mapping resource is empty");
+
+        String[] header = lines.get(0).split("\\t", -1);
+        if (header.length == 0) throw new IllegalStateException("Invalid Paper mapping header");
+
+        List<PendingMember> pending = new ArrayList<>();
+        if ("tiny".equals(header[0])) {
+            parseTinyV2(lines, header, pending);
+        } else if ("v1".equals(header[0])) {
+            parseTinyV1(lines, header, pending);
+        } else if ("tsrg2".equals(header[0])) {
+            parseTsrg2(lines, pending);
+        } else {
+            throw new IllegalStateException("Unsupported Paper mapping format: " + lines.get(0));
+        }
+
+
+        for (PendingMember member : pending) {
+            String spigotDescriptor = mapDescriptorClasses(member.mojangDescriptor, MOJANG_TO_SPIGOT_CLASS);
+            MemberKey key = new MemberKey(member.spigotOwner, member.spigotName, spigotDescriptor);
+            if (member.method) {
+                putMethod(key, member.mojangName);
+                addUniqueNameMapping(METHOD_NAME_MAP, new MemberNameKey(member.spigotOwner, member.spigotName), member.mojangName);
+            } else {
+                FIELD_MAP.put(key, member.mojangName);
+                addUniqueNameMapping(FIELD_NAME_MAP, new MemberNameKey(member.spigotOwner, member.spigotName), member.mojangName);
             }
         }
+    }
 
-        // Legacy Spigot NMS root package → modern Mojang-mapped package.
-        CLASS_MAP.put("net/minecraft/server/v1_21_R1", "net/minecraft/server");
+    /** Single write path for METHOD_MAP so METHOD_OVERLOAD_INDEX can never drift out of sync with it. */
+    private static void putMethod(MemberKey key, String mojangName) {
+        METHOD_MAP.put(key, mojangName);
+        METHOD_OVERLOAD_INDEX
+                .computeIfAbsent(new MemberNameKey(key.owner(), key.name()), ignored -> new ArrayList<>())
+                .add(Map.entry(key, mojangName));
+    }
 
-        // Common Spigot → Paper class renames.
-        CLASS_MAP.put("net/minecraft/network/NetworkManager",
-                "net/minecraft/network/Connection");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutScoreboardTeam",
-                "net/minecraft/network/protocol/game/ClientboundSetPlayerTeamPacket");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutChat",
-                "net/minecraft/network/protocol/game/ClientboundSystemChatPacket");
-        CLASS_MAP.put("net/minecraft/network/chat/IChatBaseComponent$ChatSerializer",
-                "net/minecraft/network/chat/Component$Serializer");
-        CLASS_MAP.put("net/minecraft/network/chat/IChatBaseComponent",
-                "net/minecraft/network/chat/Component");
+    private static void parseTinyV2(List<String> lines, String[] header, List<PendingMember> pending) {
+        if (header.length < 5 || !"2".equals(header[1])) {
+            throw new IllegalStateException("Unsupported Tiny header: " + lines.get(0));
+        }
+        int sourceIndex = 3;
+        int targetIndex = findSpigotNamespace(header, sourceIndex + 1);
+        if (targetIndex < 0) targetIndex = header.length - 1;
 
-        // Unversioned legacy CraftBukkit references.
-        CLASS_MAP.put("org/bukkit/craftbukkit/CraftServer",
-                "org/bukkit/craftbukkit/v1_21_R1/CraftServer");
-        CLASS_MAP.put("org/bukkit/craftbukkit/entity/CraftPlayer",
-                "org/bukkit/craftbukkit/v1_21_R1/entity/CraftPlayer");
+        String mojangOwner = null;
+        String spigotOwner = null;
+        for (int i = 1; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (line.isEmpty() || line.charAt(0) == '#') continue;
+            String[] p = line.split("\\t", -1);
 
-        // NMS inner-class renames: obfuscated single-letter nested types → Mojang-mapped names.
-        // TAB and similar plugins may reference obfuscated names; NeoForge ships the Mojang-mapped variants.
-        // In ClientboundPlayerInfoUpdatePacket the obfuscated $a = Action (enum, has valueOf()),
-        // and $b = Entry (record, holds player data).
-        CLASS_MAP.put(
-                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$a",
-                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$Action");
-        CLASS_MAP.put(
-                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$b",
-                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket$Entry");
+            if (p.length >= 3 && "c".equals(p[0])) {
+                mojangOwner = p[1];
+                int mappedColumn = targetIndex - sourceIndex + 1;
+                if (mappedColumn >= p.length) continue;
+                spigotOwner = p[mappedColumn];
+                if (!mojangOwner.isEmpty() && !spigotOwner.isEmpty()) {
+                    CLASS_MAP.put(spigotOwner, mojangOwner);
+                    MOJANG_TO_SPIGOT_CLASS.put(mojangOwner, spigotOwner);
+                }
+                continue;
+            }
 
-        // SRG → Mojang-mapped entity / network renames used by TAB and similar plugins.
-        CLASS_MAP.put("net/minecraft/server/level/EntityPlayer",
-                "net/minecraft/server/level/ServerPlayer");
-        CLASS_MAP.put("net/minecraft/server/network/PlayerConnection",
-                "net/minecraft/server/network/ServerGamePacketListenerImpl");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayInChat",
-                "net/minecraft/network/protocol/game/ServerboundChatPacket");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayInTabComplete",
-                "net/minecraft/network/protocol/game/ServerboundCommandSuggestionPacket");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutTabComplete",
-                "net/minecraft/network/protocol/game/ClientboundCommandSuggestionsPacket");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutPlayerInfo",
-                "net/minecraft/network/protocol/game/ClientboundPlayerInfoUpdatePacket");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutPlayerListHeaderFooter",
-                "net/minecraft/network/protocol/game/ClientboundTabListPacket");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutTitle",
-                "net/minecraft/network/protocol/game/ClientboundSetTitleTextPacket");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutBoss",
-                "net/minecraft/network/protocol/game/ClientboundBossEventPacket");
-        CLASS_MAP.put("net/minecraft/network/protocol/game/PacketPlayOutEntityMetadata",
-                "net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket");
+
+            if (p.length >= 5 && p[0].isEmpty() && ("f".equals(p[1]) || "m".equals(p[1]))
+                    && mojangOwner != null && spigotOwner != null) {
+                int mappedColumn = targetIndex - sourceIndex + 3;
+                if (mappedColumn >= p.length) continue;
+                String descriptor = p[2];
+                String mojangName = p[3];
+                String spigotName = p[mappedColumn];
+                if (!mojangName.isEmpty() && !spigotName.isEmpty()) {
+                    pending.add(new PendingMember("m".equals(p[1]), spigotOwner, spigotName, descriptor, mojangName));
+                }
+            }
+        }
+    }
+
+    private static void parseTinyV1(List<String> lines, String[] header, List<PendingMember> pending) {
+        int targetIndex = findSpigotNamespace(header, 1);
+        if (targetIndex < 0) targetIndex = header.length - 1;
+        int mappedNameOffset = targetIndex;
+
+        for (int i = 1; i < lines.size(); i++) {
+            String[] p = lines.get(i).split("\\t", -1);
+            if (p.length < 3) continue;
+            switch (p[0]) {
+                case "CLASS" -> {
+                    if (mappedNameOffset >= p.length) continue;
+                    String mojang = p[1];
+                    String spigot = p[mappedNameOffset];
+                    if (!mojang.isEmpty() && !spigot.isEmpty()) {
+                        CLASS_MAP.put(spigot, mojang);
+                        MOJANG_TO_SPIGOT_CLASS.put(mojang, spigot);
+                    }
+                }
+                case "FIELD", "METHOD" -> {
+
+                    int mappedColumn = targetIndex + 2;
+                    if (p.length <= mappedColumn) continue;
+                    String mojangOwner = p[1];
+                    String spigotOwner = MOJANG_TO_SPIGOT_CLASS.getOrDefault(mojangOwner, mojangOwner);
+                    pending.add(new PendingMember("METHOD".equals(p[0]), spigotOwner, p[mappedColumn], p[2], p[3]));
+                }
+                default -> {
+                }
+            }
+        }
+    }
+
+
+    private static void parseTsrg2(List<String> lines, List<PendingMember> pending) {
+        String mojangOwner = null;
+        String spigotOwner = null;
+        for (int i = 1; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (line.isBlank() || line.startsWith("#")) continue;
+            if (!Character.isWhitespace(line.charAt(0))) {
+                String[] p = line.trim().split("\\s+");
+                if (p.length >= 2) {
+                    mojangOwner = p[0];
+                    spigotOwner = p[1];
+                    CLASS_MAP.put(spigotOwner, mojangOwner);
+                    MOJANG_TO_SPIGOT_CLASS.put(mojangOwner, spigotOwner);
+                }
+                continue;
+            }
+            if (mojangOwner == null || spigotOwner == null) continue;
+            String[] p = line.trim().split("\\s+");
+            if (p.length == 2) {
+
+                pending.add(new PendingMember(false, spigotOwner, p[1], "*", p[0]));
+            } else if (p.length >= 3 && p[1].startsWith("(")) {
+                pending.add(new PendingMember(true, spigotOwner, p[2], p[1], p[0]));
+            } else if (p.length >= 3) {
+                pending.add(new PendingMember(false, spigotOwner, p[p.length - 1], p[1], p[0]));
+            }
+        }
+    }
+
+    private static int findSpigotNamespace(String[] header, int start) {
+        for (int i = start; i < header.length; i++) {
+            String value = header[i].toLowerCase(java.util.Locale.ROOT);
+            if (value.contains("spigot") || value.contains("reobf")) return i;
+        }
+        return -1;
+    }
+
+    private static void loadOverrides(InputStream stream) throws Exception {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+                String[] parts = line.split("\\t", -1);
+                switch (parts[0]) {
+                    case "CLASS" -> {
+                        if (parts.length != 3) throw invalid(line);
+                        CLASS_MAP.put(parts[1], parts[2]);
+                        MOJANG_TO_SPIGOT_CLASS.put(parts[2], parts[1]);
+                    }
+                    case "FIELD" -> {
+                        if (parts.length != 5) throw invalid(line);
+                        FIELD_MAP.put(new MemberKey(parts[1], parts[2], parts[3]), parts[4]);
+                        addUniqueNameMapping(FIELD_NAME_MAP, new MemberNameKey(parts[1], parts[2]), parts[4]);
+                    }
+                    case "METHOD" -> {
+                        if (parts.length != 5) throw invalid(line);
+                        putMethod(new MemberKey(parts[1], parts[2], parts[3]), parts[4]);
+                        addUniqueNameMapping(METHOD_NAME_MAP, new MemberNameKey(parts[1], parts[2]), parts[4]);
+                    }
+                    default -> throw invalid(line);
+                }
+            }
+        }
+    }
+
+    private static final String AMBIGUOUS = "\u0000";
+
+    private static void addUniqueNameMapping(Map<MemberNameKey, String> map, MemberNameKey key, String value) {
+        String previous = map.putIfAbsent(key, value);
+        if (previous != null && !previous.equals(value)) map.put(key, AMBIGUOUS);
+    }
+
+    private static IllegalStateException invalid(String line) {
+        return new IllegalStateException("Invalid plugin mapping entry: " + line);
     }
 
     @Override
     public String map(String internalName) {
         if (internalName == null) return null;
 
-        // Already the target version — nothing to do.
-        if (internalName.startsWith("org/bukkit/craftbukkit/v1_21_R1/")) {
+        // Paper-style CraftBukkit is canonical and unversioned on LunarArc.
+        // Spigot plugins may still be compiled against versioned CraftBukkit names
+        // such as org/bukkit/craftbukkit/v1_21_R1/entity/CraftPlayer. Rewrite only
+        // that version segment to the canonical unversioned Paper package.
+        if (internalName.startsWith(CRAFTBUKKIT_PREFIX)) {
+            String remainder = internalName.substring(CRAFTBUKKIT_PREFIX.length());
+            int slash = remainder.indexOf('/');
+            if (slash > 0 && remainder.substring(0, slash).matches("v\\d+_\\d+_R\\d+")) {
+                return CRAFTBUKKIT_PREFIX + remainder.substring(slash + 1);
+            }
             return internalName;
         }
 
-        // CraftBukkit versioned → current.
-        if (internalName.startsWith("org/bukkit/craftbukkit/")) {
-            if (internalName.startsWith("org/bukkit/craftbukkit/v1_")) {
-                for (Map.Entry<String, String> e : CLASS_MAP.entrySet()) {
-                    if (e.getKey().startsWith("org/bukkit/craftbukkit/")
-                            && internalName.startsWith(e.getKey())) {
-                        return e.getValue() + internalName.substring(e.getKey().length());
-                    }
-                }
-            }
-            // Unversioned CraftBukkit reference.
-            return "org/bukkit/craftbukkit/v1_21_R1/"
-                    + internalName.substring("org/bukkit/craftbukkit/".length());
-        }
+        if (!remapNms) return internalName;
+        String mapped = CLASS_MAP.get(internalName);
+        if (mapped != null) return mapped;
 
-        // General NMS / library relocations.
-        for (Map.Entry<String, String> e : CLASS_MAP.entrySet()) {
-            if (internalName.startsWith(e.getKey())) {
-                String mapped = e.getValue() + internalName.substring(e.getKey().length());
-                if (!mapped.equals(internalName)) return mapped;
-            }
+        int nested = internalName.indexOf('$');
+        if (nested > 0) {
+            String mappedOwner = CLASS_MAP.get(internalName.substring(0, nested));
+            if (mappedOwner != null) return mappedOwner + internalName.substring(nested);
         }
-
         return internalName;
     }
 
-    /**
-     * Transforms plugin bytecode: applies name remapping and optionally downgrades
-     * the class-file version so a plugin compiled on a newer JDK still loads.
-     *
-     * @param className internal class name (e.g. "com/sk89q/worldedit/bukkit/BukkitConfiguration")
-     */
-    public byte[] transform(byte[] bytecode, String className) {
-        bytecode = transform(bytecode);
-        if (className != null) {
-            bytecode = applyWorldEditFixes(bytecode, className);
+    @Override
+    public String mapFieldName(String owner, String name, String descriptor) {
+        if (!remapNms || owner == null || name == null) return name;
+
+        String spigotOwner = toSpigotOwner(owner);
+        String lookupDescriptor = toSpigotDescriptor(descriptor);
+        String mapped = FIELD_MAP.get(new MemberKey(spigotOwner, name, lookupDescriptor));
+        if (mapped == null && !java.util.Objects.equals(lookupDescriptor, descriptor)) {
+            mapped = FIELD_MAP.get(new MemberKey(spigotOwner, name, descriptor));
         }
-        return bytecode;
+        if (mapped == null) mapped = FIELD_MAP.get(new MemberKey(spigotOwner, name, "*"));
+        if (mapped == null) {
+            String unique = FIELD_NAME_MAP.get(new MemberNameKey(spigotOwner, name));
+            if (unique != null && !AMBIGUOUS.equals(unique)) mapped = unique;
+        }
+        if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
+            String key = spigotOwner + '#' + name + '#' + descriptor;
+            mapped = boundedComputeIfAbsent(BYTECODE_FIELD_CACHE, key,
+                    ignored -> resolveInheritedBytecodeMember(spigotOwner, name, descriptor, false));
+            if (name.equals(mapped)) mapped = null;
+        }
+        if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
+            LOGGER.warn("No mapping found for NMS field {}#{} {} — plugin bytecode will keep the "
+                            + "unmapped name and is likely to throw NoSuchFieldError at runtime.",
+                    spigotOwner, name, descriptor);
+        }
+        return mapped != null ? mapped : name;
     }
 
-    /** Patch WorldEdit classes to bypass unsupported-version checks. */
-    private static byte[] applyWorldEditFixes(byte[] bytecode, String className) {
-        switch (className) {
-            // Force unsupportedVersionEditing = true by making the config-key lookup return a
-            // key that does not exist, so getBoolean() falls back to its default (true when patched).
-            case "com/sk89q/worldedit/bukkit/BukkitConfiguration" -> {
-                return patchStringConstant(bytecode,
-                    "allow-editing-on-unsupported-versions",
-                    "lunararc-supported");
-            }
-            // FastAsyncWorldEdit version probe — make it return our target package version
-            case "com/fastasyncworldedit/bukkit/util/MinecraftVersion" -> {
-                return patchStringConstant(bytecode, "getPackageVersion", "v1_21_R1");
-            }
+    @Override
+    public String mapMethodName(String owner, String name, String descriptor) {
+        if (!remapNms || "<init>".equals(name) || "<clinit>".equals(name)) return name;
+        String spigotOwner = toSpigotOwner(owner);
+        String lookupDescriptor = toSpigotDescriptor(descriptor);
+        String mapped = METHOD_MAP.get(new MemberKey(spigotOwner, name, lookupDescriptor));
+        if (mapped == null && !java.util.Objects.equals(lookupDescriptor, descriptor)) {
+            mapped = METHOD_MAP.get(new MemberKey(spigotOwner, name, descriptor));
         }
-        return bytecode;
+        if (mapped == null) mapped = METHOD_MAP.get(new MemberKey(spigotOwner, name, "*"));
+        if (mapped == null) {
+            String unique = METHOD_NAME_MAP.get(new MemberNameKey(spigotOwner, name));
+            if (unique != null && !AMBIGUOUS.equals(unique)) mapped = unique;
+        }
+        if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
+            String key = spigotOwner + '#' + name + '#' + descriptor;
+            mapped = boundedComputeIfAbsent(BYTECODE_METHOD_CACHE, key,
+                    ignored -> resolveInheritedBytecodeMember(spigotOwner, name, descriptor, true));
+            if (name.equals(mapped)) mapped = null;
+        }
+        if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
+            LOGGER.warn("No mapping found for NMS method {}#{} {} — plugin bytecode will keep the "
+                            + "unmapped name and is likely to throw NoSuchMethodError at runtime.",
+                    spigotOwner, name, descriptor);
+        }
+        return mapped != null ? mapped : name;
     }
 
-    /** Replace one string constant in all LDC instructions via ASM (safe for any string length). */
-    private static byte[] patchStringConstant(byte[] bytes, String from, String to) {
+    private String resolveInheritedBytecodeMember(String spigotOwner, String name, String descriptor, boolean method) {
+        String mojangOwner = CLASS_MAP.get(spigotOwner);
+        if (mojangOwner == null) return name;
         try {
-            ClassReader reader = new ClassReader(bytes);
-            ClassWriter writer = new ClassWriter(0);
-            reader.accept(new ClassVisitor(Opcodes.ASM9, writer) {
-                @Override
-                public MethodVisitor visitMethod(int access, String name, String descriptor,
-                        String signature, String[] exceptions) {
-                    MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-                    return new MethodVisitor(Opcodes.ASM9, mv) {
-                        @Override
-                        public void visitLdcInsn(Object value) {
-                            super.visitLdcInsn(from.equals(value) ? to : value);
-                        }
-                    };
+            ClassLoader loader = LunarArcServer.modClassLoader();
+            if (loader == null) loader = LunarArcRemapper.class.getClassLoader();
+            Class<?> type = Class.forName(mojangOwner.replace('/', '.'), false, loader);
+            for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+                String currentSpigot = MOJANG_TO_SPIGOT_CLASS.getOrDefault(
+                        current.getName().replace('.', '/'), current.getName().replace('.', '/'));
+                Map<MemberKey, String> mappings = method ? METHOD_MAP : FIELD_MAP;
+                String lookupDescriptor = toSpigotDescriptor(descriptor);
+                String mapped = mappings.get(new MemberKey(currentSpigot, name, lookupDescriptor));
+                if (mapped == null) mapped = mappings.get(new MemberKey(currentSpigot, name, descriptor));
+                if (mapped == null) mapped = mappings.get(new MemberKey(currentSpigot, name, "*"));
+                if (mapped == null) {
+                    Map<MemberNameKey, String> names = method ? METHOD_NAME_MAP : FIELD_NAME_MAP;
+                    String unique = names.get(new MemberNameKey(currentSpigot, name));
+                    if (unique != null && !AMBIGUOUS.equals(unique)) mapped = unique;
                 }
-            }, 0);
-            return writer.toByteArray();
-        } catch (Throwable t) {
-            return bytes;
+                if (mapped != null) return mapped;
+                if (method) {
+                    String fromInterface = resolveInterfaceBytecodeMember(current.getInterfaces(), name, descriptor);
+                    if (fromInterface != null) return fromInterface;
+                }
+            }
+        } catch (ClassNotFoundException | LinkageError ignored) {
         }
+        return name;
+    }
+
+    private String resolveInterfaceBytecodeMember(Class<?>[] interfaces, String name, String descriptor) {
+        for (Class<?> iface : interfaces) {
+            String spigot = MOJANG_TO_SPIGOT_CLASS.getOrDefault(
+                    iface.getName().replace('.', '/'), iface.getName().replace('.', '/'));
+            String lookupDescriptor = toSpigotDescriptor(descriptor);
+            String mapped = METHOD_MAP.get(new MemberKey(spigot, name, lookupDescriptor));
+            if (mapped == null) mapped = METHOD_MAP.get(new MemberKey(spigot, name, descriptor));
+            if (mapped == null) mapped = METHOD_MAP.get(new MemberKey(spigot, name, "*"));
+            if (mapped == null) {
+                String unique = METHOD_NAME_MAP.get(new MemberNameKey(spigot, name));
+                if (unique != null && !AMBIGUOUS.equals(unique)) mapped = unique;
+            }
+            if (mapped != null) return mapped;
+            mapped = resolveInterfaceBytecodeMember(iface.getInterfaces(), name, descriptor);
+            if (mapped != null) return mapped;
+        }
+        return null;
+    }
+
+
+    public String mapRuntimeClassName(String className) {
+        if (!remapNms || className == null || className.isEmpty()) return className;
+        return mapClassNameString(className);
+    }
+
+
+    public String mapRuntimeFieldName(Class<?> runtimeOwner, String spigotName) {
+        if (!remapNms || runtimeOwner == null || spigotName == null) return spigotName;
+        String cacheKey = runtimeOwner.getName() + '#' + spigotName;
+        return boundedComputeIfAbsent(RUNTIME_FIELD_CACHE, cacheKey,
+                ignored -> resolveRuntimeMember(runtimeOwner, spigotName, false));
+    }
+
+
+    public String mapRuntimeMethodName(Class<?> runtimeOwner, String spigotName) {
+        return mapRuntimeMethodName(runtimeOwner, spigotName, null);
     }
 
     /**
-     * Transforms plugin bytecode: applies name remapping and optionally downgrades
-     * the class-file version so a plugin compiled on a newer JDK still loads.
+     * Resolve a reflective Spigot method name against the Mojang runtime.
+     *
+     * <p>Unlike a plain name-only lookup, {@link Class#getMethod(String, Class[])}
+     * gives us the parameter types. Use them to disambiguate overloaded Spigot
+     * names before falling back to the unique-name table. This is generic NMS
+     * reflection compatibility and does not depend on any plugin identity.</p>
      */
-    public byte[] transform(byte[] bytecode) {
-        try {
-            if (bytecode.length < 8) return bytecode;
+    public String mapRuntimeMethodName(Class<?> runtimeOwner, String spigotName, Class<?>[] parameterTypes) {
+        if (!remapNms || runtimeOwner == null || spigotName == null) return spigotName;
+        String parameterKey = parameterTypes == null ? "*" : runtimeParameterDescriptor(parameterTypes);
+        String cacheKey = runtimeOwner.getName() + '#' + spigotName + '#' + parameterKey;
+        return boundedComputeIfAbsent(RUNTIME_METHOD_CACHE, cacheKey,
+                ignored -> resolveRuntimeMethod(runtimeOwner, spigotName, parameterTypes));
+    }
 
-            // Downgrade class-file version if compiled on a newer JVM (max Java 21 = 65).
-            int major = ((bytecode[6] & 0xFF) << 8) | (bytecode[7] & 0xFF);
-            if (major > 65) {
-                bytecode = bytecode.clone();
-                bytecode[6] = 0;
-                bytecode[7] = 65;
+
+    private static String boundedComputeIfAbsent(Map<String, String> cache, String key,
+                                                  java.util.function.Function<String, String> mapping) {
+        String existing = cache.get(key);
+        if (existing != null) return existing;
+        // Mapping/reflection inputs can originate in plugin bytecode. Keep memoization
+        // bounded so reloads or pathological plugins cannot grow a process-wide cache forever.
+        // Skip caching past the cap rather than clearing the whole map: under concurrent
+        // plugin/classloading a full clear can race across threads and repeatedly discard
+        // still-useful warm entries instead of just capping growth.
+        if (cache.size() >= DYNAMIC_CACHE_LIMIT) return mapping.apply(key);
+        return cache.computeIfAbsent(key, mapping);
+    }
+
+    private String resolveRuntimeMember(Class<?> runtimeOwner, String spigotName, boolean method) {
+        for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
+            String spigotOwner = MOJANG_TO_SPIGOT_CLASS.getOrDefault(current.getName().replace('.', '/'),
+                    current.getName().replace('.', '/'));
+            Map<MemberNameKey, String> names = method ? METHOD_NAME_MAP : FIELD_NAME_MAP;
+            String unique = names.get(new MemberNameKey(spigotOwner, spigotName));
+            if (unique != null && !AMBIGUOUS.equals(unique)) return unique;
+            if (method) {
+                for (Class<?> iface : current.getInterfaces()) {
+                    String resolved = resolveRuntimeMember(iface, spigotName, true);
+                    if (!resolved.equals(spigotName)) return resolved;
+                }
             }
+        }
+        LOGGER.warn("No reflective mapping found for {} {}#{} — a plugin's reflective lookup is "
+                        + "likely to throw NoSuchFieldException/NoSuchMethodException.",
+                method ? "method" : "field", runtimeOwner.getName(), spigotName);
+        return spigotName;
+    }
 
+    private String resolveRuntimeMethod(Class<?> runtimeOwner, String spigotName, Class<?>[] parameterTypes) {
+        String parameterDescriptor = parameterTypes == null ? null : runtimeParameterDescriptor(parameterTypes);
+        for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
+            String spigotOwner = MOJANG_TO_SPIGOT_CLASS.getOrDefault(current.getName().replace('.', '/'),
+                    current.getName().replace('.', '/'));
+            String descriptorMapped = parameterDescriptor == null ? null
+                    : findMethodMappingByParameters(spigotOwner, spigotName, parameterDescriptor);
+            if (descriptorMapped != null) return descriptorMapped;
+
+            String unique = METHOD_NAME_MAP.get(new MemberNameKey(spigotOwner, spigotName));
+            if (unique != null && !AMBIGUOUS.equals(unique)) return unique;
+            for (Class<?> iface : current.getInterfaces()) {
+                String resolved = resolveRuntimeMethod(iface, spigotName, parameterTypes);
+                if (!resolved.equals(spigotName)) return resolved;
+            }
+        }
+        LOGGER.warn("No reflective mapping found for method {}#{}{} — a plugin's reflective lookup is "
+                        + "likely to throw NoSuchMethodException.",
+                runtimeOwner.getName(), spigotName, parameterDescriptor == null ? "(*)" : parameterDescriptor);
+        return spigotName;
+    }
+
+    private static String findMethodMappingByParameters(String spigotOwner, String spigotName,
+                                                         String parameterDescriptor) {
+        List<Map.Entry<MemberKey, String>> overloads =
+                METHOD_OVERLOAD_INDEX.get(new MemberNameKey(spigotOwner, spigotName));
+        if (overloads == null || overloads.isEmpty()) return null;
+        String resolved = null;
+        for (Map.Entry<MemberKey, String> entry : overloads) {
+            String descriptor = entry.getKey().descriptor();
+            if ("*".equals(descriptor)) {
+                if (resolved == null) resolved = entry.getValue();
+                else if (!resolved.equals(entry.getValue())) return null;
+                continue;
+            }
+            int close = descriptor.indexOf(')');
+            if (close < 0 || !descriptor.substring(0, close + 1).equals(parameterDescriptor)) continue;
+            if (resolved == null) resolved = entry.getValue();
+            else if (!resolved.equals(entry.getValue())) return null;
+        }
+        return resolved;
+    }
+
+    private static String runtimeParameterDescriptor(Class<?>[] parameterTypes) {
+        StringBuilder descriptor = new StringBuilder("(");
+        for (Class<?> parameterType : parameterTypes) descriptor.append(runtimeTypeDescriptor(parameterType));
+        return descriptor.append(')').toString();
+    }
+
+    private static String runtimeTypeDescriptor(Class<?> type) {
+        if (type.isArray()) return type.getName().replace('.', '/');
+        if (type.isPrimitive()) {
+            if (type == void.class) return "V";
+            if (type == boolean.class) return "Z";
+            if (type == byte.class) return "B";
+            if (type == char.class) return "C";
+            if (type == short.class) return "S";
+            if (type == int.class) return "I";
+            if (type == long.class) return "J";
+            if (type == float.class) return "F";
+            if (type == double.class) return "D";
+        }
+        String internal = type.getName().replace('.', '/');
+        String spigot = MOJANG_TO_SPIGOT_CLASS.getOrDefault(internal, internal);
+        return 'L' + spigot + ';';
+    }
+
+    private String toSpigotOwner(String owner) {
+        String normalized = owner;
+        if (CLASS_MAP.containsKey(normalized)) return normalized;
+        return MOJANG_TO_SPIGOT_CLASS.getOrDefault(normalized, normalized);
+    }
+
+    private static String toSpigotDescriptor(String descriptor) {
+        return mapDescriptorClasses(descriptor, MOJANG_TO_SPIGOT_CLASS);
+    }
+
+    public byte[] transform(byte[] bytecode, String className) {
+        return transformInternal(bytecode, className == null ? "<unknown>" : className);
+    }
+
+    public byte[] transform(byte[] bytecode) {
+        return transformInternal(bytecode, "<unknown>");
+    }
+
+    private byte[] transformInternal(byte[] bytecode, String className) {
+        if (bytecode == null || bytecode.length < 8) return bytecode;
+        try {
             ClassReader reader = new ClassReader(bytecode);
             ClassWriter writer = new ClassWriter(0);
-            ClassRemapper remapper = new ClassRemapper(writer, this);
-            reader.accept(remapper, 0);
-            return writer.toByteArray();
-        } catch (IllegalArgumentException e) {
-            if (e.getMessage() != null && e.getMessage().contains("69")) {
-                return bytecode; // version-69 quirk — skip silently
-            }
-            throw e;
-        } catch (Exception e) {
-            return bytecode; // best-effort: return original if transform fails
+
+            // Repair 87: NMS remapping is now selected per class, not per plugin.
+            // Most Paper/Bukkit plugin classes never touch net.minecraft at all and
+            // should not be exposed to NMS member/reflection rewriting. Classes that
+            // actually carry legacy NMS references still use the full remapper.
+            boolean classNeedsNms = remapNms && containsNmsReference(bytecode);
+            LunarArcRemapper effective = classNeedsNms || !remapNms
+                    ? this
+                    : new LunarArcRemapper(false);
+
+            ClassVisitor remapper = new ClassRemapper(writer, effective);
+            ClassVisitor visitor = classNeedsNms ? new ReflectionMemberVisitor(remapper) : remapper;
+            visitor = effective.compatibilityVisitor(visitor, className);
+            reader.accept(visitor, 0);
+            byte[] remapped = writer.toByteArray();
+            return applyPluginPatchers(remapped, className);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("Failed to remap plugin class " + className, e);
         }
+    }
+
+    // Modeled on the real Arclight PluginPatcher framework (ArclightPluginPatcher +
+    // IntegratedPatcher): a second, ClassNode-based pass over the already-remapped bytecode,
+    // for surgical one-off fixes to known third-party incompatibilities that aren't a general
+    // member-remapping problem. Loaded once; see LunarArcPluginPatcherLoader for how patchers
+    // are discovered.
+    private static final java.util.List<io.ampznetwork.lunararc.common.mod.util.remapper.patcher.PluginPatcher> PLUGIN_PATCHERS =
+            io.ampznetwork.lunararc.common.mod.util.remapper.patcher.LunarArcPluginPatcherLoader.load();
+
+    private static byte[] applyPluginPatchers(byte[] remapped, String className) {
+        if (PLUGIN_PATCHERS.isEmpty()) return remapped;
+        org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode();
+        new ClassReader(remapped).accept(node, 0);
+        boolean matched = false;
+        for (io.ampznetwork.lunararc.common.mod.util.remapper.patcher.PluginPatcher patcher : PLUGIN_PATCHERS) {
+            try {
+                patcher.handleClass(node, io.ampznetwork.lunararc.common.mod.util.remapper.patcher.LunarArcGlobalClassRepo.INSTANCE);
+                matched = true;
+            } catch (RuntimeException e) {
+                LOGGER.warn("Plugin patcher {} failed on class {}", patcher.getClass().getName(), className, e);
+            }
+        }
+        if (!matched) return remapped;
+        ClassWriter writer = new ClassWriter(0);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private static boolean containsNmsReference(byte[] bytecode) {
+        // Class-file constant-pool UTF-8 entries are stored as raw modified-UTF bytes.
+        // These ASCII needles therefore safely identify ordinary NMS descriptors,
+        // owners, class literals, and reflective class-name strings without parsing
+        // or rewriting the class a first time.
+        return containsAscii(bytecode, "net/minecraft/")
+                || containsAscii(bytecode, "net.minecraft.");
+    }
+
+    private static boolean containsAscii(byte[] haystack, String needle) {
+        byte[] target = needle.getBytes(StandardCharsets.US_ASCII);
+        outer:
+        for (int i = 0; i <= haystack.length - target.length; i++) {
+            for (int j = 0; j < target.length; j++) {
+                if (haystack[i + j] != target[j]) continue outer;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private ClassVisitor compatibilityVisitor(ClassVisitor delegate, String className) {
+        return new ClassVisitor(Opcodes.ASM9, delegate) {
+            @Override
+            public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                MethodVisitor method = super.visitMethod(access, name, descriptor, signature, exceptions);
+                return new MethodVisitor(Opcodes.ASM9, method) {
+                    @Override
+                    public void visitMethodInsn(int opcode, String owner, String methodName, String methodDescriptor, boolean isInterface) {
+                        // Generic compatibility for the legacy Spigot static accessor. The
+                        // modloader still owns the real MinecraftServer; this only redirects
+                        // old plugin bytecode to LunarArc's concrete server access method.
+                        if (opcode == Opcodes.INVOKESTATIC
+                                && "net/minecraft/server/MinecraftServer".equals(owner)
+                                && "getServer".equals(methodName)
+                                && "()Lnet/minecraft/server/MinecraftServer;".equals(methodDescriptor)) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                    "io/ampznetwork/lunararc/common/LunarArcServerAccess",
+                                    "getMinecraftServer", methodDescriptor, false);
+                            return;
+                        }
+                        super.visitMethodInsn(opcode, owner, methodName, methodDescriptor, isInterface);
+                    }
+                };
+            }
+        };
+    }
+
+    private String mapClassNameString(String value) {
+        if (value == null || value.isEmpty()) return value;
+        boolean binaryName = value.indexOf('.') >= 0 && value.indexOf('/') < 0;
+        String internal = binaryName ? value.replace('.', '/') : value;
+        if (!internal.startsWith(CRAFTBUKKIT_PREFIX) && !internal.startsWith("net/minecraft/")) return value;
+        String mapped = map(internal);
+        return mapped.equals(internal) ? value : (binaryName ? mapped.replace('/', '.') : mapped);
+    }
+
+    private final class ReflectionMemberVisitor extends ClassVisitor {
+        private ReflectionMemberVisitor(ClassVisitor delegate) {
+            super(Opcodes.ASM9, delegate);
+        }
+
+        @Override
+        public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+            MethodVisitor delegate = super.visitMethod(access, name, descriptor, signature, exceptions);
+            return new MethodVisitor(Opcodes.ASM9, delegate) {
+                @Override
+                public void visitMethodInsn(int opcode, String owner, String methodName, String methodDescriptor, boolean isInterface) {
+                    String bridgeOwner = "io/ampznetwork/lunararc/common/mod/LunarArcReflectionBridge";
+                    if (opcode == Opcodes.INVOKESTATIC && "java/lang/Class".equals(owner) && "forName".equals(methodName)) {
+                        if ("(Ljava/lang/String;)Ljava/lang/Class;".equals(methodDescriptor)) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "forName", methodDescriptor, false);
+                            return;
+                        }
+                        if ("(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;".equals(methodDescriptor)) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "forName", methodDescriptor, false);
+                            return;
+                        }
+                    }
+                    if (opcode == Opcodes.INVOKEVIRTUAL && "java/lang/ClassLoader".equals(owner)
+                            && "loadClass".equals(methodName)
+                            && "(Ljava/lang/String;)Ljava/lang/Class;".equals(methodDescriptor)) {
+                        super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "loadClass",
+                                "(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;", false);
+                        return;
+                    }
+                    if ("java/lang/Class".equals(owner)) {
+                        switch (methodName) {
+                            case "getField" -> {
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "getField",
+                                        "(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/reflect/Field;", false);
+                                return;
+                            }
+                            case "getDeclaredField" -> {
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "getDeclaredField",
+                                        "(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/reflect/Field;", false);
+                                return;
+                            }
+                            case "getMethod" -> {
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "getMethod",
+                                        "(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;", false);
+                                return;
+                            }
+                            case "getDeclaredMethod" -> {
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "getDeclaredMethod",
+                                        "(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;", false);
+                                return;
+                            }
+                            default -> {
+                            }
+                        }
+                    }
+                    super.visitMethodInsn(opcode, owner, methodName, methodDescriptor, isInterface);
+                }
+            };
+        }
+    }
+
+    private static String mapDescriptorClasses(String descriptor, Map<String, String> classes) {
+        if (descriptor == null || descriptor.isEmpty() || "*".equals(descriptor)) return descriptor;
+        StringBuilder out = new StringBuilder(descriptor.length());
+        for (int i = 0; i < descriptor.length(); i++) {
+            char c = descriptor.charAt(i);
+            out.append(c);
+            if (c == 'L') {
+                int end = descriptor.indexOf(';', i);
+                if (end < 0) break;
+                String name = descriptor.substring(i + 1, end);
+                out.append(classes.getOrDefault(name, name));
+                out.append(';');
+                i = end;
+            }
+        }
+        return out.toString();
+    }
+
+    private record MemberKey(String owner, String name, String descriptor) {
+    }
+
+    private record MemberNameKey(String owner, String name) {
+    }
+
+    private record PendingMember(boolean method, String spigotOwner, String spigotName,
+                                 String mojangDescriptor, String mojangName) {
     }
 }

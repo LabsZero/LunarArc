@@ -1,5 +1,5 @@
 # This workflow will build a Java project with Gradle
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-gradle
+# For more information see: https:
 
 name: Build
 
@@ -22,10 +22,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 21
+      - name: Read Java runtime requirement
+        id: java-runtime
+        shell: bash
+        run: |
+          java_runtime=$(awk -F '=' '/^java-runtime[[:space:]]*=/ {gsub(/[ "\r]/, "", $2); print $2; exit}' gradle/libs.versions.toml)
+          test -n "$java_runtime" || { echo "java-runtime is missing from gradle/libs.versions.toml" >&2; exit 1; }
+          echo "version=$java_runtime" >> "$GITHUB_OUTPUT"
+
+      - name: Set up required JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '${{ steps.java-runtime.outputs.version }}'
           distribution: 'temurin'
 
       - name: Setup Gradle
@@ -33,7 +41,7 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Cache Loom / Paper setup
+      - name: Cache Loom / compile reference setup
         uses: actions/cache@v4
         with:
           path: |
@@ -52,7 +60,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build & Assemble
-        run: ./gradlew setupPaperServer build collect --no-daemon --stacktrace
+        run: ./gradlew clean preparePaperCompileReference forgeBuild collectForge --no-daemon --stacktrace
 
       - name: List Artifacts
         run: ls -R build/libs
@@ -61,6 +69,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: LunarArc
-          path: build/libs/*.jar
-          if-no-files-found: error
-          retention-days: 90
+          path: build/libs
+
+

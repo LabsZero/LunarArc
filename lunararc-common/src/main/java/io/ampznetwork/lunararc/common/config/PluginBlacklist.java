@@ -12,10 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Allows server admins to prevent known-incompatible plugins from loading.
- * Configured in lunararc-blacklist.yml at the server root.
- */
+
 public class PluginBlacklist {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc");
@@ -50,7 +47,7 @@ public class PluginBlacklist {
                 }
             }
 
-            LOGGER.info("[LunarArc] Plugin blacklist loaded with {} entries.", entries.size());
+            LOGGER.debug("[LunarArc] Plugin blacklist loaded with {} entries.", entries.size());
         } catch (Exception e) {
             LOGGER.error("[LunarArc] Failed to load lunararc-blacklist.yml", e);
         }

@@ -1,0 +1,31 @@
+modLoader="javafml"
+loaderVersion="[52,)"
+license="GNU General Public License v3.0"
+
+[[mods]]
+modId="lunararc"
+version="${version}"
+displayName="LunarArc"
+displayTest="IGNORE_SERVER_VERSION"
+authors="AMPZNetwork"
+description='''
+LunarArc hybrid Bukkit/Paper compatibility layer for Minecraft Forge.
+Minecraft and Forge remain authoritative; LunarArc provides the plugin-facing server layer.
+'''
+
+[[dependencies.lunararc]]
+modId="forge"
+mandatory=true
+versionRange="[52.1.16,)"
+ordering="NONE"
+side="SERVER"
+
+[[dependencies.lunararc]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.21.1]"
+ordering="NONE"
+side="SERVER"
+
+[[mixins]]
+config="mixins.lunararc.forge.json"

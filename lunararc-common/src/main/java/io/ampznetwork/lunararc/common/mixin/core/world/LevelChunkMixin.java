@@ -1,0 +1,121 @@
+package io.ampznetwork.lunararc.common.mixin.core.world;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+@Mixin(LevelChunk.class)
+public abstract class LevelChunkMixin implements io.ampznetwork.lunararc.common.bridge.LevelChunkBridge {
+    @Shadow @Final private Level level;
+    @Shadow private boolean loaded;
+
+    @Shadow
+    public abstract BlockState setBlockState(BlockPos pos, BlockState state, boolean isMoving);
+
+    @Unique
+    private int lunararc$suppressOnPlaceDepth;
+    @Unique
+    private boolean lunararc$needsDecoration;
+
+    @Unique
+    private final org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer lunararc$persistentData =
+            new org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer();
+
+    @Override
+    public org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer lunararc$getPersistentDataContainer() {
+        return this.lunararc$persistentData;
+    }
+
+    public BlockState setBlockState(BlockPos pos, BlockState state, boolean isMoving, boolean doPlace) {
+        if (doPlace) {
+            return this.setBlockState(pos, state, isMoving);
+        }
+        this.lunararc$suppressOnPlaceDepth++;
+        try {
+            return this.setBlockState(pos, state, isMoving);
+        } finally {
+            this.lunararc$suppressOnPlaceDepth--;
+        }
+    }
+
+    @Redirect(
+            method = "setBlockState(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Z)Lnet/minecraft/world/level/block/state/BlockState;",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/level/block/state/BlockState;onPlace(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Z)V"),
+            require = 0)
+    private void lunararc$conditionallyRunOnPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
+        if (this.lunararc$suppressOnPlaceDepth == 0) {
+            state.onPlace(level, pos, oldState, movedByPiston);
+        }
+    }
+
+    @Inject(method = "<init>(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ProtoChunk;Lnet/minecraft/world/level/chunk/LevelChunk$PostLoadProcessor;)V",
+            at = @At("RETURN"), require = 0)
+    private void lunararc$markGeneratedChunk(net.minecraft.server.level.ServerLevel level,
+                                             net.minecraft.world.level.chunk.ProtoChunk protoChunk,
+                                             LevelChunk.PostLoadProcessor postLoadProcessor,
+                                             CallbackInfo ci) {
+        this.lunararc$needsDecoration = true;
+    }
+
+    @Unique
+    private org.bukkit.craftbukkit.CraftWorld lunararc$craftWorld() {
+        if (!(this.level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return null;
+        for (org.bukkit.World world : org.bukkit.Bukkit.getWorlds()) {
+            if (world instanceof org.bukkit.craftbukkit.CraftWorld craftWorld
+                    && craftWorld.getHandle() == serverLevel) {
+                return craftWorld;
+            }
+        }
+        return null;
+    }
+
+    @Inject(method = "setLoaded", at = @At("HEAD"), require = 0)
+    private void lunararc$chunkUnloadEvent(boolean loaded, CallbackInfo ci) {
+        // setLoaded is a general vanilla method reachable from chunk generation on worker
+        // threads — confirmed real risk, same class of bug as a real crash in
+        // LivingEntity.addEffect() during structure population. Skip firing off-thread rather
+        // than let PaperEventManager's safety check throw and abort chunk generation.
+        if (loaded || !this.loaded || !org.bukkit.Bukkit.isPrimaryThread()) return;
+        org.bukkit.craftbukkit.CraftWorld world = lunararc$craftWorld();
+        if (world == null) return;
+        org.bukkit.Chunk chunk = new org.bukkit.craftbukkit.CraftChunk((LevelChunk) (Object) this, world);
+        org.bukkit.event.world.ChunkUnloadEvent event = new org.bukkit.event.world.ChunkUnloadEvent(chunk, true);
+        org.bukkit.Bukkit.getPluginManager().callEvent(event);
+    }
+
+    @Inject(method = "setLoaded", at = @At("TAIL"), require = 0)
+    private void lunararc$chunkLoadEvent(boolean loaded, CallbackInfo ci) {
+        if (!loaded) return;
+        boolean isNewChunk = this.lunararc$needsDecoration;
+        // setLoaded is a general vanilla method reachable from chunk generation on worker
+        // threads — same class of risk as lunararc$chunkUnloadEvent above. Unlike that one,
+        // this method also clears the needsDecoration flag as a real side effect, so that part
+        // must always run regardless of thread — only the two event-firing calls below are
+        // skipped off-thread, not the whole method, or the flag would never reset and this
+        // chunk would incorrectly look "new" again the next time it's loaded on the main thread.
+        this.lunararc$needsDecoration = false;
+        if (!org.bukkit.Bukkit.isPrimaryThread()) return;
+        org.bukkit.craftbukkit.CraftWorld world = lunararc$craftWorld();
+        if (world == null) return;
+        org.bukkit.Chunk chunk = new org.bukkit.craftbukkit.CraftChunk((LevelChunk) (Object) this, world);
+        org.bukkit.Bukkit.getPluginManager().callEvent(new org.bukkit.event.world.ChunkLoadEvent(chunk, isNewChunk));
+
+        if (!isNewChunk) return;
+
+        // Bukkit BlockPopulators are already executed at the real generation-decoration
+        // boundary by LunarArcChunkPopulators. The first live LevelChunk load owns only
+        // the provenance-sensitive lifecycle events, otherwise populators would run twice.
+        org.bukkit.Bukkit.getPluginManager().callEvent(new org.bukkit.event.world.ChunkPopulateEvent(chunk));
+    }
+}

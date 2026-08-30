@@ -20,7 +20,8 @@ public class LunarArcConfig {
     private static boolean velocityEnabled = false;
     private static byte[] velocitySecret = new byte[0];
     private static boolean blockMedicEnabled = true;
-    private static String blockMedicConsent = "unset"; // "unset" | "accepted" | "declined"
+    private static String blockMedicConsent = "unset";
+    private static boolean quietConsole = true;
 
     public static void load() {
         Properties props = readProps();
@@ -42,6 +43,10 @@ public class LunarArcConfig {
             props.setProperty("blockmedic_consent", "unset");
             changed = true;
         }
+        if (!props.containsKey("console.quiet")) {
+            props.setProperty("console.quiet", "true");
+            changed = true;
+        }
         if (changed) writeProps(props);
 
         velocityEnabled = Boolean.parseBoolean(props.getProperty("proxy.velocity.enabled", "false"));
@@ -49,8 +54,9 @@ public class LunarArcConfig {
         velocitySecret = secret.isEmpty() ? new byte[0] : secret.getBytes(StandardCharsets.UTF_8);
         blockMedicEnabled = Boolean.parseBoolean(props.getProperty("enable_blockmedic", "true"));
         blockMedicConsent = props.getProperty("blockmedic_consent", "unset");
+        quietConsole = Boolean.parseBoolean(props.getProperty("console.quiet", "true"));
 
-        LOGGER.info("[LunarArc] Config loaded (velocity={}, blockmedic={}).", velocityEnabled, blockMedicEnabled);
+        LOGGER.debug("[LunarArc] Config loaded (velocity={}, blockmedic={}).", velocityEnabled, blockMedicEnabled);
     }
 
     public static String getBlockMedicConsent() { return blockMedicConsent; }
@@ -85,4 +91,5 @@ public class LunarArcConfig {
     public static boolean isVelocityEnabled() { return velocityEnabled; }
     public static byte[] getVelocitySecret() { return velocitySecret; }
     public static boolean isBlockMedicEnabled() { return blockMedicEnabled; }
+    public static boolean isQuietConsole() { return quietConsole; }
 }

@@ -1,29 +1,25 @@
 package io.ampznetwork.lunararc.neoforge;
 
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
+import io.ampznetwork.lunararc.common.mod.server.LunarArcServer;
+import io.ampznetwork.lunararc.neoforge.command.NeoForgeCommandHook;
+import io.ampznetwork.lunararc.neoforge.server.NeoForgeServerLifecycle;
+import io.ampznetwork.lunararc.neoforge.event.NeoForgeBlockBreakEvents;
+import io.ampznetwork.lunararc.neoforge.event.NeoForgeBlockPlaceEvents;
+import io.ampznetwork.lunararc.neoforge.event.NeoForgeEntityTeleportEvents;
+import io.ampznetwork.lunararc.neoforge.event.NeoForgeEntityJoinEvents;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.server.ServerStartingEvent;
-import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 
 @Mod("lunararc")
-public class LunarArcNeoForge {
+public final class LunarArcNeoForge {
 
     public LunarArcNeoForge(IEventBus modBus) {
-        // Register the bridge before any server lifecycle events so that
-        // MinecraftServerMixin.lunararc$afterServerInit can call createCraftServer().
-        LunarArcPlatform.registerBridge(new NeoForgeBridge());
-
-        NeoForge.EVENT_BUS.addListener(this::onServerStarting);
-        NeoForge.EVENT_BUS.addListener(this::onServerStopping);
-    }
-
-    private void onServerStarting(ServerStartingEvent event) {
-        LunarArcPlatform.getPlatformBridge().onServerStarting();
-    }
-
-    private void onServerStopping(ServerStoppingEvent event) {
-        LunarArcPlatform.getPlatformBridge().onServerStopping();
+        LunarArcServer.installPlatform("NeoForge", LunarArcNeoForge.class.getClassLoader());
+        NeoForgeCommandHook.install();
+        NeoForgeServerLifecycle.register();
+        NeoForgeBlockBreakEvents.register();
+        NeoForgeBlockPlaceEvents.register();
+        NeoForgeEntityTeleportEvents.register();
+        NeoForgeEntityJoinEvents.register();
     }
 }

@@ -8,15 +8,9 @@ import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.Scanner;
 
-/**
- * The high-performance LunarArc Unified Launcher.
- * Designed to be better than Arclight by providing a cleaner, faster boot
- * sequence.
- */
 public class Launcher {
     public static void main(String[] args) {
-        // Arclight-style agent bootstrap: re-launch with -javaagent:self so premain()
-        // gives us Instrumentation, allowing same-JVM mod loader injection without mods/.
+
         if (LunarArcAgent.instrumentation == null) {
             try {
                 Path self = Paths.get(Launcher.class.getProtectionDomain()
@@ -33,7 +27,7 @@ public class Launcher {
                     System.exit(pb.start().waitFor());
                 }
             } catch (Exception e) {
-                // Fall through: agent unavailable, continue without Instrumentation
+
             }
         }
 
@@ -42,29 +36,18 @@ public class Launcher {
             String minecraftVersion = versions.getProperty("minecraft", "unknown");
             String projectVersion = versions.getProperty("version", "unknown");
             String buildName = versions.getProperty("buildName", "unknown");
-            
+
             ConsoleUI.printLogo(minecraftVersion);
 
-            // EULA check — must agree before server starts
             checkEula();
 
-            // Check for updates
             UpdateChecker.check(projectVersion, buildName);
 
             ConsoleUI.printStep("step.initializing");
             LibraryExtractor.extractLibraries();
 
             Path workingDir = Paths.get("").toAbsolutePath();
-            Path lunararcDir = workingDir.resolve(".lunararc");
-            if (!Files.exists(lunararcDir)) {
-                ConsoleUI.printStep("step.creating_dir", lunararcDir.getFileName());
-                Files.createDirectories(lunararcDir);
-            }
 
-            // Platform selection. Each platform-specific jar bakes a
-            // "LunarArc-Platform" manifest attribute, so when the user runs e.g.
-            // the NeoForge jar we launch it directly without prompting. Only a
-            // universal/unmarked jar falls back to the persisted/prompted choice.
             String choice = platformChoiceFromManifest();
 
             if (choice == null || choice.isEmpty()) {
@@ -99,26 +82,30 @@ public class Launcher {
                 }
             }
 
-            // Resolve the self-JAR path once; platform launchers use it for classpath injection
             Path selfPath = Paths.get(Launcher.class.getProtectionDomain().getCodeSource().getLocation().toURI())
                     .toAbsolutePath();
 
+            String platformName = switch (choice) {
+                case "1" -> "neoforge";
+                case "2" -> "forge";
+                case "3" -> "fabric";
+                case "4" -> "quilt";
+                default -> "unknown";
+            };
+            LunarArcRuntime.Layout runtime = LunarArcRuntime.prepare(workingDir, selfPath, versions, platformName);
+
             switch (choice) {
                 case "1":
-                    ConsoleUI.printHeader("NeoForge Boot Sequence");
-                    NeoForgeInstaller.install(lunararcDir, versions, selfPath);
+                    NeoForgeInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 case "2":
-                    ConsoleUI.printHeader("Forge Boot Sequence");
-                    ForgeInstaller.install(lunararcDir, versions, selfPath);
+                    ForgeInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 case "3":
-                    ConsoleUI.printHeader("Fabric Boot Sequence");
-                    FabricInstaller.install(lunararcDir, versions, selfPath);
+                    FabricInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 case "4":
-                    ConsoleUI.printHeader("Quilt Boot Sequence");
-                    QuiltInstaller.install(lunararcDir, versions, selfPath);
+                    QuiltInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 default:
                     ConsoleUI.printError("error.invalid_selection");
@@ -131,12 +118,6 @@ public class Launcher {
         }
     }
 
-    /**
-     * Resolves the boot platform from this jar's {@code LunarArc-Platform}
-     * manifest attribute, mapping it to the numeric menu choice. Returns
-     * {@code null} for a universal/unmarked jar so the caller falls back to the
-     * persisted/prompted selection.
-     */
     private static String platformChoiceFromManifest() {
         try {
             Path self = Paths.get(

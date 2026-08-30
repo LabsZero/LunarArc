@@ -1,613 +1,315 @@
 package io.papermc.paper.plugin.manager;
 
+import com.google.common.graph.MutableGraph;
+import io.papermc.paper.plugin.PermissionManager;
+import io.papermc.paper.plugin.configuration.PluginMeta;
+import io.papermc.paper.plugin.provider.entrypoint.DependencyContext;
+import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.command.CommandMap;
+import org.bukkit.craftbukkit.CraftServer;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.permissions.Permissible;
 import org.bukkit.permissions.Permission;
-import org.bukkit.plugin.*;
-import org.bukkit.event.HandlerList;
-import org.bukkit.plugin.RegisteredListener;
+import org.bukkit.plugin.EventExecutor;
+import org.bukkit.plugin.InvalidDescriptionException;
+import org.bukkit.plugin.InvalidPluginException;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.PluginLoader;
+import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.SimplePluginManager;
+import org.bukkit.plugin.UnknownDependencyException;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import org.bukkit.command.SimpleCommandMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.util.*;
-import java.util.logging.Level;
+import java.io.File;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
-/**
- * Stub implementation of PaperPluginManagerImpl to satisfy Paper 1.21.1
- * requirements.
- * This class serves as the bridge between legacy Spigot loading and modern
- * Paper loading.
- */
-public class PaperPluginManagerImpl implements PluginManager {
-    private final Server server;
-    private final SimpleCommandMap commandMap;
-    private final SimplePluginManager simpleManager;
-    private final io.ampznetwork.lunararc.common.server.LunarArcPluginLoader pluginLoader;
-    private final Map<String, Plugin> plugins = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-    private final Map<String, PluginDescriptionFile> descriptions = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-    private final List<Plugin> pluginList = new ArrayList<>();
-    private final Map<String, Permission> permissions = new HashMap<>();
-    private static final Logger logger = LoggerFactory.getLogger("LunarArc");
+public class PaperPluginManagerImpl implements PluginManager, DependencyContext {
 
-    public PaperPluginManagerImpl(Server server, SimpleCommandMap commandMap,
-            SimplePluginManager simpleManager) {
-        this.server = server;
-        this.commandMap = commandMap;
-        this.simpleManager = simpleManager;
-        this.pluginLoader = new io.ampznetwork.lunararc.common.server.LunarArcPluginLoader(server);
-    }
+    final PaperPluginInstanceManager instanceManager;
+    final PaperEventManager paperEventManager;
+    PermissionManager permissionManager;
 
-    @Override
-    public void callEvent(@NotNull org.bukkit.event.Event event) {
-        // Async events must not be fired on the primary thread; sync events may be
-        // fired from any thread in our hybrid (Mixin injections can run on server or
-        // Netty threads before the server considers itself "primary").
-        if (event.isAsynchronous() && server.isPrimaryThread()) {
-            throw new IllegalStateException(event.getEventName() + " may only be triggered asynchronously.");
-        }
+    // --- LunarArc addition, not present in real Paper ---
+    // Real Paper's registerInterface throws UnsupportedOperationException — the modern
+    // provider-based system replaces legacy PluginLoader registration entirely. LunarArc's own
+    // CraftServer still calls registerInterface(LunarArcPluginLoader.class) at boot expecting it
+    // to actually work, so this implements the real, long-stable classic Bukkit
+    // SimplePluginManager.registerInterface behavior instead: reflectively construct the loader
+    // via its (Server) constructor and index it by the file-pattern(s) it declares.
+    // getRegisteredLoader(...) lets other code (e.g. SpigotPluginProvider) retrieve the same
+    // shared instance rather than constructing an independent one with its own class-space.
+    private final Map<Pattern, PluginLoader> fileAssociations = new ConcurrentHashMap<>();
 
-        HandlerList handlers = event.getHandlers();
-        RegisteredListener[] listeners = handlers.getRegisteredListeners();
+    public PaperPluginManagerImpl(Server server, CommandMap commandMap, @Nullable SimplePluginManager permissionManager) {
+        this.instanceManager = new PaperPluginInstanceManager(this, commandMap, server);
+        this.paperEventManager = new PaperEventManager(server);
 
-        for (RegisteredListener registration : listeners) {
-            if (!registration.getPlugin().isEnabled()) {
-                continue;
-            }
-
-            try {
-                registration.callEvent(event);
-            } catch (Throwable ex) {
-                server.getLogger().log(java.util.logging.Level.SEVERE, "Could not pass event " + event.getEventName()
-                        + " to " + registration.getPlugin().getDescription().getFullName(), ex);
-            }
+        if (permissionManager == null) {
+            this.permissionManager = new NormalPaperPermissionManager();
+        } else {
+            this.permissionManager = new StupidSPMPermissionManagerWrapper(permissionManager); // TODO: See comment when SimplePermissionManager is removed
         }
     }
 
+    // REMOVE THIS WHEN SimplePluginManager is removed.
+    // Just cast and use Bukkit.getServer().getPluginManager()
+    public static PaperPluginManagerImpl getInstance() {
+        // Real Paper reads a package-visible `paperPluginManager` field directly on CraftServer.
+        // LunarArc's CraftServer instead stores this behind the PluginManager interface as
+        // `pluginManager` (set from this exact class in its constructor — see CraftServer),
+        // so this casts back through the public accessor instead of requiring a CraftServer
+        // field rename.
+        return (PaperPluginManagerImpl) ((CraftServer) Bukkit.getServer()).getPluginManager();
+    }
+
+    // Plugin Manipulation
+
     @Override
-    public void registerInterface(@NotNull Class<? extends org.bukkit.plugin.PluginLoader> loader) {
+    public @Nullable Plugin getPlugin(@NotNull String name) {
+        return this.instanceManager.getPlugin(name);
     }
 
     @Override
-    public Plugin getPlugin(@NotNull String name) {
-        return plugins.get(normalizePluginName(name));
-    }
-
-    @Override
-    public Plugin[] getPlugins() {
-        return pluginList.toArray(new Plugin[0]);
+    public @NotNull Plugin[] getPlugins() {
+        return this.instanceManager.getPlugins();
     }
 
     @Override
     public boolean isPluginEnabled(@NotNull String name) {
-        Plugin plugin = getPlugin(name);
-        return plugin != null && plugin.isEnabled();
+        return this.instanceManager.isPluginEnabled(name);
     }
 
     @Override
-    public boolean isPluginEnabled(Plugin plugin) {
-        return plugin != null && plugin.isEnabled();
+    public boolean isPluginEnabled(@Nullable Plugin plugin) {
+        return this.instanceManager.isPluginEnabled(plugin);
+    }
+
+    public void loadPlugin(Plugin plugin) {
+        this.instanceManager.loadPlugin(plugin);
     }
 
     @Override
-    public Plugin loadPlugin(@NotNull java.io.File file)
-            throws InvalidPluginException, InvalidDescriptionException, UnknownDependencyException {
-        PluginDescriptionFile description = pluginLoader.getPluginDescription(file);
-        validateHardDependencies(description);
-
-        Plugin plugin = pluginLoader.loadPlugin(file);
-        if (plugin != null) {
-            String pluginName = normalizePluginName(plugin.getName());
-            if (plugins.containsKey(pluginName)) {
-                throw new InvalidPluginException("Plugin " + plugin.getName() + " is already loaded");
-            }
-            plugins.put(pluginName, plugin);
-            descriptions.put(pluginName, plugin.getDescription());
-            for (String provided : plugin.getDescription().getProvides()) {
-                String providedName = normalizePluginName(provided);
-                if (!plugins.containsKey(providedName)) {
-                    plugins.put(providedName, plugin);
-                    descriptions.put(providedName, plugin.getDescription());
-                }
-            }
-            pluginList.add(plugin);
-            try {
-                plugin.onLoad();
-            } catch (Throwable e) {
-                logger.error("[LunarArc] Error while loading {}", plugin.getDescription().getFullName(), e);
-                throw new InvalidPluginException(e);
-            }
-            logger.info("[LunarArc] Loaded plugin {}", plugin.getDescription().getFullName());
-        }
-        return plugin;
+    public @Nullable Plugin loadPlugin(@NotNull File file) throws InvalidPluginException, InvalidDescriptionException, UnknownDependencyException {
+        return this.instanceManager.loadPlugin(file.toPath());
     }
 
     @Override
-    public Plugin[] loadPlugins(@NotNull java.io.File directory) {
-        logger.info("[LunarArc] Scanning directory for plugins: " + directory.getAbsolutePath());
-        if (!directory.isDirectory()) {
-            logger.warn("[LunarArc] " + directory.getAbsolutePath() + " is not a directory!");
-            return new Plugin[0];
-        }
-        java.io.File[] files = directory.listFiles(file -> file.isFile()
-                && file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".jar"));
-        if (files == null || files.length == 0) {
-            logger.info("[LunarArc] No plugin jars found in " + directory.getAbsolutePath());
-            return new Plugin[0];
-        }
-        logger.info("[LunarArc] Found " + files.length + " jar files in " + directory.getAbsolutePath());
-        java.util.Arrays.sort(files,
-                java.util.Comparator.comparing(java.io.File::getName, String.CASE_INSENSITIVE_ORDER));
-        return loadPlugins(files);
+    public @NotNull Plugin[] loadPlugins(@NotNull File directory) {
+        return this.instanceManager.loadPlugins(directory.toPath());
     }
 
-    public Plugin[] loadPlugins(@NotNull java.io.File[] files) {
-        logger.info("[LunarArc] Loading " + files.length + " plugin jars...");
-        java.util.List<Plugin> loaded = new java.util.ArrayList<>();
-        java.util.Map<String, PluginCandidate> candidates = discoverPluginCandidates(files);
-
-        logger.info("[LunarArc] Discovered " + candidates.size() + " plugin candidates.");
-        java.util.Map<String, String> candidateAliases = buildCandidateAliases(candidates);
-        for (PluginCandidate candidate : sortCandidates(candidates, candidateAliases)) {
-            try {
-                logger.info("[LunarArc] Attempting to load plugin: " + candidate.file.getName());
-                Plugin plugin = loadPlugin(candidate.file);
-                if (plugin != null) {
-                    loaded.add(plugin);
-                    logger.info("[LunarArc] Successfully loaded: " + plugin.getName());
-                }
-            } catch (Throwable e) {
-                logger.error("[LunarArc] Could not load plugin from " + candidate.file.getName(), e);
-            }
-        }
-        logger.info("[LunarArc] Loaded " + loaded.size() + " plugin(s).");
-        return loaded.toArray(new Plugin[0]);
+    @Override
+    public @NotNull Plugin[] loadPlugins(final @NotNull File[] files) {
+        return this.instanceManager.loadPlugins(files);
     }
 
-    public void enablePlugins() {
-        enablePlugins(null);
-    }
-
-    public void enablePlugins(org.bukkit.plugin.PluginLoadOrder type) {
-        java.util.List<Plugin> unenabled = new java.util.ArrayList<>(pluginList);
-        boolean changed = true;
-        while (changed && !unenabled.isEmpty()) {
-            changed = false;
-            java.util.Iterator<Plugin> it = unenabled.iterator();
-            while (it.hasNext()) {
-                Plugin plugin = it.next();
-                if (plugin.isEnabled()) {
-                    it.remove();
-                    continue;
-                }
-
-                if (type != null && plugin.getDescription().getLoad() != type) {
-                    continue;
-                }
-
-                boolean canEnable = true;
-                for (String depend : plugin.getDescription().getDepend()) {
-                    Plugin dep = getPlugin(depend);
-                    if (dep == null || !dep.isEnabled()) {
-                        canEnable = false;
-                        break;
-                    }
-                }
-                if (canEnable) {
-                    for (String softDepend : plugin.getDescription().getSoftDepend()) {
-                        Plugin dep = getPlugin(softDepend);
-                        if (dep != null && !dep.isEnabled() && unenabled.contains(dep)) {
-                            if (dep == plugin) {
-                                continue;
-                            }
-                            if (type == null || dep.getDescription().getLoad() == type) {
-                                canEnable = false;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (canEnable) {
-                    try {
-                        long start = System.currentTimeMillis();
-                        enablePlugin(plugin);
-                        long end = System.currentTimeMillis();
-                        logger.info("[LunarArc] Enabled plugin {} (took {}ms)", plugin.getDescription().getFullName(),
-                                (end - start));
-                        it.remove();
-                        changed = true;
-                    } catch (Throwable e) {
-                        logger.error("[LunarArc] Error enabling {}", plugin.getDescription().getFullName(), e);
-                        io.ampznetwork.lunararc.common.telemetry.BlockMedicReporter.uploadLog(
-                                "plugin-enable-failure:" + plugin.getDescription().getFullName());
-                        it.remove();
-                        changed = true;
-                    }
-                }
-            }
-
-            if (!changed && !unenabled.isEmpty()) {
-                // Check if any matching type plugins are actually stuck
-                boolean matchingTypeStuck = false;
-                for (Plugin p : unenabled) {
-                    if (type == null || p.getDescription().getLoad() == type) {
-                        matchingTypeStuck = true;
-                        List<String> reasons = getEnablementReasons(p);
-                        logger.warn("[LunarArc] Cannot enable {} yet. Reasons: {}", p.getName(), reasons);
-                    }
-                }
-                if (matchingTypeStuck) {
-                    // We have stuck plugins of the current type, might be circular
-                    break;
-                } else {
-                    // Only plugins of other types left, we are done with this phase
-                    break;
-                }
-            }
-        }
-
-        if (type == org.bukkit.plugin.PluginLoadOrder.POSTWORLD || type == null) {
-            for (Plugin plugin : unenabled) {
-                if (plugin.isEnabled())
-                    continue;
-                server.getLogger().severe("[LunarArc] Could not resolve enable order for "
-                        + plugin.getDescription().getFullName() + "; check for circular dependencies.");
-            }
-        }
-    }
-
-    private List<String> getEnablementReasons(Plugin plugin) {
-        List<String> reasons = new ArrayList<>();
-        for (String depend : plugin.getDescription().getDepend()) {
-            Plugin dep = getPlugin(depend);
-            if (dep == null)
-                reasons.add("missing depend: " + depend);
-            else if (!dep.isEnabled())
-                reasons.add("depend not enabled: " + depend);
-        }
-        for (String softDepend : plugin.getDescription().getSoftDepend()) {
-            Plugin dep = getPlugin(softDepend);
-            if (dep != null && dep != plugin && !dep.isEnabled() && pluginList.contains(dep)) {
-                reasons.add("softDepend not enabled: " + softDepend);
-            }
-        }
-        return reasons;
-    }
-
+    @Override
     public void disablePlugins() {
-        for (int i = pluginList.size() - 1; i >= 0; i--) {
-            disablePlugin(pluginList.get(i));
-        }
+        this.instanceManager.disablePlugins();
     }
 
     @Override
-    public void clearPlugins() {
-        HandlerList.unregisterAll();
-        plugins.clear();
-        descriptions.clear();
-        pluginList.clear();
-    }
-
-    @Override
-    public void registerEvent(@NotNull Class<? extends org.bukkit.event.Event> event,
-            @NotNull org.bukkit.event.Listener listener, @NotNull org.bukkit.event.EventPriority priority,
-            @NotNull org.bukkit.plugin.EventExecutor executor, @NotNull Plugin plugin) {
-        registerEvent(event, listener, priority, executor, plugin, false);
-    }
-
-    @Override
-    public void registerEvent(@NotNull Class<? extends org.bukkit.event.Event> event,
-            @NotNull org.bukkit.event.Listener listener, @NotNull org.bukkit.event.EventPriority priority,
-            @NotNull org.bukkit.plugin.EventExecutor executor, @NotNull Plugin plugin, boolean ignoreCancelled) {
-        if (!plugin.isEnabled()) {
-            throw new IllegalPluginAccessException("Plugin attempted to register " + event + " while not enabled");
-        }
-
-        getEventListeners(event)
-                .register(new RegisteredListener(listener, executor, priority, plugin, ignoreCancelled));
-    }
-
-    @Override
-    public void registerEvents(@NotNull org.bukkit.event.Listener listener, @NotNull Plugin plugin) {
-        if (!plugin.isEnabled()) {
-            throw new IllegalPluginAccessException("Plugin attempted to register " + listener + " while not enabled");
-        }
-
-        for (java.util.Map.Entry<Class<? extends org.bukkit.event.Event>, java.util.Set<RegisteredListener>> entry : pluginLoader
-                .createRegisteredListeners(listener, plugin).entrySet()) {
-            getEventListeners(getRegistrationClass(entry.getKey())).registerAll(entry.getValue());
-        }
-    }
-
-    private HandlerList getEventListeners(Class<? extends org.bukkit.event.Event> type) {
-        try {
-            java.lang.reflect.Method method = getRegistrationClass(type).getDeclaredMethod("getHandlerList");
-            method.setAccessible(true);
-            return (HandlerList) method.invoke(null);
-        } catch (Exception e) {
-            throw new org.bukkit.plugin.IllegalPluginAccessException(
-                    "Error while registering listener for event type " + type.getName() + ": " + e.toString());
-        }
-    }
-
-    private Class<? extends org.bukkit.event.Event> getRegistrationClass(
-            Class<? extends org.bukkit.event.Event> clazz) {
-        try {
-            clazz.getDeclaredMethod("getHandlerList");
-            return clazz;
-        } catch (NoSuchMethodException e) {
-            if (clazz.getSuperclass() != null
-                    && !clazz.getSuperclass().equals(org.bukkit.event.Event.class)
-                    && org.bukkit.event.Event.class.isAssignableFrom(clazz.getSuperclass())) {
-                return getRegistrationClass(clazz.getSuperclass().asSubclass(org.bukkit.event.Event.class));
-            } else {
-                throw new org.bukkit.plugin.IllegalPluginAccessException("Unable to find handler list for event "
-                        + clazz.getName() + ". Static getHandlerList method required!");
-            }
-        }
+    public synchronized void clearPlugins() {
+        this.instanceManager.clearPlugins();
+        this.permissionManager.clearPermissions();
+        this.paperEventManager.clearEvents();
     }
 
     @Override
     public void enablePlugin(@NotNull Plugin plugin) {
-        pluginLoader.enablePlugin(plugin);
+        this.instanceManager.enablePlugin(plugin);
     }
 
     @Override
     public void disablePlugin(@NotNull Plugin plugin) {
-        pluginLoader.disablePlugin(plugin);
+        this.instanceManager.disablePlugin(plugin);
     }
 
     @Override
-    public Permission getPermission(@NotNull String name) {
-        return permissions.get(name);
+    public boolean isTransitiveDependency(PluginMeta pluginMeta, PluginMeta dependencyConfig) {
+        return this.instanceManager.isTransitiveDepend(pluginMeta, dependencyConfig);
+    }
+
+    @Override
+    public boolean hasDependency(String pluginIdentifier) {
+        return this.instanceManager.hasDependency(pluginIdentifier);
+    }
+
+    // Event manipulation
+
+    @Override
+    public void callEvent(@NotNull Event event) throws IllegalStateException {
+        this.paperEventManager.callEvent(event);
+    }
+
+    @Override
+    public void registerEvents(@NotNull Listener listener, @NotNull Plugin plugin) {
+        this.paperEventManager.registerEvents(listener, plugin);
+    }
+
+    @Override
+    public void registerEvent(@NotNull Class<? extends Event> event, @NotNull Listener listener, @NotNull EventPriority priority, @NotNull EventExecutor executor, @NotNull Plugin plugin) {
+        this.paperEventManager.registerEvent(event, listener, priority, executor, plugin);
+    }
+
+    @Override
+    public void registerEvent(@NotNull Class<? extends Event> event, @NotNull Listener listener, @NotNull EventPriority priority, @NotNull EventExecutor executor, @NotNull Plugin plugin, boolean ignoreCancelled) {
+        this.paperEventManager.registerEvent(event, listener, priority, executor, plugin, ignoreCancelled);
+    }
+
+    // Permission manipulation
+
+    @Override
+    public @Nullable Permission getPermission(@NotNull String name) {
+        return this.permissionManager.getPermission(name);
     }
 
     @Override
     public void addPermission(@NotNull Permission perm) {
-        Permission existing = permissions.putIfAbsent(perm.getName(), perm);
-        if (existing != null) {
-            throw new IllegalArgumentException("Permission " + perm.getName() + " already exists");
-        }
-        recalculatePermissionDefaults(perm);
+        this.permissionManager.addPermission(perm);
     }
 
     @Override
     public void removePermission(@NotNull Permission perm) {
-        removePermission(perm.getName());
+        this.permissionManager.removePermission(perm);
     }
 
     @Override
     public void removePermission(@NotNull String name) {
-        permissions.remove(name);
+        this.permissionManager.removePermission(name);
     }
 
     @Override
-    public Set<Permission> getDefaultPermissions(boolean op) {
-        Set<Permission> result = new HashSet<>();
-        for (Permission perm : permissions.values()) {
-            if (perm.getDefault().getValue(op)) {
-                result.add(perm);
-            }
-        }
-        return result;
+    public @NotNull Set<Permission> getDefaultPermissions(boolean op) {
+        return this.permissionManager.getDefaultPermissions(op);
     }
 
     @Override
     public void recalculatePermissionDefaults(@NotNull Permission perm) {
+        this.permissionManager.recalculatePermissionDefaults(perm);
     }
 
     @Override
-    public void subscribeToPermission(@NotNull String permission,
-            @NotNull org.bukkit.permissions.Permissible permissible) {
+    public void subscribeToPermission(@NotNull String permission, @NotNull Permissible permissible) {
+        this.permissionManager.subscribeToPermission(permission, permissible);
     }
 
     @Override
-    public void unsubscribeFromPermission(@NotNull String permission,
-            @NotNull org.bukkit.permissions.Permissible permissible) {
+    public void unsubscribeFromPermission(@NotNull String permission, @NotNull Permissible permissible) {
+        this.permissionManager.unsubscribeFromPermission(permission, permissible);
     }
 
     @Override
-    public Set<org.bukkit.permissions.Permissible> getPermissionSubscriptions(@NotNull String permission) {
-        return java.util.Collections.emptySet();
+    public @NotNull Set<Permissible> getPermissionSubscriptions(@NotNull String permission) {
+        return this.permissionManager.getPermissionSubscriptions(permission);
     }
 
     @Override
-    public void subscribeToDefaultPerms(boolean op, @NotNull org.bukkit.permissions.Permissible permissible) {
+    public void subscribeToDefaultPerms(boolean op, @NotNull Permissible permissible) {
+        this.permissionManager.subscribeToDefaultPerms(op, permissible);
     }
 
     @Override
-    public void unsubscribeFromDefaultPerms(boolean op, @NotNull org.bukkit.permissions.Permissible permissible) {
+    public void unsubscribeFromDefaultPerms(boolean op, @NotNull Permissible permissible) {
+        this.permissionManager.unsubscribeFromDefaultPerms(op, permissible);
     }
 
     @Override
-    public Set<org.bukkit.permissions.Permissible> getDefaultPermSubscriptions(boolean op) {
-        return java.util.Collections.emptySet();
+    public @NotNull Set<Permissible> getDefaultPermSubscriptions(boolean op) {
+        return this.permissionManager.getDefaultPermSubscriptions(op);
     }
 
     @Override
-    public Set<Permission> getPermissions() {
-        return new HashSet<>(permissions.values());
+    public @NotNull Set<Permission> getPermissions() {
+        return this.permissionManager.getPermissions();
     }
 
     @Override
-    public boolean useTimings() {
-        return false;
-    }
-
-    @Override
-    public void overridePermissionManager(@NotNull Plugin plugin,
-            @org.jetbrains.annotations.Nullable io.papermc.paper.plugin.PermissionManager permissionManager) {
-    }
-
-    @Override
-    public boolean isTransitiveDependency(@NotNull io.papermc.paper.plugin.configuration.PluginMeta plugin,
-            @NotNull io.papermc.paper.plugin.configuration.PluginMeta dependency) {
-        return false;
+    public void addPermissions(@NotNull List<Permission> perm) {
+        this.permissionManager.addPermissions(perm);
     }
 
     @Override
     public void clearPermissions() {
+        this.permissionManager.clearPermissions();
     }
 
     @Override
-    public void addPermissions(@NotNull java.util.List<Permission> perms) {
+    public void overridePermissionManager(@NotNull Plugin plugin, @Nullable PermissionManager permissionManager) {
+        this.permissionManager = permissionManager;
     }
 
-    private String normalizePluginName(String name) {
-        return name.replace(' ', '_');
+    // Etc
+
+    @Override
+    public boolean useTimings() {
+        return co.aikar.timings.Timings.isTimingsEnabled();
     }
 
-    private java.util.Map<String, PluginCandidate> discoverPluginCandidates(java.io.File[] files) {
-        java.util.Map<String, PluginCandidate> candidates = new java.util.LinkedHashMap<>();
-        java.util.Set<String> claimedNames = new java.util.HashSet<>(plugins.keySet());
-        java.util.List<java.io.File> jars = new java.util.ArrayList<>();
-        for (java.io.File file : files) {
-            if (file == null || !file.isFile()
-                    || !file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
-                continue;
-            }
-            jars.add(file);
+    @Override
+    public void registerInterface(@NotNull Class<? extends PluginLoader> loader) throws IllegalArgumentException {
+        // Real, long-stable classic Bukkit SimplePluginManager.registerInterface behavior —
+        // see the field comment on fileAssociations above for why this replaces real Paper's
+        // UnsupportedOperationException here.
+        PluginLoader instance;
+        try {
+            java.lang.reflect.Constructor<? extends PluginLoader> constructor = loader.getConstructor(Server.class);
+            instance = constructor.newInstance(Bukkit.getServer());
+        } catch (NoSuchMethodException ex) {
+            throw new IllegalArgumentException(String.format(
+                    "Class %s does not have a public %s(Server) constructor", loader.getName(), loader.getSimpleName()), ex);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException(String.format(
+                    "Unexpected exception %s while attempting to construct a new instance of %s",
+                    ex.getClass().getName(), loader.getName()), ex);
         }
-        jars.sort(java.util.Comparator.comparing(java.io.File::getName, String.CASE_INSENSITIVE_ORDER));
-
-        for (java.io.File file : jars) {
-            try {
-                PluginDescriptionFile description = pluginLoader.getPluginDescription(file);
-                String pluginName = normalizePluginName(description.getName());
-                if (candidates.containsKey(pluginName) || plugins.containsKey(pluginName)) {
-                    server.getLogger().severe("[LunarArc] Duplicate plugin " + description.getName()
-                            + " in " + file.getName() + "; skipping");
-                    continue;
-                }
-                boolean duplicateAlias = false;
-                for (String provided : description.getProvides()) {
-                    String providedName = normalizePluginName(provided);
-                    if (claimedNames.contains(providedName)) {
-                        server.getLogger().severe("[LunarArc] Plugin " + description.getName()
-                                + " provides duplicate plugin name " + provided + "; skipping");
-                        duplicateAlias = true;
-                        break;
-                    }
-                }
-                if (duplicateAlias) {
-                    continue;
-                }
-                candidates.put(pluginName, new PluginCandidate(file, description));
-                claimedNames.add(pluginName);
-                for (String provided : description.getProvides()) {
-                    claimedNames.add(normalizePluginName(provided));
-                }
-            } catch (Exception e) {
-                server.getLogger().log(Level.SEVERE,
-                        "Could not read plugin metadata from " + file.getName() + ": " + e.getMessage(), e);
-            }
-        }
-        return candidates;
-    }
-
-    private java.util.Map<String, String> buildCandidateAliases(java.util.Map<String, PluginCandidate> candidates) {
-        java.util.Map<String, String> aliases = new java.util.HashMap<>();
-        for (java.util.Map.Entry<String, PluginCandidate> entry : candidates.entrySet()) {
-            aliases.put(entry.getKey(), entry.getKey());
-            for (String provided : entry.getValue().description.getProvides()) {
-                aliases.putIfAbsent(normalizePluginName(provided), entry.getKey());
-            }
-        }
-        return aliases;
-    }
-
-    private java.util.List<PluginCandidate> sortCandidates(java.util.Map<String, PluginCandidate> candidates,
-            java.util.Map<String, String> aliases) {
-        java.util.List<PluginCandidate> sorted = new java.util.ArrayList<>();
-        java.util.Set<String> visiting = new java.util.HashSet<>();
-        java.util.Set<String> visited = new java.util.HashSet<>();
-
-        java.util.List<String> startup = new java.util.ArrayList<>();
-        java.util.List<String> postWorld = new java.util.ArrayList<>();
-        for (java.util.Map.Entry<String, PluginCandidate> entry : candidates.entrySet()) {
-            if (entry.getValue().description.getLoad() == PluginLoadOrder.STARTUP) {
-                startup.add(entry.getKey());
-            } else {
-                postWorld.add(entry.getKey());
-            }
-        }
-
-        for (String name : startup) {
-            visitCandidate(name, candidates, aliases, visiting, visited, sorted);
-        }
-        for (String name : postWorld) {
-            visitCandidate(name, candidates, aliases, visiting, visited, sorted);
-        }
-        return sorted;
-    }
-
-    private void visitCandidate(String name, java.util.Map<String, PluginCandidate> candidates,
-            java.util.Map<String, String> aliases, java.util.Set<String> visiting,
-            java.util.Set<String> visited, java.util.List<PluginCandidate> sorted) {
-        if (visited.contains(name)) {
-            return;
-        }
-        if (!visiting.add(name)) {
-            server.getLogger().severe("[LunarArc] Circular plugin dependency involving " + name);
-            return;
-        }
-
-        PluginCandidate candidate = candidates.get(name);
-        if (candidate == null) {
-            return;
-        }
-
-        for (String dependency : candidate.description.getDepend()) {
-            String normalized = aliases.get(normalizePluginName(dependency));
-            if (normalized != null && !normalized.equals(name) && candidates.containsKey(normalized)) {
-                visitCandidate(normalized, candidates, aliases, visiting, visited, sorted);
-            }
-        }
-        for (String dependency : candidate.description.getSoftDepend()) {
-            String normalized = aliases.get(normalizePluginName(dependency));
-            if (normalized != null && !normalized.equals(name) && candidates.containsKey(normalized)) {
-                visitCandidate(normalized, candidates, aliases, visiting, visited, sorted);
-            }
-        }
-
-        visiting.remove(name);
-        visited.add(name);
-        sorted.add(candidate);
-    }
-
-    private void validateHardDependencies(PluginDescriptionFile description) throws UnknownDependencyException {
-        String missingDependency = findMissingDependency(description);
-        if (missingDependency != null) {
-            throw new UnknownDependencyException(missingDependency);
+        for (Pattern pattern : instance.getPluginFileFilters()) {
+            this.fileAssociations.put(pattern, instance);
         }
     }
 
-    private String findMissingDependency(PluginDescriptionFile description) {
-        for (String dependency : description.getDepend()) {
-            if (getPlugin(dependency) == null) {
-                return dependency;
-            }
+    /**
+     * LunarArc addition, not present in real Paper. Retrieves the shared instance registered via
+     * {@link #registerInterface}, so callers building a plugin outside the classic load path
+     * (e.g. SpigotPluginProvider) reuse the same loader — and therefore the same class-space —
+     * instead of constructing an independent, state-diverging instance.
+     */
+    @SuppressWarnings("unchecked")
+    public <T extends PluginLoader> @Nullable T getRegisteredLoader(Class<T> loaderClass) {
+        for (PluginLoader candidate : this.fileAssociations.values()) {
+            if (loaderClass.isInstance(candidate)) return (T) candidate;
         }
         return null;
     }
 
-    private static class PluginCandidate {
-        private final java.io.File file;
-        private final PluginDescriptionFile description;
+    public MutableGraph<String> getInstanceManagerGraph() {
+        return instanceManager.getDependencyGraph();
+    }
 
-        public PluginCandidate(java.io.File file, PluginDescriptionFile description) {
-            this.file = file;
-            this.description = description;
-        }
+    // --- LunarArc addition, not present in real Paper ---
+    // Real Paper's PaperPluginInstanceManager loads plugins via the dependency-graph-based
+    // strategy ported into entrypoint/dependency + entrypoint/strategy, which already produces
+    // a correctly dependency-ordered plugin list — so enabling in that list's order, filtered by
+    // load-order type, is sufficient here without re-deriving dependency order by hand.
+    // Preserved because CraftServer's existing boot sequence (enablePlugins(STARTUP) then
+    // enablePlugins(POSTWORLD)) calls this by name.
+    public void enablePlugins() {
+        enablePlugins(null);
+    }
 
-        public java.io.File file() {
-            return file;
-        }
-
-        public PluginDescriptionFile description() {
-            return description;
+    public void enablePlugins(@Nullable org.bukkit.plugin.PluginLoadOrder type) {
+        for (Plugin plugin : getPlugins()) {
+            if (plugin.isEnabled()) continue;
+            if (type != null && plugin.getDescription().getLoad() != type) continue;
+            enablePlugin(plugin);
         }
     }
 }

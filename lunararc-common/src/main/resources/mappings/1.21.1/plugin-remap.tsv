@@ -1,0 +1,17 @@
+# LunarArc mapping overrides for Minecraft 1.21.1.
+#
+# The complete Paper/Spigot -> Mojang mapping database is generated at build
+# time from Mojang's 1.21.1 server mappings plus the pinned Spigot BuildData
+# class aliases, and is bundled as mappings/1.21.1/paper-reobf.tiny.
+#
+# Keep this file only for genuine hybrid-runtime exceptions that are not
+# represented by Paper's mapping data.
+#
+# CLASS  <spigot internal name> <mojang internal name>
+# FIELD  <spigot owner> <spigot name> <spigot descriptor or *> <mojang name>
+# METHOD <spigot owner> <spigot name> <spigot descriptor or *> <mojang name>
+
+# Legacy CraftBukkit unversioned `org.bukkit.craftbukkit.*` NMS bytecode uses ServerPlayer.c for the
+# packet listener. Paper remaps this member to Mojang's `connection`.
+FIELD	net/minecraft/server/level/ServerPlayer	c	*	connection
+FIELD	net/minecraft/server/network/ServerCommonPacketListenerImpl	e	*	connection

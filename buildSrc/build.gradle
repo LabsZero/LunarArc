@@ -1,5 +1,4 @@
-// buildSrc — custom Gradle build logic for LunarArc.
-// Analogous to Arclight's buildSrc (Paper remapping utilities, etc.)
+
 plugins {
     id 'groovy-gradle-plugin'
 }

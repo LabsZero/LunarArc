@@ -16,9 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
 
-/**
- * Listener to notify OPs about updates in-game.
- */
+
 public class PlayerJoinListener implements Listener {
 
     @EventHandler

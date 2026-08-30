@@ -17,18 +17,15 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
-/**
- * Hybrid Bridge JavaPlugin implementation.
- */
-public abstract class JavaPlugin extends PluginBase implements org.bukkit.command.TabExecutor {
-    private static final java.util.Map<Class<? extends JavaPlugin>, JavaPlugin> PLUGIN_INSTANCES = new java.util.concurrent.ConcurrentHashMap<>();
 
+public abstract class JavaPlugin extends PluginBase implements org.bukkit.command.TabExecutor {
     private boolean isEnabled = false;
     protected org.bukkit.plugin.PluginLoader loader;
     protected Server server;
@@ -42,6 +39,7 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
     private FileConfiguration newConfig;
     private File configFile;
     private io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager<org.bukkit.plugin.Plugin> lifecycleManager;
+    private boolean allowsLifecycleRegistration = true;
 
     protected JavaPlugin() {
         final ClassLoader classLoader = this.getClass().getClassLoader();
@@ -49,6 +47,17 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
             throw new IllegalStateException("JavaPlugin requires " + PluginClassLoader.class.getName());
         }
         ((PluginClassLoader) classLoader).initialize(this);
+    }
+
+    /**
+     * Returns the plugin jar file. Bukkit/Spigot expose this to subclasses as a
+     * protected final method, so the inherited binary contract is preserved here.
+     */
+    protected final @NotNull File getFile() {
+        if (file == null) {
+            throw new IllegalStateException("Plugin has not been initialized");
+        }
+        return file;
     }
 
     @Override
@@ -59,7 +68,7 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
     @Override
     public final @NotNull PluginDescriptionFile getDescription() {
         if (description == null) {
-            return new PluginDescriptionFile("Unknown", "0.0.0", "unknown.main");
+            throw new IllegalStateException("Plugin has not been initialized");
         }
         return description;
     }
@@ -74,6 +83,9 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
 
     @Override
     public void reloadConfig() {
+        if (configFile == null) {
+            throw new IllegalStateException("Plugin configuration is not available before plugin initialization");
+        }
         newConfig = YamlConfiguration.loadConfiguration(configFile);
     }
 
@@ -88,6 +100,9 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
 
     @Override
     public void saveDefaultConfig() {
+        if (configFile == null) {
+            throw new IllegalStateException("Plugin configuration is not available before plugin initialization");
+        }
         if (!configFile.exists()) {
             saveResource("config.yml", false);
         }
@@ -100,32 +115,26 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
         }
 
         resourcePath = resourcePath.replace('\\', '/');
-        InputStream in = getResource(resourcePath);
-        if (in == null) {
-            throw new IllegalArgumentException("The embedded resource '" + resourcePath + "' cannot be found");
-        }
-
         File outFile = new File(dataFolder, resourcePath);
         int lastIndex = resourcePath.lastIndexOf('/');
         File outDir = new File(dataFolder, resourcePath.substring(0, lastIndex >= 0 ? lastIndex : 0));
 
-        if (!outDir.exists()) {
-            outDir.mkdirs();
+        if (!outDir.exists() && !outDir.mkdirs() && !outDir.isDirectory()) {
+            throw new IllegalStateException("Could not create plugin data directory " + outDir);
         }
 
-        try {
-            if (!outFile.exists() || replace) {
-                OutputStream out = new FileOutputStream(outFile);
-                byte[] buf = new byte[1024];
-                int len;
-                while ((len = in.read(buf)) > 0) {
-                    out.write(buf, 0, len);
-                }
-                out.close();
-                in.close();
+        try (InputStream in = getResource(resourcePath)) {
+            if (in == null) {
+                throw new IllegalArgumentException("The embedded resource '" + resourcePath + "' cannot be found");
             }
-        } catch (Exception ex) {
-            logger.severe("Could not save " + outFile.getName() + " to " + outFile);
+            if (!outFile.exists() || replace) {
+                try (OutputStream out = new FileOutputStream(outFile)) {
+                    in.transferTo(out);
+                }
+            }
+        } catch (IOException ex) {
+            logger.log(java.util.logging.Level.SEVERE,
+                    "Could not save " + outFile.getName() + " to " + outFile, ex);
         }
     }
 
@@ -165,15 +174,27 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
         if (isEnabled != enabled) {
             isEnabled = enabled;
             if (isEnabled) {
-                logger.info("Enabling " + getDescription().getFullName());
-                onEnable();
+                if (io.ampznetwork.lunararc.common.config.LunarArcConfig.isQuietConsole()) {
+                    logger.fine("Enabling " + getDescription().getFullName());
+                } else {
+                    logger.info("Enabling " + getDescription().getFullName());
+                }
+                try {
+                    onEnable();
+                } finally {
+                    this.allowsLifecycleRegistration = false;
+                }
             } else {
-                logger.info("Disabling " + getDescription().getFullName());
+                if (io.ampznetwork.lunararc.common.config.LunarArcConfig.isQuietConsole()) {
+                    logger.fine("Disabling " + getDescription().getFullName());
+                } else {
+                    logger.info("Disabling " + getDescription().getFullName());
+                }
                 try {
                     onDisable();
                 } catch (Throwable t) {
-                    // Guard: onDisable() must never propagate — a crash here would
-                    // mask the original onEnable() exception (e.g. handleCrash pattern).
+
+
                     logger.log(java.util.logging.Level.SEVERE,
                             "Error in onDisable() for " + getDescription().getFullName(), t);
                 }
@@ -193,9 +214,7 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
         return null;
     }
 
-    /**
-     * Internal Paper 1.21.1 initialization method.
-     */
+
     public final void init(@NotNull Server server, @NotNull PluginDescriptionFile description, @NotNull File dataFolder,
             @NotNull File file, @NotNull ClassLoader classLoader, @NotNull PluginMeta pluginMeta,
             @NotNull Logger logger) {
@@ -208,10 +227,12 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
         this.logger = logger;
         this.configFile = new File(dataFolder, "config.yml");
 
-        this.lifecycleManager = io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventManager.create();
-        this.loader = (org.bukkit.plugin.PluginLoader) null; // Will be set by caller if needed, but init handles it
-
-        PLUGIN_INSTANCES.put(this.getClass(), this);
+        this.lifecycleManager = io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventManager.create(
+                this, () -> this.allowsLifecycleRegistration);
+        if (!(classLoader instanceof PluginClassLoader pluginClassLoader)) {
+            throw new IllegalArgumentException("Plugin class loader is not a PluginClassLoader");
+        }
+        this.loader = pluginClassLoader.getPluginLoaderInstance();
     }
 
     @NotNull
@@ -219,37 +240,47 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
         if (clazz == null) {
             throw new IllegalArgumentException("Class cannot be null");
         }
-        JavaPlugin instance = PLUGIN_INSTANCES.get(clazz);
-        if (instance == null) {
-            // Fallback: search for instance by class name if exact class match fails
-            // (common with multiple loaders)
-            for (JavaPlugin jp : PLUGIN_INSTANCES.values()) {
-                if (clazz.isInstance(jp)) {
-                    return clazz.cast(jp);
-                }
-            }
-            throw new IllegalStateException("Plugin is not enabled or not registered: " + clazz.getName());
+        ClassLoader classLoader = clazz.getClassLoader();
+        if (!(classLoader instanceof PluginClassLoader pluginClassLoader)) {
+            throw new IllegalArgumentException(clazz + " is not initialized by " + PluginClassLoader.class.getName());
         }
-        return clazz.cast(instance);
+        JavaPlugin plugin = pluginClassLoader.getPluginInstance();
+        if (plugin == null) {
+            throw new IllegalStateException("Cannot get plugin for " + clazz + " before it is initialized");
+        }
+        return clazz.cast(plugin);
     }
 
-    /**
-     * Non-generic version for bytecode compatibility.
-     */
-    public static JavaPlugin getPlugin(Class<?> clazz, boolean dummy) {
-        return PLUGIN_INSTANCES.get(clazz);
+    @NotNull
+    public static JavaPlugin getProvidingPlugin(@NotNull Class<?> clazz) {
+        if (clazz == null) {
+            throw new IllegalArgumentException("Class cannot be null");
+        }
+        ClassLoader classLoader = clazz.getClassLoader();
+        if (!(classLoader instanceof PluginClassLoader pluginClassLoader)) {
+            throw new IllegalArgumentException(clazz + " is not provided by a plugin");
+        }
+        JavaPlugin plugin = pluginClassLoader.getPluginInstance();
+        if (plugin == null) {
+            throw new IllegalStateException("Cannot get providing plugin for " + clazz + " before it is initialized");
+        }
+        return plugin;
     }
 
     @Nullable
     public org.bukkit.command.PluginCommand getCommand(@NotNull String name) {
         String search = name.toLowerCase(java.util.Locale.ENGLISH);
         org.bukkit.command.Command command = server.getCommandMap().getCommand(search);
-        if (command instanceof org.bukkit.command.PluginCommand pc) {
+        if (command instanceof org.bukkit.command.PluginCommand pc && pc.getPlugin() == this) {
             return pc;
         }
-        // Fallback: try to find it in the description if it's not registered yet
+        command = server.getCommandMap().getCommand(description.getName().toLowerCase(java.util.Locale.ENGLISH) + ":" + search);
+        if (command instanceof org.bukkit.command.PluginCommand pc && pc.getPlugin() == this) {
+            return pc;
+        }
+
         if (description.getCommands() != null && description.getCommands().containsKey(search)) {
-            // Return a proxy if needed, but usually it should be in the command map
+
         }
         return null;
     }
@@ -264,7 +295,8 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
     }
 
     public @NotNull List<String> getPluginLibraries() {
-        return Collections.emptyList();
+        List<String> libraries = description.getLibraries();
+        return libraries == null || libraries.isEmpty() ? Collections.emptyList() : List.copyOf(libraries);
     }
 
     public @NotNull Logger getLogger() {

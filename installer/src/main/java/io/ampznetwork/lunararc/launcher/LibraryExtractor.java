@@ -9,7 +9,7 @@ public class LibraryExtractor {
         try {
             ConsoleUI.printStep("Extracting runtime dependencies...");
             File selfJar = new File(LibraryExtractor.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            
+
             try (ZipInputStream zin = new ZipInputStream(new FileInputStream(selfJar))) {
                 ZipEntry entry;
                 while ((entry = zin.getNextEntry()) != null) {
@@ -17,12 +17,22 @@ public class LibraryExtractor {
                     if (name.startsWith("META-INF/libraries/")) {
                         String destPath = name.substring("META-INF/".length());
                         Path dest = Paths.get(destPath);
-                        
+
                         if (entry.isDirectory()) {
                             Files.createDirectories(dest);
                         } else {
                             Files.createDirectories(dest.getParent());
-                            Files.copy(zin, dest, StandardCopyOption.REPLACE_EXISTING);
+                            long expectedSize = entry.getSize();
+                            if (Files.isRegularFile(dest) && expectedSize >= 0 && Files.size(dest) == expectedSize) {
+                                continue;
+                            }
+                            Path temp = dest.resolveSibling(dest.getFileName() + ".tmp");
+                            Files.copy(zin, temp, StandardCopyOption.REPLACE_EXISTING);
+                            try {
+                                Files.move(temp, dest, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                            } catch (AtomicMoveNotSupportedException ignored) {
+                                Files.move(temp, dest, StandardCopyOption.REPLACE_EXISTING);
+                            }
                         }
                     }
                     zin.closeEntry();

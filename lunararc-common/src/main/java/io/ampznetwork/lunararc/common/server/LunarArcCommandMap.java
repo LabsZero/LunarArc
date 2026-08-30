@@ -1,23 +1,30 @@
 package io.ampznetwork.lunararc.common.server;
 
 import com.mojang.brigadier.CommandDispatcher;
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
 import net.minecraft.commands.CommandSourceStack;
 import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.SimpleCommandMap;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.plugin.Plugin;
 
-public class LunarArcCommandMap extends SimpleCommandMap {
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
 
-    // Brigadier dispatcher set by CommandsMixin once commands are initialized
+
+public final class LunarArcCommandMap extends SimpleCommandMap {
     private static volatile CommandDispatcher<CommandSourceStack> dispatcher;
+    private final Server lunararc$server;
 
     public LunarArcCommandMap(Server server) {
-        super(server, new java.util.HashMap<>());
+        super(server, new HashMap<>());
+        this.lunararc$server = java.util.Objects.requireNonNull(server, "server");
     }
 
-    public static void setDispatcher(CommandDispatcher<CommandSourceStack> d) {
-        dispatcher = d;
+    public static void setDispatcher(CommandDispatcher<CommandSourceStack> value) {
+        dispatcher = value;
     }
 
     public static CommandDispatcher<CommandSourceStack> getDispatcher() {
@@ -26,24 +33,124 @@ public class LunarArcCommandMap extends SimpleCommandMap {
 
     @Override
     public boolean register(String label, String fallbackPrefix, Command command) {
-        boolean registered = super.register(label, fallbackPrefix, command);
-        if (registered && dispatcher != null) {
-            new BukkitCommandWrapper(command).register(dispatcher);
-            syncCommandTreeToPlayers();
+        boolean result = super.register(label, fallbackPrefix, command);
+        syncCommand(command, label, fallbackPrefix);
+        syncCommandTreeToPlayers();
+        return result;
+    }
+
+    public void unregisterPlugin(Plugin plugin) {
+        if (plugin == null) return;
+        Set<Command> removed = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        getKnownCommands().entrySet().removeIf(entry -> {
+            Command command = entry.getValue();
+            if (command instanceof PluginCommand pluginCommand && pluginCommand.getPlugin() == plugin) {
+                removed.add(command);
+                return true;
+            }
+            return false;
+        });
+        for (Command command : removed) command.unregister(this);
+        syncCommandTreeToPlayers();
+    }
+
+
+    public boolean reloadServerAliases(java.util.Map<String, String[]> previousAliases,
+                                       java.util.Map<String, String[]> aliases) {
+        java.util.Objects.requireNonNull(previousAliases, "previousAliases");
+        java.util.Objects.requireNonNull(aliases, "aliases");
+
+        java.util.Set<String> previous = new java.util.LinkedHashSet<>();
+        for (String alias : previousAliases.keySet()) {
+            String normalized = normalize(alias);
+            if (!normalized.isEmpty()) previous.add(normalized);
         }
+
+        if (!previous.isEmpty()) {
+            getKnownCommands().entrySet().removeIf(entry -> previous.contains(normalize(entry.getKey())));
+            CommandDispatcher<CommandSourceStack> target = dispatcher;
+            if (target != null && target.getRoot() instanceof io.ampznetwork.lunararc.common.bridge.access.CommandNodeAccessBridge accessor) {
+                for (String alias : previous) {
+                    accessor.lunararc$getChildren().remove(alias);
+                    accessor.lunararc$getLiterals().remove(alias);
+                    accessor.lunararc$getArguments().remove(alias);
+                }
+            }
+        }
+
+        boolean registered = true;
+        for (java.util.Map.Entry<String, String[]> entry : aliases.entrySet()) {
+            String alias = normalize(entry.getKey());
+            String[] replacements = entry.getValue();
+            if (alias.isEmpty() || replacements == null || replacements.length == 0) continue;
+            registered &= this.register(alias, "bukkit", new org.bukkit.command.FormattedCommandAlias(alias, replacements.clone()));
+        }
+        syncCommandTreeToPlayers();
         return registered;
     }
 
-    /** Resend the command tree to all online players so tab-complete reflects the new command. */
-    private void syncCommandTreeToPlayers() {
-        try {
-            Server server = LunarArcPlatform.getServer();
-            if (server == null) return;
-            for (org.bukkit.entity.Player player : server.getOnlinePlayers()) {
-                try {
-                    player.updateCommands();
-                } catch (Throwable ignored) {}
+    public void syncToBrigadier(CommandDispatcher<CommandSourceStack> target) {
+        if (target == null) return;
+        dispatcher = target;
+
+        Set<String> labels = new LinkedHashSet<>(getKnownCommands().keySet());
+        for (String knownLabel : labels) {
+            registerMirror(target, knownLabel);
+        }
+    }
+
+    private void syncCommand(Command command, String requestedLabel, String fallbackPrefix) {
+        CommandDispatcher<CommandSourceStack> target = dispatcher;
+        if (target == null) return;
+
+        Set<String> candidates = new LinkedHashSet<>();
+        candidates.add(normalize(requestedLabel));
+        candidates.add(normalize(command.getName()));
+        for (String alias : command.getAliases()) candidates.add(normalize(alias));
+
+        String prefix = normalize(fallbackPrefix);
+        if (!prefix.isEmpty()) {
+            candidates.add(prefix + ":" + normalize(requestedLabel));
+            candidates.add(prefix + ":" + normalize(command.getName()));
+            for (String alias : command.getAliases()) {
+                candidates.add(prefix + ":" + normalize(alias));
             }
-        } catch (Throwable ignored) {}
+        }
+
+
+        for (String candidate : candidates) {
+            if (!candidate.isEmpty() && getKnownCommands().containsKey(candidate)) {
+                registerMirror(target, candidate);
+            }
+        }
+    }
+
+    private void registerMirror(CommandDispatcher<CommandSourceStack> target, String label) {
+        String normalized = normalize(label);
+        if (normalized.isEmpty() || getCommand(normalized) == null) return;
+
+
+        if (target.getRoot().getChild(normalized) != null) return;
+
+        new BukkitCommandWrapper(this, normalized).register(target);
+    }
+
+    private void syncCommandTreeToPlayers() {
+        Server server = this.lunararc$server;
+        if (server == null) {
+
+
+            return;
+        }
+        for (org.bukkit.entity.Player player : server.getOnlinePlayers()) {
+            player.updateCommands();
+        }
+    }
+
+    private static String normalize(String value) {
+        if (value == null) return "";
+
+
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 }

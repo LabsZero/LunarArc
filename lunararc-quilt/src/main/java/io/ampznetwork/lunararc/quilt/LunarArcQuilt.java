@@ -1,12 +1,17 @@
 package io.ampznetwork.lunararc.quilt;
 
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
+import io.ampznetwork.lunararc.common.mod.server.LunarArcServer;
+import io.ampznetwork.lunararc.quilt.event.QuiltBlockBreakEvents;
+import io.ampznetwork.lunararc.quilt.network.QuiltChannelRegistration;
+import io.ampznetwork.lunararc.quilt.server.QuiltServerLifecycle;
 import net.fabricmc.api.ModInitializer;
 
-public class LunarArcQuilt implements ModInitializer {
-
+public final class LunarArcQuilt implements ModInitializer {
     @Override
     public void onInitialize() {
-        LunarArcPlatform.registerBridge(new QuiltBridge());
+        LunarArcServer.installPlatform("Quilt", LunarArcQuilt.class.getClassLoader());
+        QuiltServerLifecycle.register();
+        QuiltChannelRegistration.register();
+        QuiltBlockBreakEvents.register();
     }
 }

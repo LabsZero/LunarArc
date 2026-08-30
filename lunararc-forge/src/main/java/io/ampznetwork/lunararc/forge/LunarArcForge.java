@@ -1,25 +1,27 @@
 package io.ampznetwork.lunararc.forge;
 
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
+import io.ampznetwork.lunararc.common.mod.server.LunarArcServer;
+import io.ampznetwork.lunararc.forge.command.ForgeCommandHook;
+import io.ampznetwork.lunararc.forge.server.ForgeServerLifecycle;
+import io.ampznetwork.lunararc.forge.network.ForgeChannelRegistration;
+import io.ampznetwork.lunararc.forge.event.ForgeBlockBreakEvents;
+import io.ampznetwork.lunararc.forge.event.ForgeBlockPlaceEvents;
+import io.ampznetwork.lunararc.forge.event.ForgeEntityTeleportEvents;
+import io.ampznetwork.lunararc.forge.event.ForgeEntityJoinEvents;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.fml.common.Mod;
 
 @Mod("lunararc")
-public class LunarArcForge {
+public final class LunarArcForge {
 
     public LunarArcForge() {
-        LunarArcPlatform.registerBridge(new ForgeBridge());
-        MinecraftForge.EVENT_BUS.addListener(this::onServerStarting);
-        MinecraftForge.EVENT_BUS.addListener(this::onServerStopping);
-    }
-
-    private void onServerStarting(ServerStartingEvent event) {
-        LunarArcPlatform.getPlatformBridge().onServerStarting();
-    }
-
-    private void onServerStopping(ServerStoppingEvent event) {
-        LunarArcPlatform.getPlatformBridge().onServerStopping();
+        LunarArcServer.installPlatform("Forge", LunarArcForge.class.getClassLoader());
+        ForgeCommandHook.install();
+        ForgeServerLifecycle.register(MinecraftForge.EVENT_BUS);
+        ForgeChannelRegistration.register(MinecraftForge.EVENT_BUS);
+        ForgeBlockBreakEvents.register(MinecraftForge.EVENT_BUS);
+        ForgeBlockPlaceEvents.register(MinecraftForge.EVENT_BUS);
+        ForgeEntityTeleportEvents.register(MinecraftForge.EVENT_BUS);
+        ForgeEntityJoinEvents.register(MinecraftForge.EVENT_BUS);
     }
 }

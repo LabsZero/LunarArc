@@ -1,20 +1,9 @@
 package io.ampznetwork.lunararc.common.mixin.core.player;
 
-import net.minecraft.world.food.FoodData;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Accessor;
-
-@Mixin(FoodData.class)
-public interface FoodDataAccessor {
-    @Accessor("foodLevel")
-    void setFoodLevel(int value);
-
-    @Accessor("saturationLevel")
-    void setSaturationLevel(float value);
-
-    @Accessor("exhaustionLevel")
-    float getExhaustionLevel();
-
-    @Accessor("exhaustionLevel")
-    void setExhaustionLevel(float value);
+/**
+ * Retired in Runtime Fix 09. Vanilla FoodData already exposes the required getters/setters.
+ * Kept as an inert marker so overlay extraction cannot retain the old active Mixin accessor.
+ */
+public final class FoodDataAccessor {
+    private FoodDataAccessor() {}
 }

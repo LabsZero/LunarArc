@@ -1,4 +1,4 @@
-// Quilt platform integration — analogous to arclight-fabric (Quilt is a Fabric fork).
+
 plugins {
     id 'architectury-plugin'
     id 'dev.architectury.loom'
@@ -30,6 +30,7 @@ dependencies {
     }
     modImplementation libs.quilt.loader
     modImplementation "net.fabricmc:fabric-loader:${libs.versions.fabric.loader.get()}"
+    modImplementation libs.fabric.api
     common(project(path: ':lunararc-common', configuration: 'namedElements')) { transitive false }
     shadowCommon(project(path: ':lunararc-common', configuration: 'transformProductionQuilt')) { transitive false }
     implementation project(':lunararc-api')

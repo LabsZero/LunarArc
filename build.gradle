@@ -6,11 +6,38 @@ plugins {
     id 'com.gradleup.shadow' version '9.0.0' apply false
 }
 
+def lunarArcConfiguredVersion = { ->
+    def configured = libs.versions.project.version.get().toString().trim()
+    if (configured.isEmpty()) throw new GradleException("libs.versions.project-version must not be blank")
+    return configured
+}
+
+def lunarArcBuildChannel = { ->
+    def configured = lunarArcConfiguredVersion().split('\\+', 2)[0].toLowerCase(java.util.Locale.ROOT)
+    if (configured ==~ /.*-preview(?:[.-].*)?$/) return 'preview'
+    if (configured ==~ /.*-(?:pre|prerelease|pre-release|alpha|beta|rc|snapshot)(?:[.-].*)?$/) return 'prerelease'
+    return 'release'
+}
+
+def lunarArcEffectiveVersion = { ->
+    def configured = lunarArcConfiguredVersion()
+    if (configured.contains('+')) return configured
+    if (lunarArcBuildChannel() == 'release') return configured
+
+    def githubRun = System.getenv('GITHUB_RUN_NUMBER')
+    def metadata = (githubRun != null && !githubRun.isBlank()) ? "build.${githubRun.trim()}" : 'local'
+    return "${configured}+${metadata}"
+}
+
+ext.lunarArcBuildChannel = lunarArcBuildChannel
+ext.lunarArcEffectiveVersion = lunarArcEffectiveVersion
+ext.lunarArcBuildNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: 'local').trim()
+
 allprojects {
     apply plugin: 'java'
 
     group = 'io.ampznetwork.lunararc'
-    version = libs.versions.project.version.get()
+    version = rootProject.ext.lunarArcEffectiveVersion()
 
     ext {
         gitHash = { ->
@@ -24,10 +51,12 @@ allprojects {
         buildName          = libs.versions.build.name.get()
         paperDir           = rootProject.file('.gradle/paper')
         paperServerJar     = rootProject.file(".gradle/paper/paper-server-${libs.versions.minecraft.get()}-${libs.versions.paper.build.get()}.jar")
+        paperBundlerJar    = rootProject.file(".gradle/paper/paper-${libs.versions.minecraft.get()}-${libs.versions.paper.build.get()}-bundler.jar")
     }
 
     repositories {
         mavenCentral()
+        maven { url 'https://maven.minecraftforge.net/' }
         maven { url 'https://maven.neoforged.net/releases' }
         maven { url 'https://repo.papermc.io/repository/maven-public/' }
         maven { url 'https://repo.spongepowered.org/maven' }
@@ -35,48 +64,307 @@ allprojects {
     }
 
     java {
-        toolchain { languageVersion = JavaLanguageVersion.of(21) }
+        toolchain { languageVersion = JavaLanguageVersion.of(libs.versions.java.runtime.get().toInteger()) }
     }
 }
 
-// ── Download & extract Paper server JAR ───────────────────────────────────────
-tasks.register('setupPaperServer') {
-    outputs.file(rootProject.ext.paperServerJar)
-    doLast {
-        if (!rootProject.ext.paperServerJar.exists()) {
-            rootProject.ext.paperDir.mkdirs()
-            def mc    = libs.versions.minecraft.get()
-            def build = libs.versions.paper.build.get()
-            def url   = "https://api.papermc.io/v2/projects/paper/versions/${mc}/builds/${build}/downloads/paper-${mc}-${build}.jar"
-            def bundler = new File(rootProject.ext.paperDir, 'paper-bundler.jar')
-            try {
-                println "Downloading Paper ${build} for MC ${mc}..."
-                def conn = URI.create(url).toURL().openConnection()
-                conn.connectTimeout = 30_000; conn.readTimeout = 120_000
-                bundler.withOutputStream { it2 -> conn.inputStream.transferTo(it2) }
-                println "Extracting paper-server from bundler..."
-                def jar   = new java.util.jar.JarFile(bundler)
-                def entry = jar.stream().filter { e -> e.name.startsWith('META-INF/versions/') && e.name.endsWith('.jar') }.findFirst().orElse(null)
-                if (entry) {
-                    rootProject.ext.paperServerJar.withOutputStream { it2 -> jar.getInputStream(entry).transferTo(it2) }
-                } else {
-                    Files.copy(bundler.toPath(), rootProject.ext.paperServerJar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+def countClassesWithPrefix = { File jarFile, String prefix ->
+    if (jarFile == null || !jarFile.isFile()) return 0
+    int count = 0
+    try {
+        new java.util.jar.JarFile(jarFile).withCloseable { jar ->
+            def entries = jar.entries()
+            while (entries.hasMoreElements()) {
+                def entry = entries.nextElement()
+                if (!entry.directory && entry.name.endsWith('.class') && entry.name.startsWith(prefix)) {
+                    count++
                 }
-                jar.close()
-                println "Paper server JAR ready: ${rootProject.ext.paperServerJar}"
-            } catch (Exception e) {
-                println "WARNING: setupPaperServer failed (network?): ${e.message}"
-            } finally {
-                if (bundler.exists()) bundler.delete()
             }
-        } else {
-            println "Paper server JAR already present: ${rootProject.ext.paperServerJar}"
+        }
+    } catch (Exception ignored) {
+        return 0
+    }
+    return count
+}
+
+def writePaperCompileReference = { File sourceJar, File targetJar ->
+    File tempJar = new File(targetJar.parentFile, targetJar.name + '.tmp')
+    if (tempJar.exists()) tempJar.delete()
+
+    new java.util.jar.JarFile(sourceJar).withCloseable { inputJar ->
+        new java.util.jar.JarOutputStream(new java.io.BufferedOutputStream(new java.io.FileOutputStream(tempJar))).withCloseable { outputJar ->
+            def entries = inputJar.entries()
+            while (entries.hasMoreElements()) {
+                def entry = entries.nextElement()
+                String name = entry.name
+
+                if (name.startsWith('net/minecraft/')) continue
+
+                if (name.endsWith('.class')) {
+                    int dollar = name.indexOf('$')
+                    String base = (dollar >= 0 ? name.substring(0, dollar) : name.replace('.class', '')) + '.java'
+                    if (new File(rootProject.projectDir, "lunararc-common/src/main/java/${base}").exists()) continue
+                }
+
+                String upper = name.toUpperCase(java.util.Locale.ROOT)
+                if (upper == 'META-INF/MANIFEST.MF' || upper.endsWith('.SF') || upper.endsWith('.RSA') || upper.endsWith('.DSA')) continue
+
+                def outEntry = new java.util.jar.JarEntry(name)
+                if (entry.time >= 0) outEntry.time = entry.time
+                outputJar.putNextEntry(outEntry)
+                if (!entry.directory) {
+                    inputJar.getInputStream(entry).withCloseable { stream -> stream.transferTo(outputJar) }
+                }
+                outputJar.closeEntry()
+            }
+        }
+    }
+
+    Files.move(tempJar.toPath(), targetJar.toPath(),
+        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+        java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+}
+
+tasks.register('preparePaperCompileReference') {
+    outputs.files(rootProject.ext.paperServerJar, rootProject.ext.paperBundlerJar)
+    outputs.upToDateWhen {
+        rootProject.ext.paperBundlerJar.isFile() &&
+            countClassesWithPrefix(rootProject.ext.paperServerJar, 'org/bukkit/craftbukkit/') >= 250 &&
+            countClassesWithPrefix(rootProject.ext.paperServerJar, 'net/minecraft/') == 0 &&
+
+            !new java.util.jar.JarFile(rootProject.ext.paperServerJar).withCloseable { jar ->
+                jar.entries().any { entry ->
+                    if (!entry.name.endsWith('.class')) return false
+                    int d = entry.name.indexOf('$')
+                    String base = (d >= 0 ? entry.name.substring(0, d) : entry.name.replace('.class', '')) + '.java'
+                    new File(rootProject.projectDir, "lunararc-common/src/main/java/${base}").exists()
+                }
+            }
+    }
+    inputs.property('minecraftVersion', libs.versions.minecraft.get())
+    inputs.property('paperBuild', libs.versions.paper.build.get())
+    inputs.property('javaRuntime', libs.versions.java.runtime.get())
+
+    doLast {
+        rootProject.ext.paperDir.mkdirs()
+        def mc = libs.versions.minecraft.get()
+        def requestedBuild = Integer.parseInt(libs.versions.paper.build.get())
+        def userAgent = 'LunarArc (https://github.com/AMPZNetwork/LunarArc)'
+        File bundler = rootProject.ext.paperBundlerJar
+        File preparedServer = rootProject.ext.paperServerJar
+
+        int cachedCraftClasses = countClassesWithPrefix(preparedServer, 'org/bukkit/craftbukkit/')
+        int cachedNmsClasses = countClassesWithPrefix(preparedServer, 'net/minecraft/')
+        if (preparedServer.isFile() && bundler.isFile() && cachedCraftClasses >= 250 && cachedNmsClasses == 0) {
+            println "Paper compile reference already prepared: ${preparedServer} (${cachedCraftClasses} CraftBukkit classes)"
+            return
+        }
+        if (preparedServer.exists()) {
+            println "Discarding stale Paper compile reference: ${preparedServer} (${cachedCraftClasses} CraftBukkit classes, ${cachedNmsClasses} NMS classes)"
+            preparedServer.delete()
+        }
+
+        try {
+            if (!bundler.isFile()) {
+                println "Resolving Paper ${requestedBuild} for MC ${mc} via PaperMC Fill..."
+                def buildsUrl = URI.create("https://fill.papermc.io/v3/projects/paper/versions/${mc}/builds").toURL()
+                def metaConn = buildsUrl.openConnection()
+                metaConn.setRequestProperty('User-Agent', userAgent)
+                metaConn.setRequestProperty('Accept', 'application/json')
+                metaConn.connectTimeout = 30_000
+                metaConn.readTimeout = 60_000
+
+                def builds = new groovy.json.JsonSlurper().parse(metaConn.inputStream)
+                def selected = builds.find { b ->
+                    def id = b.id ?: b.number
+                    id != null && Integer.parseInt(id.toString()) == requestedBuild
+                }
+                if (selected == null) {
+                    throw new GradleException("Paper build ${requestedBuild} for Minecraft ${mc} was not returned by the PaperMC downloads service")
+                }
+
+                def download = selected.downloads?.get('server:default')
+                def downloadUrl = download?.url
+                if (!downloadUrl) {
+                    throw new GradleException("Paper build ${requestedBuild} for Minecraft ${mc} has no server:default download")
+                }
+
+                println "Downloading Paper ${requestedBuild} for MC ${mc}..."
+                def conn = URI.create(downloadUrl.toString()).toURL().openConnection()
+                conn.setRequestProperty('User-Agent', userAgent)
+                conn.connectTimeout = 30_000
+                conn.readTimeout = 120_000
+                File tempBundler = new File(bundler.parentFile, bundler.name + '.tmp')
+                tempBundler.withOutputStream { out -> conn.inputStream.transferTo(out) }
+                Files.move(tempBundler.toPath(), bundler.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+            }
+
+            File patchDir = rootProject.file(".gradle/paper/patch-${mc}-${requestedBuild}")
+            if (patchDir.exists()) {
+
+                fileTree(patchDir) {
+                    include '**/patched*.jar'
+                    include '**/paper-*.jar'
+                }.files.each { File candidate ->
+                    if (countClassesWithPrefix(candidate, 'org/bukkit/craftbukkit/') < 250) candidate.delete()
+                }
+            } else {
+                patchDir.mkdirs()
+            }
+
+            println "Preparing patched Paper compile reference via Paperclip (patch-only)..."
+            def javaLauncher = javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(libs.versions.java.runtime.get().toInteger())
+            }.get()
+            def command = [
+                javaLauncher.executablePath.asFile.absolutePath,
+                '-Dpaperclip.patchonly=true',
+                '-jar', bundler.absolutePath
+            ]
+            def process = new ProcessBuilder(command)
+                .directory(patchDir)
+                .inheritIO()
+                .start()
+            int exitCode = process.waitFor()
+            if (exitCode != 0) {
+                throw new GradleException("Paperclip patch-only exited with code ${exitCode}")
+            }
+
+            def candidates = fileTree(patchDir) {
+                include '**/*.jar'
+            }.files.findAll { File candidate ->
+                countClassesWithPrefix(candidate, 'org/bukkit/craftbukkit/') >= 250
+            }.sort { a, b -> b.lastModified() <=> a.lastModified() }
+
+            if (candidates.isEmpty()) {
+                throw new GradleException(
+                    "Paperclip completed but no patched Paper compile reference containing CraftBukkit was found under ${patchDir}"
+                )
+            }
+
+            File patched = candidates.first()
+            writePaperCompileReference(patched, preparedServer)
+            int craftClasses = countClassesWithPrefix(preparedServer, 'org/bukkit/craftbukkit/')
+            int nmsClasses = countClassesWithPrefix(preparedServer, 'net/minecraft/')
+            if (craftClasses < 250 || nmsClasses != 0) {
+                throw new GradleException("Invalid Paper compile reference: ${craftClasses} CraftBukkit classes, ${nmsClasses} NMS classes")
+            }
+            println "Paper compile reference JAR ready: ${preparedServer} (${craftClasses} CraftBukkit classes, ${nmsClasses} NMS classes)"
+        } catch (Exception e) {
+            if (preparedServer.exists()) preparedServer.delete()
+            throw new GradleException("Unable to prepare Paper ${requestedBuild} for Minecraft ${mc}: ${e.message}", e)
         }
     }
 }
 
-// ── Collect all platform fat-JARs into build/libs ─────────────────────────────
+tasks.register('verifyNoRuntimeProxies') {
+    group = 'verification'
+    description = 'Fails if any LunarArc loader or common code reintroduces proxy/runtime-dispatch architecture.'
+    inputs.files(
+        fileTree(rootProject.file('lunararc-common/src/main/java')) { include '**/*.java' },
+        fileTree(rootProject.file('lunararc-forge/src/main/java')) { include '**/*.java' },
+        fileTree(rootProject.file('lunararc-neoforge/src/main/java')) { include '**/*.java' },
+        fileTree(rootProject.file('lunararc-fabric/src/main/java')) { include '**/*.java' },
+        fileTree(rootProject.file('lunararc-quilt/src/main/java')) { include '**/*.java' }
+    )
+    doLast {
+        List<String> violations = []
+        List<String> forbiddenTokens = [
+            'java.lang.reflect.Proxy',
+            'Proxy.newProxyInstance',
+            'java.lang.reflect.InvocationHandler',
+            'class PlatformBridge',
+            'interface PlatformBridge',
+            'class LunarArcPlatform',
+            'interface LunarArcPlatform',
+            'RuntimeProxy',
+            'RuntimeDispatcher'
+        ]
+        inputs.files.files.findAll { it.isFile() }.sort { it.path }.each { File source ->
+            String body = source.getText('UTF-8')
+            if (forbiddenTokens.any { body.contains(it) }) {
+                violations.add(rootProject.projectDir.toPath().relativize(source.toPath()).toString())
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException(
+                "Proxy/runtime-dispatch architecture is forbidden. Remove it from: ${violations.join(', ')}"
+            )
+        }
+        logger.lifecycle('No-proxy architecture audit passed for common + Forge + NeoForge + Fabric + Quilt sources.')
+    }
+}
+
+tasks.register('verifyFourLoaderPaperParity') {
+    group = 'verification'
+    description = 'Fails when shared Paper/Bukkit entity-event policy is duplicated back into loader-native adapters.'
+    inputs.files(
+        fileTree(rootProject.file('lunararc-forge/src/main/java/io/ampznetwork/lunararc/forge/event')) { include '**/*.java' },
+        fileTree(rootProject.file('lunararc-neoforge/src/main/java/io/ampznetwork/lunararc/neoforge/event')) { include '**/*.java' }
+    )
+    doLast {
+        List<String> violations = []
+        List<String> duplicatedPolicy = [
+            'new PlayerTeleportEvent(',
+            'new org.bukkit.event.entity.EntityTeleportEvent(',
+            'CraftEventFactory.callCreatureSpawnEvent(',
+            'CraftEventFactory.callEntitySpawnEvent('
+        ]
+        inputs.files.files.findAll { it.isFile() }.sort { it.path }.each { File source ->
+            String body = source.getText('UTF-8')
+            if (duplicatedPolicy.any { body.contains(it) }) {
+                violations.add(rootProject.projectDir.toPath().relativize(source.toPath()).toString())
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException(
+                "Paper/Bukkit entity-event semantics must stay in lunararc-common. Loader duplication found in: ${violations.join(', ')}"
+            )
+        }
+        logger.lifecycle('Four-loader Paper parity audit passed for native entity-event adapters.')
+    }
+}
+
+tasks.register('collectForge', Copy) {
+    group = 'build'
+    description = 'Collects the verified Forge-first LunarArc hybrid artifact.'
+    dependsOn project(':bootstrap').tasks.named('verifyForgeHybridShape')
+    destinationDir = file('build/libs')
+    from project(':bootstrap').tasks.named('forgeJar')
+}
+
+tasks.register('forgeBuild') {
+    group = 'build'
+    description = 'Builds LunarArc as a Forge-owned Arclight-style hybrid server.'
+    dependsOn tasks.named('verifyNoRuntimeProxies')
+    dependsOn tasks.named('verifyFourLoaderPaperParity')
+    dependsOn project(':lunararc-forge').tasks.named('build')
+    dependsOn project(':bootstrap').tasks.named('verifyForgeHybridShape')
+}
+
+tasks.register('hybridBuild') {
+    group = 'build'
+    description = 'Builds and verifies all four Arclight-style LunarArc hybrids (Forge, NeoForge, Fabric, Quilt).'
+    dependsOn tasks.named('verifyNoRuntimeProxies')
+    dependsOn tasks.named('verifyFourLoaderPaperParity')
+    dependsOn project(':lunararc-forge').tasks.named('build')
+    dependsOn project(':lunararc-neoforge').tasks.named('build')
+    dependsOn project(':lunararc-fabric').tasks.named('build')
+    dependsOn project(':lunararc-quilt').tasks.named('build')
+    dependsOn project(':bootstrap').tasks.named('verifyForgeHybridShape')
+    dependsOn project(':bootstrap').tasks.named('verifyNeoforgeHybridShape')
+    dependsOn project(':bootstrap').tasks.named('verifyFabricHybridShape')
+    dependsOn project(':bootstrap').tasks.named('verifyQuiltHybridShape')
+}
+
 tasks.register('collect', Copy) {
+    dependsOn tasks.named('hybridBuild')
+    dependsOn project(':bootstrap').tasks.named('verifyNeoforgeHybridShape')
+    dependsOn project(':bootstrap').tasks.named('verifyForgeHybridShape')
+    dependsOn project(':bootstrap').tasks.named('verifyFabricHybridShape')
+    dependsOn project(':bootstrap').tasks.named('verifyQuiltHybridShape')
     destinationDir = file('build/libs')
     from project(':bootstrap').tasks.named('neoforgeJar')
     from project(':bootstrap').tasks.named('forgeJar')
@@ -85,3 +373,11 @@ tasks.register('collect', Copy) {
 }
 
 jar.enabled = false
+
+tasks.register('collectNeoforge', Copy) {
+    group = 'build'
+    description = 'Collects the verified NeoForge LunarArc hybrid artifact.'
+    dependsOn project(':bootstrap').tasks.named('verifyNeoforgeHybridShape')
+    destinationDir = file('build/libs')
+    from project(':bootstrap').tasks.named('neoforgeJar')
+}
