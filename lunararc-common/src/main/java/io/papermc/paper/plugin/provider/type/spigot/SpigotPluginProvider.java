@@ -17,7 +17,6 @@ import org.bukkit.plugin.InvalidPluginException;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.UnknownDependencyException;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.plugin.java.LibraryLoader;
 import org.bukkit.plugin.java.PluginClassLoader;
 import org.jetbrains.annotations.NotNull;
 
@@ -35,7 +34,6 @@ import java.util.logging.Logger;
 public class SpigotPluginProvider implements PluginProvider<JavaPlugin>, ProviderStatusHolder, DependencyContextHolder {
 
     public static final PluginTypeFactory<SpigotPluginProvider, PluginDescriptionFile> FACTORY = new SpigotPluginProviderFactory();
-    private static final LibraryLoader LIBRARY_LOADER = new LibraryLoader(Logger.getLogger("SpigotLibraryLoader"));
     private final Path path;
     private final PluginDescriptionFile description;
     private final JarFile jarFile;
