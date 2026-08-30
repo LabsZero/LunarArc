@@ -5,12 +5,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
-import io.ampznetwork.lunararc.common.bridge.EntityBridge;
+import io.ampznetwork.lunararc.common.bridge.CommandSourceStackBridge;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.server.level.ServerPlayer;
-import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
@@ -18,10 +15,7 @@ import org.bukkit.command.CommandSender;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * Thin Brigadier facade over Bukkit's authoritative CommandMap.
- * Command ownership, aliases, permissions and execution stay in Bukkit.
- */
+
 public final class BukkitCommandWrapper {
     private final CommandMap commandMap;
     private final String label;
@@ -55,8 +49,7 @@ public final class BukkitCommandWrapper {
             if (!args.isBlank()) line += " " + args;
         }
 
-        // This Brigadier node exists only because Bukkit already owns this exact label.
-        // Execute directly through the authoritative CommandMap so routing cannot recurse.
+
         return commandMap.dispatch(sender(context.getSource()), line) ? 1 : 0;
     }
 
@@ -76,8 +69,8 @@ public final class BukkitCommandWrapper {
                     ? new String[0]
                     : argumentText.split(" ", -1);
             completions = command == null ? List.of() : command.tabComplete(sender, label, args);
-        } catch (Throwable ignored) {
-            completions = List.of();
+        } catch (org.bukkit.command.CommandException exception) {
+            throw exception;
         }
 
         int lastSpace = input.lastIndexOf(' ');
@@ -95,24 +88,13 @@ public final class BukkitCommandWrapper {
     }
 
     private static CommandSender sender(CommandSourceStack source) {
-        if (source.getEntity() instanceof ServerPlayer player) {
-            Object bukkit = ((EntityBridge) player).lunararc$getBukkitEntity();
-            if (bukkit instanceof CommandSender commandSender) {
-                return commandSender;
-            }
-        }
-
-        Server server = LunarArcPlatform.getServer();
-        if (server == null) {
-            throw new IllegalStateException("Bukkit server is not initialized");
-        }
-        return server.getConsoleSender();
+        return ((CommandSourceStackBridge) (Object) source).lunararc$getBukkitSender();
     }
 
     private static String normalize(String value) {
         if (value == null) return "";
-        // Preserve a slash that is part of the actual Bukkit label (not the
-        // client's command introducer). This is required for WorldEdit // commands.
+
+
         return value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }

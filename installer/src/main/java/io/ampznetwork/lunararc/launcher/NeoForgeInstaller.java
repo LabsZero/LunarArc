@@ -24,7 +24,7 @@ public class NeoForgeInstaller {
         Path libDir = Paths.get("libraries");
         Path versionSentinel = libDir.resolve(".lunararc-neoforge-version");
         boolean needsInstall = true;
-        
+
         if (Files.exists(versionSentinel)) {
             String installedVersion = Files.readString(versionSentinel).trim();
             if (installedVersion.equals(neoforgeVersion)) {

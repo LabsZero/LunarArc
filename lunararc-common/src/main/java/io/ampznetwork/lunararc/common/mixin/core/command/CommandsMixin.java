@@ -1,7 +1,6 @@
 package io.ampznetwork.lunararc.common.mixin.core.command;
 
 import com.mojang.brigadier.CommandDispatcher;
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
 import io.ampznetwork.lunararc.common.server.LunarArcCommandMap;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -22,11 +21,5 @@ public abstract class CommandsMixin {
                                           net.minecraft.commands.CommandBuildContext context,
                                           CallbackInfo ci) {
         LunarArcCommandMap.setDispatcher(this.dispatcher);
-
-        if (LunarArcPlatform.getServer() == null) return;
-        org.bukkit.command.CommandMap map = LunarArcPlatform.getServer().getCommandMap();
-        if (map instanceof LunarArcCommandMap lunarArcMap) {
-            lunarArcMap.syncToBrigadier(this.dispatcher);
-        }
     }
 }

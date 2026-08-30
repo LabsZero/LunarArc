@@ -21,11 +21,15 @@
     "entrypoints": {
       "main": "io.ampznetwork.lunararc.quilt.LunarArcQuilt"
     },
-    "mixin": "mixins.lunararc.common.json",
+    "mixin": [
+      "mixins.lunararc.common.json",
+      "mixins.lunararc.quilt.json"
+    ],
     "depends": [
       {
         "quilt_loader": ">=${quilt_loader}",
-        "minecraft": ">=${minecraft}"
+        "minecraft": "${minecraft}",
+        "fabric-api": "*"
       }
     ]
   }

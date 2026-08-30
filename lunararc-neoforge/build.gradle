@@ -1,4 +1,4 @@
-// NeoForge platform integration — analogous to arclight-neoforge.
+
 plugins {
     id 'architectury-plugin'
     id 'dev.architectury.loom'
@@ -26,7 +26,6 @@ dependencies {
     implementation libs.paper.api
 }
 
-// Strip compile-only neoforgespi stubs — FancyModLoader provides the real classes at runtime.
 tasks.named('jar') {
     exclude 'net/neoforged/neoforgespi/**'
 }
@@ -36,6 +35,7 @@ processResources {
     inputs.property 'version', project.version
     inputs.property 'project_name', rootProject.name
     inputs.property 'java_runtime', javaRuntime
+
     filesMatching('META-INF/mods.toml') {
         expand version: project.version, project_name: rootProject.name
     }

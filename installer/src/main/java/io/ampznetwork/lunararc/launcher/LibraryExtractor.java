@@ -9,7 +9,7 @@ public class LibraryExtractor {
         try {
             ConsoleUI.printStep("Extracting runtime dependencies...");
             File selfJar = new File(LibraryExtractor.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-            
+
             try (ZipInputStream zin = new ZipInputStream(new FileInputStream(selfJar))) {
                 ZipEntry entry;
                 while ((entry = zin.getNextEntry()) != null) {
@@ -17,7 +17,7 @@ public class LibraryExtractor {
                     if (name.startsWith("META-INF/libraries/")) {
                         String destPath = name.substring("META-INF/".length());
                         Path dest = Paths.get(destPath);
-                        
+
                         if (entry.isDirectory()) {
                             Files.createDirectories(dest);
                         } else {

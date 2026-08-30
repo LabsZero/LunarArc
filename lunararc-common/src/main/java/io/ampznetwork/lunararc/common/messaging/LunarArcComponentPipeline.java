@@ -5,18 +5,9 @@ import net.md_5.bungee.api.chat.BaseComponent;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.level.ServerPlayer;
-import org.bukkit.craftbukkit.v1_21_R1.util.CraftChatMessage;
+import org.bukkit.craftbukkit.util.CraftChatMessage;
 
-/**
- * The single authoritative outgoing in-game component pipeline for LunarArc.
- *
- * <p>Keep this class deliberately free of eager serializer initialization.
- * Hybrid servers can load plugin-facing Adventure/Bungee classes through a
- * different class-loader path during bootstrap; eagerly resolving one optional
- * serializer used to poison this class with ExceptionInInitializerError and all
- * later calls then failed as NoClassDefFoundError. Every conversion therefore
- * resolves its adapter at call time and has a safe native fallback.</p>
- */
+
 public final class LunarArcComponentPipeline {
     private LunarArcComponentPipeline() {}
 
@@ -25,7 +16,7 @@ public final class LunarArcComponentPipeline {
             return net.minecraft.network.chat.Component.empty();
         }
 
-        // Preferred path preserves legacy colours/styles including §x RGB.
+
         try {
             net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer serializer =
                     net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.builder()
@@ -33,17 +24,105 @@ public final class LunarArcComponentPipeline {
                             .hexColors()
                             .useUnusualXRepeatedCharacterHexFormat()
                             .build();
-            return fromAdventure(serializer.deserialize(message));
+            return fromAdventure(linkifyUrls(serializer.deserialize(message)));
         } catch (Throwable ignored) {
-            // CraftChatMessage has its own guarded legacy conversion and native
-            // literal fallback, so the messaging class can never become poisoned.
-            try {
-                net.minecraft.network.chat.Component converted = CraftChatMessage.fromStringOrNull(message);
-                if (converted != null) return converted;
-            } catch (Throwable ignoredAgain) {
-            }
+            // Do not call CraftChatMessage#fromStringOrNull here: that method routes
+            // back through this pipeline and would recurse if Adventure conversion
+            // itself failed. Preserve the original text as the terminal fallback.
             return net.minecraft.network.chat.Component.literal(message);
         }
+    }
+
+
+    public static Component legacyToAdventure(String message) {
+        if (message == null || message.isEmpty()) return Component.empty();
+        try {
+            Component decoded = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.builder()
+                    .character('§')
+                    .hexColors()
+                    .useUnusualXRepeatedCharacterHexFormat()
+                    .build()
+                    .deserialize(message);
+            return linkifyUrls(decoded);
+        } catch (Throwable ignored) {
+            return linkifyUrls(Component.text(message));
+        }
+    }
+
+    // CraftBukkit 1.21.1 URL recognition. Keep this aligned with the server's
+    // normal legacy-message linkification instead of imposing a LunarArc URL policy.
+    private static final java.util.regex.Pattern URL_PATTERN = java.util.regex.Pattern.compile(
+            "((?:(?:https?):\\/\\/)?(?:[-\\w_\\.]{2,}\\.[a-z]{2,4}.*?(?=[\\.\\?!,;:]?(?:[§ \n]|$))))",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Restores CraftBukkit-style clickable links in legacy text without imposing a
+     * LunarArc/domain allow-list. Explicit plugin click events are preserved exactly;
+     * plain URLs receive OPEN_URL and the Minecraft client remains authoritative for
+     * whether that target can actually be opened.
+     */
+    private static Component linkifyUrls(Component component) {
+        if (component == null) return Component.empty();
+        try {
+            return component.replaceText(net.kyori.adventure.text.TextReplacementConfig.builder()
+                    .match(URL_PATTERN)
+                    .replacement((match, builder) -> {
+                        // Never replace a click action supplied by the plugin/component itself.
+                        if (builder.build().clickEvent() != null) return builder;
+
+                        String shown = match.group();
+                        String target = shown.regionMatches(true, 0, "http://", 0, 7)
+                                || shown.regionMatches(true, 0, "https://", 0, 8)
+                                ? shown : "http://" + shown;
+                        return builder.clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(target));
+                    })
+                    .build());
+        } catch (Throwable ignored) {
+            // A malformed piece of plugin text must not lose its original component/style.
+            return component;
+        }
+    }
+
+
+    public static String toLegacy(Component component) {
+        if (component == null) return "";
+        try {
+            return net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.builder()
+                    .character('§')
+                    .hexColors()
+                    .useUnusualXRepeatedCharacterHexFormat()
+                    .build()
+                    .serialize(component);
+        } catch (Throwable ignored) {
+            try {
+                return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(component);
+            } catch (Throwable ignoredAgain) {
+                return String.valueOf(component);
+            }
+        }
+    }
+
+
+    public static Component toAdventure(net.minecraft.network.chat.Component component) {
+        if (component == null) return Component.empty();
+        try {
+            Class<?> bridge = Class.forName("io.papermc.paper.adventure.PaperAdventure", false,
+                    LunarArcComponentPipeline.class.getClassLoader());
+            java.lang.reflect.Method method = bridge.getMethod("asAdventure", net.minecraft.network.chat.Component.class);
+            Object converted = method.invoke(null, component);
+            if (converted instanceof Component adventure) return adventure;
+        } catch (Throwable ignored) {
+        }
+        try {
+            String json = CraftChatMessage.toJSON(component);
+            return net.kyori.adventure.text.serializer.gson.GsonComponentSerializer.gson().deserialize(json);
+        } catch (Throwable ignored) {
+            return Component.text(component.getString());
+        }
+    }
+
+    public static Component bungeeToAdventure(BaseComponent... components) {
+        return toAdventure(fromBungee(components));
     }
 
     public static net.minecraft.network.chat.Component fromAdventure(Component component) {
@@ -51,7 +130,7 @@ public final class LunarArcComponentPipeline {
             return net.minecraft.network.chat.Component.empty();
         }
 
-        // Paper's native Adventure bridge is the best conversion when present.
+
         try {
             Class<?> bridge = Class.forName("io.papermc.paper.adventure.PaperAdventure", false,
                     LunarArcComponentPipeline.class.getClassLoader());
@@ -61,7 +140,7 @@ public final class LunarArcComponentPipeline {
         } catch (Throwable ignored) {
         }
 
-        // Gson remains the portable shared-runtime conversion path.
+
         try {
             String json = net.kyori.adventure.text.serializer.gson.GsonComponentSerializer.gson().serialize(component);
             net.minecraft.network.chat.MutableComponent nms = CraftChatMessage.fromJSON(json);
@@ -69,8 +148,7 @@ public final class LunarArcComponentPipeline {
         } catch (Throwable ignored) {
         }
 
-        // Last-resort plain conversion must itself be guarded: the plain serializer
-        // may live in the same optional Adventure serializer module on some setups.
+
         try {
             String plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(component);
             return net.minecraft.network.chat.Component.literal(plain);

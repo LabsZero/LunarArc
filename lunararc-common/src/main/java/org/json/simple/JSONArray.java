@@ -1,8 +1,13 @@
 package org.json.simple;
 
 import java.util.ArrayList;
+import java.util.Collection;
 
-/** Minimal stub so Vault's update-checker can load without crashing. */
+
 public class JSONArray extends ArrayList<Object> {
-    public String toJSONString() { return "[]"; }
+    public JSONArray() {}
+    public JSONArray(Collection<?> values) { super(values); }
+    public String toJSONString() { return JSONValue.toJSONString(this); }
+    @Override public String toString() { return toJSONString(); }
+    public static String toJSONString(Collection<?> collection) { return JSONValue.toJSONString(collection); }
 }

@@ -1,6 +1,6 @@
 modLoader="javafml"
 loaderVersion="[1,)"
-license="Apache-3.0"
+license="GNU General Public License v3.0"
 
 [[mods]]
 modId="lunararc"
@@ -10,7 +10,14 @@ authors="Ampz Network"
 description="LunarArc Hybrid Server Core"
 
 [[mixins]]
-config="mixins.lunararc.common.json"
+config="mixins.lunararc.common.neoforge.json"
 
 [[mixins]]
 config="mixins.lunararc.neoforge.json"
+
+[[dependencies.lunararc]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="BOTH"

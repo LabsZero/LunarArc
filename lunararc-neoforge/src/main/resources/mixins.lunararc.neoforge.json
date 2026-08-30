@@ -4,7 +4,18 @@
   "package": "io.ampznetwork.lunararc.neoforge.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "permission.PermissionAPIMixin"
+    "permission.PermissionAPIMixin",
+    "core.server.MinecraftServerMixin_NeoForge",
+    "bukkit.CraftWorldMixin_NeoForge",
+    "network.NetworkRegistryMixin_NeoForge",
+    "network.NetworkRegistryAccessor_NeoForge",
+    "bukkit.StandardMessengerMixin_NeoForge",
+    "bukkit.CraftPlayerMixin_NeoForge",
+    "core.entity.SlimeAttackGoalMixin_NeoForge",
+    "core.entity.SlimeFloatGoalMixin_NeoForge",
+    "core.entity.SlimeRandomDirectionGoalMixin_NeoForge",
+    "core.entity.SlimeKeepOnJumpingGoalMixin_NeoForge",
+    "core.effect.HungerMobEffectMixin_NeoForge"
   ],
   "injectors": {
     "defaultRequire": 1

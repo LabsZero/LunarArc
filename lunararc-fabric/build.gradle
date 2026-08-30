@@ -1,4 +1,4 @@
-// Fabric platform integration — analogous to arclight-fabric.
+
 plugins {
     id 'architectury-plugin'
     id 'dev.architectury.loom'

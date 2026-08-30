@@ -18,13 +18,13 @@ public record LunarArcServerBuildInfo(
         @NotNull Optional<String> gitBranch,
         @NotNull Optional<String> gitCommit) implements ServerBuildInfo {
 
-    /** Singleton — created once at class-load time so buildTime is stable. */
+
     public static final LunarArcServerBuildInfo INSTANCE = new LunarArcServerBuildInfo();
 
     private LunarArcServerBuildInfo() {
         this(
-                Key.key("paper", "paper"),      // brand must be paper:paper for plugin compat
-                LunarArcVersionInfo.projectName(), // "Paper"
+                Key.key("paper", "paper"),
+                LunarArcVersionInfo.projectName(),
                 LunarArcVersionInfo.minecraftVersion(),
                 LunarArcVersionInfo.minecraftVersion(),
                 LunarArcVersionInfo.paperBuild() > 0 ? OptionalInt.of(LunarArcVersionInfo.paperBuild()) : OptionalInt.empty(),

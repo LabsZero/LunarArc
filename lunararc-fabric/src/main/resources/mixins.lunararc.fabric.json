@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.ampznetwork.lunararc.fabric.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "bukkit.StandardMessengerMixin_Fabric",
+    "bukkit.CraftPlayerMixin_Fabric",
+    "core.server.MinecraftServerMixin_Fabric"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

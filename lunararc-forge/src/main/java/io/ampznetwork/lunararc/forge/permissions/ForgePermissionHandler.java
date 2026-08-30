@@ -1,41 +1,16 @@
 package io.ampznetwork.lunararc.forge.permissions;
 
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.OfflinePlayer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.ampznetwork.lunararc.common.permission.LunarArcBukkitPermissions;
 import java.util.UUID;
 
-/**
- * Delegates Forge permission checks to Bukkit's permission system.
- * Called from ForgeBridge.hasPermission() to check mod-side permission nodes.
- */
-public class ForgePermissionHandler {
-    private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc-Forge");
+public final class ForgePermissionHandler {
+    private ForgePermissionHandler() {}
 
     public static boolean hasPermission(UUID playerUUID, String permission) {
-        try {
-            Player player = Bukkit.getPlayer(playerUUID);
-            if (player != null) return player.hasPermission(permission);
-            OfflinePlayer offline = Bukkit.getOfflinePlayer(playerUUID);
-            return offline.isOp();
-        } catch (Throwable t) {
-            return false;
-        }
+        return LunarArcBukkitPermissions.hasPermission(playerUUID, permission);
     }
 
     public static boolean hasPermission(UUID playerUUID, String permission, boolean defaultValue) {
-        try {
-            Player player = Bukkit.getPlayer(playerUUID);
-            if (player != null) {
-                if (player.isPermissionSet(permission)) return player.hasPermission(permission);
-                return defaultValue;
-            }
-            OfflinePlayer offline = Bukkit.getOfflinePlayer(playerUUID);
-            return offline.isOp();
-        } catch (Throwable t) {
-            return defaultValue;
-        }
+        return LunarArcBukkitPermissions.hasPermission(playerUUID, permission, defaultValue);
     }
 }

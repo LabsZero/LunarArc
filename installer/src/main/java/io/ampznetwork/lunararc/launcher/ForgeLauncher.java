@@ -23,7 +23,6 @@ public class ForgeLauncher {
             return;
         }
 
-        // Deploy to hidden .lunararc/mods/ (keeps user mods/ folder clean)
         Path bridgeModsDir = Paths.get(".lunararc", "mods");
         Files.createDirectories(bridgeModsDir);
         if (selfPath != null && Files.exists(selfPath)) {

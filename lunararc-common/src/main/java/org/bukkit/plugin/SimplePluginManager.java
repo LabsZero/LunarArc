@@ -20,24 +20,32 @@ import org.bukkit.permissions.Permission;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * LunarArc Custom SimplePluginManager stub to provide a bridge to
- * PaperPluginManagerImpl.
- */
+
 public class SimplePluginManager implements PluginManager {
     private final Server server;
     private final SimpleCommandMap commandMap;
     private PluginManager paperPluginManager;
-    
-    // Fields expected by LuckPerms and other plugins via reflection
-    private final Map<String, Permission> permissions = new java.util.HashMap<>();
-    private final Map<Boolean, Set<Permission>> defaultPerms = new java.util.LinkedHashMap<>();
-    private final Map<String, Map<Permissible, Boolean>> permSubs = new java.util.HashMap<>();
-    private final Map<Boolean, Map<Permissible, Boolean>> defSubs = new java.util.HashMap<>();
+
+
+    // Real Paper widens these from private to public specifically so
+    // io.papermc.paper.plugin.manager.StupidSPMPermissionManagerWrapper (different package) can
+    // access them directly — matching that exactly rather than adding accessor methods that
+    // wouldn't exist in the ported wrapper's real call sites.
+    public final Map<String, Permission> permissions = new java.util.HashMap<>();
+    // Real classic Bukkit SimplePluginManager always pre-populates both boolean keys here —
+    // StupidSPMPermissionManagerWrapper (io.papermc.paper.plugin.manager) reads this map
+    // directly and had no way to know it needed entries here; getDefaultPermissions(op) was
+    // calling ImmutableSet.copyOf(null) on first boot before any permission was ever added.
+    // Populated in the constructor below, not here, to avoid an unnecessary anonymous subclass.
+    public final Map<Boolean, Set<Permission>> defaultPerms = new java.util.LinkedHashMap<>();
+    public final Map<String, Map<Permissible, Boolean>> permSubs = new java.util.HashMap<>();
+    public final Map<Boolean, Map<Permissible, Boolean>> defSubs = new java.util.HashMap<>();
 
     public SimplePluginManager(Server server, SimpleCommandMap commandMap) {
         this.server = server;
         this.commandMap = commandMap;
+        this.defaultPerms.put(true, new java.util.LinkedHashSet<>());
+        this.defaultPerms.put(false, new java.util.LinkedHashSet<>());
     }
 
     public void setInternalManager(PluginManager manager) {
@@ -93,7 +101,7 @@ public class SimplePluginManager implements PluginManager {
                 java.lang.reflect.Method method = paperPluginManager.getClass().getMethod("enablePlugins");
                 method.invoke(paperPluginManager);
             } catch (Exception e) {
-                // Fallback or ignore
+
             }
         }
     }

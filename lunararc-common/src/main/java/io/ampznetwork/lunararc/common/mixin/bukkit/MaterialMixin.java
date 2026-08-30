@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Locale;
 
-@Mixin(targets = "org.bukkit.Material")
+@Mixin(org.bukkit.Material.class)
 public abstract class MaterialMixin {
 
     @Shadow(remap = false)
@@ -17,12 +17,17 @@ public abstract class MaterialMixin {
 
     @Inject(method = "getKey", at = @At("HEAD"), cancellable = true, remap = false)
     private void lunararc$onGetKey(CallbackInfoReturnable<NamespacedKey> cir) {
+        org.bukkit.Material self = (org.bukkit.Material) (Object) this;
+        NamespacedKey dynamicKey = io.ampznetwork.lunararc.common.server.LunarArcDynamicBukkitEnums.materialKey(self);
+        if (dynamicKey != null) {
+            cir.setReturnValue(dynamicKey);
+            return;
+        }
         String enumName = ((Enum<?>) (Object) this).name();
         if (enumName.startsWith("LEGACY_")) {
-            cir.setReturnValue(NamespacedKey.minecraft("air"));
-        } else {
-            cir.setReturnValue(NamespacedKey.minecraft(enumName.toLowerCase(Locale.ROOT)));
+            throw new IllegalArgumentException("Cannot get key of Legacy Material");
         }
+        cir.setReturnValue(NamespacedKey.minecraft(enumName.toLowerCase(Locale.ROOT)));
     }
 
     @Inject(method = "isItem", at = @At("HEAD"), cancellable = true, remap = false)
@@ -32,9 +37,11 @@ public abstract class MaterialMixin {
             return;
         }
         try {
-            String path = ((Enum<?>) (Object) this).name().toLowerCase(Locale.ROOT);
-            net.minecraft.resources.ResourceLocation rl =
-                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", path);
+            org.bukkit.Material self = (org.bukkit.Material) (Object) this;
+            NamespacedKey dynamicKey = io.ampznetwork.lunararc.common.server.LunarArcDynamicBukkitEnums.materialKey(self);
+            net.minecraft.resources.ResourceLocation rl = dynamicKey == null
+                    ? net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", ((Enum<?>) (Object) this).name().toLowerCase(Locale.ROOT))
+                    : net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(dynamicKey.getNamespace(), dynamicKey.getKey());
             cir.setReturnValue(net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(rl));
         } catch (Exception ignored) {}
     }
@@ -46,9 +53,11 @@ public abstract class MaterialMixin {
             return;
         }
         try {
-            String path = ((Enum<?>) (Object) this).name().toLowerCase(Locale.ROOT);
-            net.minecraft.resources.ResourceLocation rl =
-                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", path);
+            org.bukkit.Material self = (org.bukkit.Material) (Object) this;
+            NamespacedKey dynamicKey = io.ampznetwork.lunararc.common.server.LunarArcDynamicBukkitEnums.materialKey(self);
+            net.minecraft.resources.ResourceLocation rl = dynamicKey == null
+                    ? net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", ((Enum<?>) (Object) this).name().toLowerCase(Locale.ROOT))
+                    : net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(dynamicKey.getNamespace(), dynamicKey.getKey());
             cir.setReturnValue(net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(rl));
         } catch (Exception ignored) {}
     }

@@ -10,8 +10,8 @@ import org.bukkit.boss.BarFlag;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
 import org.bukkit.boss.KeyedBossBar;
-import org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer;
-import org.bukkit.craftbukkit.v1_21_R1.util.CraftChatMessage;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
+import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -21,13 +21,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Bukkit boss bar backed by Minecraft's live {@link ServerBossEvent}.
- * This keeps the plugin-facing API in the shared runtime while leaving packet
- * delivery to vanilla's boss event implementation on every supported loader.
- */
+
 public final class LunarArcBossBar implements KeyedBossBar {
+    private static final Set<LunarArcBossBar> LIVE_BARS = ConcurrentHashMap.newKeySet();
+
     private final NamespacedKey key;
     private final ServerBossEvent handle;
 
@@ -41,6 +41,18 @@ public final class LunarArcBossBar implements KeyedBossBar {
         if (flags != null) {
             for (BarFlag flag : flags) addFlag(flag);
         }
+        LIVE_BARS.add(this);
+    }
+
+
+    private LunarArcBossBar(@NotNull ServerBossEvent handle) {
+        this.key = NamespacedKey.minecraft("lunararc_wrapped_bossbar_" + UUID.randomUUID());
+        this.handle = Objects.requireNonNull(handle, "handle");
+    }
+
+    /** Wraps an existing loader-owned NMS boss event without replacing it. */
+    public static BossBar wrap(@NotNull ServerBossEvent handle) {
+        return new LunarArcBossBar(handle);
     }
 
     public static BossBar create(@Nullable String title, @NotNull BarColor color,
@@ -55,6 +67,58 @@ public final class LunarArcBossBar implements KeyedBossBar {
 
     public ServerBossEvent getHandle() {
         return handle;
+    }
+
+
+    public static Iterable<BossBar> activeFor(@NotNull Player player) {
+        Objects.requireNonNull(player, "player");
+        List<BossBar> result = new ArrayList<>();
+        for (LunarArcBossBar bar : LIVE_BARS) {
+            try {
+                if (bar.getPlayers().contains(player)) result.add(bar);
+            } catch (Throwable ignored) {
+            }
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    public static Iterable<net.kyori.adventure.bossbar.BossBar> activeAdventureFor(@NotNull Player player) {
+        Objects.requireNonNull(player, "player");
+        List<net.kyori.adventure.bossbar.BossBar> result = new ArrayList<>();
+        for (LunarArcBossBar bar : LIVE_BARS) {
+            try {
+                if (!bar.getPlayers().contains(player)) continue;
+                result.add(net.kyori.adventure.bossbar.BossBar.bossBar(
+                        net.kyori.adventure.text.Component.text(bar.getTitle()),
+                        (float) Math.max(0.0D, Math.min(1.0D, bar.getProgress())),
+                        toAdventureColor(bar.getColor()),
+                        toAdventureOverlay(bar.getStyle())));
+            } catch (Throwable ignored) {
+            }
+        }
+        return Collections.unmodifiableList(result);
+    }
+
+    private static net.kyori.adventure.bossbar.BossBar.Color toAdventureColor(@NotNull BarColor color) {
+        return switch (color) {
+            case PINK -> net.kyori.adventure.bossbar.BossBar.Color.PINK;
+            case BLUE -> net.kyori.adventure.bossbar.BossBar.Color.BLUE;
+            case RED -> net.kyori.adventure.bossbar.BossBar.Color.RED;
+            case GREEN -> net.kyori.adventure.bossbar.BossBar.Color.GREEN;
+            case YELLOW -> net.kyori.adventure.bossbar.BossBar.Color.YELLOW;
+            case PURPLE -> net.kyori.adventure.bossbar.BossBar.Color.PURPLE;
+            case WHITE -> net.kyori.adventure.bossbar.BossBar.Color.WHITE;
+        };
+    }
+
+    private static net.kyori.adventure.bossbar.BossBar.Overlay toAdventureOverlay(@NotNull BarStyle style) {
+        return switch (style) {
+            case SOLID -> net.kyori.adventure.bossbar.BossBar.Overlay.PROGRESS;
+            case SEGMENTED_6 -> net.kyori.adventure.bossbar.BossBar.Overlay.NOTCHED_6;
+            case SEGMENTED_10 -> net.kyori.adventure.bossbar.BossBar.Overlay.NOTCHED_10;
+            case SEGMENTED_12 -> net.kyori.adventure.bossbar.BossBar.Overlay.NOTCHED_12;
+            case SEGMENTED_20 -> net.kyori.adventure.bossbar.BossBar.Overlay.NOTCHED_20;
+        };
     }
 
     @Override
@@ -146,13 +210,14 @@ public final class LunarArcBossBar implements KeyedBossBar {
     @Override
     public void removeAll() {
         for (ServerPlayer player : new ArrayList<>(handle.getPlayers())) handle.removePlayer(player);
+        LIVE_BARS.remove(this);
     }
 
     @Override
     public @NotNull List<Player> getPlayers() {
         List<Player> players = new ArrayList<>(handle.getPlayers().size());
         for (ServerPlayer player : handle.getPlayers()) {
-            org.bukkit.entity.Entity bukkit = player.getBukkitEntity();
+            org.bukkit.entity.Entity bukkit = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity();
             if (bukkit instanceof Player p) players.add(p);
         }
         return Collections.unmodifiableList(players);

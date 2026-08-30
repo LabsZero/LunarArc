@@ -20,11 +20,13 @@
     ]
   },
   "mixins": [
-    "mixins.lunararc.common.json"
+    "mixins.lunararc.common.json",
+    "mixins.lunararc.fabric.json"
   ],
   "depends": {
     "fabricloader": ">=${fabric_loader}",
-    "minecraft": ">=${minecraft}",
-    "java": ">=${java_runtime}"
+    "minecraft": "${minecraft}",
+    "java": ">=${java_runtime}",
+    "fabric-api": "*"
   }
 }

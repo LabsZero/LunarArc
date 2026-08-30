@@ -3,11 +3,11 @@
 [![Downloads count](https://img.shields.io/github/downloads/AMPZNetwork/LunarArc/total?style=for-the-badge)](https://lunararc.ampznetwork.com)  ![License](https://img.shields.io/github/license/AMPZNetwork/LunarArc?style=for-the-badge) ![GitHub forks](https://img.shields.io/github/forks/AMPZNetwork/LunarArc?style=for-the-badge&logo=github)
 
 
-An upcoming experimental PaperMC server bridge built to unify the modding ecosystem. While many hybrid servers exist, few successfully unify the PaperMC core with diverse mod loaders; **LunarArc** aims to fill that gap by providing seamless support for **Fabric**, **Quilt**, **Forge**, and **NeoForge** mods on a high performance Paper foundation.
+An experimental hybrid Minecraft server compatibility layer. **Forge/NeoForge/Fabric/Quilt**, while LunarArc layers Bukkit/Spigot/Paper plugin compatibility on top with concrete Craft-style adapters and targeted mixins. Paper is an API/behaviour contract and merge reference, not a second shaded server runtime.
 
 |        Release        |  Forge  | NeoForge |  Fabric  |  QuiltMC  | Status |                                                                                                                                              Build                                                           
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Trial Zenith (1.21.1) | 52.1.16 |21.1.248 | 0.19.3  |  0.30.0  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
+| Trial Zenith (1.21.1) | 52.1.16 |21.1.248 |  0.19.3  |  0.30.0  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
 
 ## Installing
 
@@ -19,7 +19,7 @@ Read our document for more information.
 
 ## Support
 
-Discord Server [Inivte Link](https://discord.gg/YKS6J9qEBq) 
+Discord Server [Inivte Link](discord.ampznetwork.com) 
 
 ## License
 
@@ -41,16 +41,13 @@ and <a href="https://www.yourkit.com/youmonitor/">YourKit YouMonitor</a>.
 
 ## Credits & Upstream Projects
 
-LunarArc is built upon the incredible work of the following projects:
+LunarArc uses the following upstream projects as runtime platforms, API contracts, or implementation references:
 
-- **[NeoForge](https://neoforged.net/)**: The modern modding platform for Minecraft.
-- **[Fabric](https://fabricmc.net/)**: A lightweight, experimental modding toolchain.
-- **[Forge](https://minecraftforge.net/)**: The classic modding API.
-- **[Quilt](https://quiltmc.org/)**: The open-source, community-driven modding toolchain.
-- **[PaperMC](https://papermc.io/)**: High-performance Minecraft server implementation.
-- **[Architectury](https://architectury.dev/)**: Multi-platform modding abstraction layer.
-- **[Arclight](https://github.com/IzzelAliz/Arclight)**: Bridge+Mixin architecture, single-JAR bootstrap pattern (`LunarArcAgent` premain/`Instrumentation`), `IModLocatorService` self-registration, class-space unification via `PluginClassLoader`, and Velocity forwarding patterns are all inspired by and adapted from Arclight. LunarArc would not exist without this foundational work.
-- **[Youer](https://github.com/MohistMC/Youer)**: Inspiration for Paper 1.21.1+ compatibility and ServiceLoader-based build metadata.
-- **[SpongePowered](https://www.spongepowered.org/)**: Mixin and project structure inspiration.
-
-Special thanks to the open-source community for making hybrid server development possible.
+- **[Arclight](https://github.com/IzzelAliz/Arclight)** — Primary architecture reference for the hybrid server structure, loader-specific mixins, lifecycle hooks, event coexistence, and concrete Bukkit/Craft integration.
+- **[Youer](https://github.com/MohistMC/Youer)** — Reference for Minecraft/Paper 1.21.1 CraftBukkit adapters, entity wrappers, registries, inventories, item meta, brewing, and other Paper compatibility behavior.
+- **[Paper](https://github.com/PaperMC/Paper)** — Bukkit/Paper API and server-behavior contract used to match Paper 1.21.1 plugin compatibility.
+- **[Minecraft Forge](https://github.com/MinecraftForge/MinecraftForge)** — Forge runtime and loader APIs used by LunarArc's Forge module.
+- **[NeoForge](https://github.com/neoforged/NeoForge)** — NeoForge runtime and loader APIs used by LunarArc's NeoForge module.
+- **[Fabric](https://github.com/FabricMC/fabric)** — Fabric loader/API lifecycle and integration hooks used by LunarArc's Fabric module.
+- **[Quilt](https://github.com/QuiltMC/quilt-loader)** — Quilt runtime/loader support used by LunarArc's Quilt module.
+- **[SpongePowered Mixin](https://github.com/SpongePowered/Mixin)** — Bytecode mixin framework used for targeted hooks and bridge state on the real loader-owned Minecraft classes.

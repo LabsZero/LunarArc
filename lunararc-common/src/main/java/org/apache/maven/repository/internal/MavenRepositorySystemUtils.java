@@ -1,9 +1,6 @@
 package org.apache.maven.repository.internal;
 
-/**
- * LunarArc runtime bootstrap for Maven Resolver when Paper's modern
- * MavenLibraryResolver is used outside Maven/Paper's normal bootstrap.
- */
+
 public final class MavenRepositorySystemUtils {
     private MavenRepositorySystemUtils() {}
 

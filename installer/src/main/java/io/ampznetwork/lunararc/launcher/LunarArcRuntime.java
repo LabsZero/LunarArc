@@ -13,11 +13,6 @@ import java.util.Properties;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
-/**
- * Owns LunarArc's disposable runtime directory. Everything below .lunararc may
- * be deleted by the user and is reconstructed from the server jar on the next
- * launch.
- */
 public final class LunarArcRuntime {
     private LunarArcRuntime() {}
 
@@ -101,7 +96,7 @@ public final class LunarArcRuntime {
                 JarEntry entry = entries.nextElement();
                 if (entry.isDirectory()) continue;
                 String name = entry.getName();
-                // Runtime classes/resources only. Embedded dependency jars stay jars.
+
                 if (name.startsWith("META-INF/libraries/")) continue;
                 Path out = target.resolve(name).normalize();
                 if (!out.startsWith(target)) throw new IOException("Unsafe runtime entry: " + name);
@@ -143,7 +138,6 @@ public final class LunarArcRuntime {
             Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
-
 
     private static String safeSha256(Path path) {
         try { return sha256(path); } catch (Exception ignored) { return ""; }

@@ -1,9 +1,12 @@
-// Non-Minecraft utilities and shared API surface
-// Analogous to arclight-api — no Minecraft/Loom dependency.
+
 plugins {
     id 'java-library'
 }
 
 dependencies {
     api libs.jetbrains.annotations
+
+    compileOnly libs.paper.api
+
+    compileOnly libs.asm
 }

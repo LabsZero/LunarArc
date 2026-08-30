@@ -7,10 +7,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 @Mixin(value = RegistryAccess.class, remap = false)
 public interface RegistryAccessMixin {
 
-    /**
-     * @author LunarArc
-     * @reason Redirect to our custom RegistryAccess implementation
-     */
+
     @Overwrite
     static RegistryAccess registryAccess() {
         return io.ampznetwork.lunararc.common.server.LunarArcRegistryAccess.INSTANCE;

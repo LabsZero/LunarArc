@@ -1,13 +1,14 @@
 package io.ampznetwork.lunararc.common.mod;
 
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
+import io.ampznetwork.lunararc.common.mod.server.LunarArcServer;
 import io.ampznetwork.lunararc.common.server.LunarArcVersionInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.ClassRemapper;
 
 import java.io.BufferedReader;
@@ -20,35 +21,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Paper/Spigot -> Mojang runtime remapper.
- *
- * Paper 1.20.5+ runs Mojang-mapped Minecraft classes and remaps legacy
- * Spigot-mapped plugins at load time. LunarArc follows the same model. The
- * complete mapping table is generated at build time from the matching Mojang
- * server mappings and pinned Spigot BuildData revision, then loaded here.
- *
- * plugin-remap.tsv is deliberately only an override layer for hybrid-specific
- * edge cases. It is no longer the primary mapping database.
- */
-public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
-    private static final String CRAFTBUKKIT_PREFIX = "org/bukkit/craftbukkit/";
-    private static final String CRAFTBUKKIT_TARGET = CRAFTBUKKIT_PREFIX + LunarArcVersionInfo.craftBukkitPackage() + "/";
-    private static final Map<String, Boolean> CRAFTBUKKIT_OVERRIDE_CACHE = new ConcurrentHashMap<>();
 
-    /** Spigot internal class name -> Mojang internal class name. */
+public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
+    private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc/Remapper");
+
+    private static final String CRAFTBUKKIT_PREFIX = "org/bukkit/craftbukkit/";
+
     private static final Map<String, String> CLASS_MAP = new HashMap<>();
-    /** Mojang internal class name -> Spigot internal class name, used for descriptors. */
+
     private static final Map<String, String> MOJANG_TO_SPIGOT_CLASS = new HashMap<>();
-    /** Keys use the Spigot owner/name/descriptor; values are Mojang member names. */
+
     private static final Map<MemberKey, String> FIELD_MAP = new HashMap<>();
     private static final Map<MemberKey, String> METHOD_MAP = new HashMap<>();
     private static final Map<MemberNameKey, String> FIELD_NAME_MAP = new HashMap<>();
     private static final Map<MemberNameKey, String> METHOD_NAME_MAP = new HashMap<>();
+    // Indexes METHOD_MAP by (owner, name) so overload resolution by parameter
+    // descriptor never has to scan the full NMS method-mapping table (which can
+    // hold tens of thousands of entries). Built once alongside METHOD_MAP.
+    private static final Map<MemberNameKey, List<Map.Entry<MemberKey, String>>> METHOD_OVERLOAD_INDEX = new HashMap<>();
     private static final Map<String, String> RUNTIME_FIELD_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, String> RUNTIME_METHOD_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, String> BYTECODE_FIELD_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, String> BYTECODE_METHOD_CACHE = new ConcurrentHashMap<>();
+    private static final int DYNAMIC_CACHE_LIMIT = 16_384;
 
     private final boolean remapNms;
 
@@ -64,12 +59,39 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         this.remapNms = remapNms;
     }
 
+    public boolean isNmsRemappingEnabled() {
+        return this.remapNms;
+    }
+
+    /**
+     * Real, conservative post-transform sanity check, not part of upstream Paper — added because
+     * this project's plugin/library classloaders (PluginClassLoader,
+     * TransformingDelegatePluginLibraryClassLoader, TransformingPluginLibraryClassLoader) call it
+     * directly after producing remapped bytecode. Scans the class's constant pool for the one
+     * failure mode a silent remap bug would actually produce: a UTF8 constant that still looks
+     * like a legacy obfuscated NMS/CraftBukkit-versioned package reference
+     * (net/minecraft/server/v1_ or org/bukkit/craftbukkit/v1_) surviving into supposedly-remapped
+     * output. That should never happen post-transform on this Mojang-mapped, unversioned-package
+     * runtime; if it does, the transform silently failed for this class and every reference
+     * through it is likely broken. Logs rather than throws — a false positive here must not take
+     * down plugin/library loading, and the existing per-member remap logging already covers the
+     * more granular failure cases.
+     */
+    public static void verifyCompatibilityOutput(byte[] bytes, String className) {
+        if (bytes == null || bytes.length < 8) return;
+        if (containsAscii(bytes, "net/minecraft/server/v1_") || containsAscii(bytes, "org/bukkit/craftbukkit/v1_")) {
+            LOGGER.warn("Post-transform compatibility check failed for {}: remapped bytecode still "
+                            + "contains a legacy versioned NMS/CraftBukkit symbol — the transform likely "
+                            + "did not fully remap this class.", className);
+        }
+    }
+
     private static void loadMappings() {
         String base = "mappings/" + LunarArcVersionInfo.minecraftVersion() + "/";
         ClassLoader loader = LunarArcRemapper.class.getClassLoader();
 
         try {
-            // The Gradle build generates the complete mapping resource for this MC version.
+
             try (InputStream stream = loader.getResourceAsStream(base + "paper-reobf.tiny")) {
                 if (stream == null) {
                     throw new IllegalStateException("Missing Paper reobf mappings " + base + "paper-reobf.tiny");
@@ -77,7 +99,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 loadPaperMappings(stream);
             }
 
-            // LunarArc-specific fixes can override Paper data, but should stay small.
+
             try (InputStream stream = loader.getResourceAsStream(base + "plugin-remap.tsv")) {
                 if (stream != null) loadOverrides(stream);
             }
@@ -107,20 +129,26 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
             throw new IllegalStateException("Unsupported Paper mapping format: " + lines.get(0));
         }
 
-        // Tiny member descriptors are expressed in the first/source namespace
-        // (Mojang for Paper's reobf mapping). Convert descriptors to Spigot so
-        // ASM lookups from Spigot-mapped plugin bytecode match exactly.
+
         for (PendingMember member : pending) {
             String spigotDescriptor = mapDescriptorClasses(member.mojangDescriptor, MOJANG_TO_SPIGOT_CLASS);
             MemberKey key = new MemberKey(member.spigotOwner, member.spigotName, spigotDescriptor);
             if (member.method) {
-                METHOD_MAP.put(key, member.mojangName);
+                putMethod(key, member.mojangName);
                 addUniqueNameMapping(METHOD_NAME_MAP, new MemberNameKey(member.spigotOwner, member.spigotName), member.mojangName);
             } else {
                 FIELD_MAP.put(key, member.mojangName);
                 addUniqueNameMapping(FIELD_NAME_MAP, new MemberNameKey(member.spigotOwner, member.spigotName), member.mojangName);
             }
         }
+    }
+
+    /** Single write path for METHOD_MAP so METHOD_OVERLOAD_INDEX can never drift out of sync with it. */
+    private static void putMethod(MemberKey key, String mojangName) {
+        METHOD_MAP.put(key, mojangName);
+        METHOD_OVERLOAD_INDEX
+                .computeIfAbsent(new MemberNameKey(key.owner(), key.name()), ignored -> new ArrayList<>())
+                .add(Map.entry(key, mojangName));
     }
 
     private static void parseTinyV2(List<String> lines, String[] header, List<PendingMember> pending) {
@@ -150,7 +178,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 continue;
             }
 
-            // Tiny v2 nested members: <tab>f/m <desc> <srcName> <mappedName>...
+
             if (p.length >= 5 && p[0].isEmpty() && ("f".equals(p[1]) || "m".equals(p[1]))
                     && mojangOwner != null && spigotOwner != null) {
                 int mappedColumn = targetIndex - sourceIndex + 3;
@@ -168,7 +196,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     private static void parseTinyV1(List<String> lines, String[] header, List<PendingMember> pending) {
         int targetIndex = findSpigotNamespace(header, 1);
         if (targetIndex < 0) targetIndex = header.length - 1;
-        int mappedNameOffset = targetIndex; // names begin at column 1 for CLASS and 3 for members
+        int mappedNameOffset = targetIndex;
 
         for (int i = 1; i < lines.size(); i++) {
             String[] p = lines.get(i).split("\\t", -1);
@@ -184,7 +212,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                     }
                 }
                 case "FIELD", "METHOD" -> {
-                    // Tiny v1: TYPE owner descriptor sourceName mappedName...
+
                     int mappedColumn = targetIndex + 2;
                     if (p.length <= mappedColumn) continue;
                     String mojangOwner = p[1];
@@ -217,7 +245,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
             if (mojangOwner == null || spigotOwner == null) continue;
             String[] p = line.trim().split("\\s+");
             if (p.length == 2) {
-                // Field without descriptor in TSRG2.
+
                 pending.add(new PendingMember(false, spigotOwner, p[1], "*", p[0]));
             } else if (p.length >= 3 && p[1].startsWith("(")) {
                 pending.add(new PendingMember(true, spigotOwner, p[2], p[1], p[0]));
@@ -255,7 +283,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                     }
                     case "METHOD" -> {
                         if (parts.length != 5) throw invalid(line);
-                        METHOD_MAP.put(new MemberKey(parts[1], parts[2], parts[3]), parts[4]);
+                        putMethod(new MemberKey(parts[1], parts[2], parts[3]), parts[4]);
                         addUniqueNameMapping(METHOD_NAME_MAP, new MemberNameKey(parts[1], parts[2]), parts[4]);
                     }
                     default -> throw invalid(line);
@@ -275,37 +303,21 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         return new IllegalStateException("Invalid plugin mapping entry: " + line);
     }
 
-    private static boolean hasCraftBukkitOverride(String internalName) {
-        String topLevel = internalName;
-        int nested = topLevel.indexOf('$');
-        if (nested > 0) topLevel = topLevel.substring(0, nested);
-        final String classResource = topLevel + ".class";
-        return CRAFTBUKKIT_OVERRIDE_CACHE.computeIfAbsent(topLevel, ignored -> {
-            ClassLoader loader = LunarArcRemapper.class.getClassLoader();
-            return loader.getResource(classResource) != null;
-        });
-    }
-
     @Override
     public String map(String internalName) {
         if (internalName == null) return null;
 
+        // Paper-style CraftBukkit is canonical and unversioned on LunarArc.
+        // Spigot plugins may still be compiled against versioned CraftBukkit names
+        // such as org/bukkit/craftbukkit/v1_21_R1/entity/CraftPlayer. Rewrite only
+        // that version segment to the canonical unversioned Paper package.
         if (internalName.startsWith(CRAFTBUKKIT_PREFIX)) {
-            String suffix = internalName.substring(CRAFTBUKKIT_PREFIX.length());
-            if (suffix.startsWith("v1_")) {
-                int slash = suffix.indexOf('/');
-                if (slash >= 0) suffix = suffix.substring(slash + 1);
+            String remainder = internalName.substring(CRAFTBUKKIT_PREFIX.length());
+            int slash = remainder.indexOf('/');
+            if (slash > 0 && remainder.substring(0, slash).matches("v\\d+_\\d+_R\\d+")) {
+                return CRAFTBUKKIT_PREFIX + remainder.substring(slash + 1);
             }
-
-            // Paper 1.20.5+ ships CraftBukkit unversioned. LunarArc keeps a small
-            // versioned override layer for hybrid-aware implementations, but it must
-            // not force every Paper class into that package or plugins will be
-            // remapped to classes that do not exist. Prefer the LunarArc override
-            // only when its class file is actually present; otherwise retain the
-            // complete unversioned Paper implementation surface.
-            String versioned = CRAFTBUKKIT_TARGET + suffix;
-            if (hasCraftBukkitOverride(versioned)) return versioned;
-            return CRAFTBUKKIT_PREFIX + suffix;
+            return internalName;
         }
 
         if (!remapNms) return internalName;
@@ -323,6 +335,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     @Override
     public String mapFieldName(String owner, String name, String descriptor) {
         if (!remapNms || owner == null || name == null) return name;
+
         String spigotOwner = toSpigotOwner(owner);
         String lookupDescriptor = toSpigotDescriptor(descriptor);
         String mapped = FIELD_MAP.get(new MemberKey(spigotOwner, name, lookupDescriptor));
@@ -336,9 +349,14 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         }
         if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
             String key = spigotOwner + '#' + name + '#' + descriptor;
-            mapped = BYTECODE_FIELD_CACHE.computeIfAbsent(key,
+            mapped = boundedComputeIfAbsent(BYTECODE_FIELD_CACHE, key,
                     ignored -> resolveInheritedBytecodeMember(spigotOwner, name, descriptor, false));
             if (name.equals(mapped)) mapped = null;
+        }
+        if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
+            LOGGER.warn("No mapping found for NMS field {}#{} {} — plugin bytecode will keep the "
+                            + "unmapped name and is likely to throw NoSuchFieldError at runtime.",
+                    spigotOwner, name, descriptor);
         }
         return mapped != null ? mapped : name;
     }
@@ -359,9 +377,14 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         }
         if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
             String key = spigotOwner + '#' + name + '#' + descriptor;
-            mapped = BYTECODE_METHOD_CACHE.computeIfAbsent(key,
+            mapped = boundedComputeIfAbsent(BYTECODE_METHOD_CACHE, key,
                     ignored -> resolveInheritedBytecodeMember(spigotOwner, name, descriptor, true));
             if (name.equals(mapped)) mapped = null;
+        }
+        if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
+            LOGGER.warn("No mapping found for NMS method {}#{} {} — plugin bytecode will keep the "
+                            + "unmapped name and is likely to throw NoSuchMethodError at runtime.",
+                    spigotOwner, name, descriptor);
         }
         return mapped != null ? mapped : name;
     }
@@ -370,7 +393,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         String mojangOwner = CLASS_MAP.get(spigotOwner);
         if (mojangOwner == null) return name;
         try {
-            ClassLoader loader = LunarArcPlatform.getModClassLoader();
+            ClassLoader loader = LunarArcServer.modClassLoader();
             if (loader == null) loader = LunarArcRemapper.class.getClassLoader();
             Class<?> type = Class.forName(mojangOwner.replace('/', '.'), false, loader);
             for (Class<?> current = type; current != null; current = current.getSuperclass()) {
@@ -416,20 +439,53 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         return null;
     }
 
-    /** Resolve a reflective field name, including inherited declarations. */
+
+    public String mapRuntimeClassName(String className) {
+        if (!remapNms || className == null || className.isEmpty()) return className;
+        return mapClassNameString(className);
+    }
+
+
     public String mapRuntimeFieldName(Class<?> runtimeOwner, String spigotName) {
         if (!remapNms || runtimeOwner == null || spigotName == null) return spigotName;
         String cacheKey = runtimeOwner.getName() + '#' + spigotName;
-        return RUNTIME_FIELD_CACHE.computeIfAbsent(cacheKey,
+        return boundedComputeIfAbsent(RUNTIME_FIELD_CACHE, cacheKey,
                 ignored -> resolveRuntimeMember(runtimeOwner, spigotName, false));
     }
 
-    /** Resolve a reflective method name, including inherited/interface declarations. */
+
     public String mapRuntimeMethodName(Class<?> runtimeOwner, String spigotName) {
+        return mapRuntimeMethodName(runtimeOwner, spigotName, null);
+    }
+
+    /**
+     * Resolve a reflective Spigot method name against the Mojang runtime.
+     *
+     * <p>Unlike a plain name-only lookup, {@link Class#getMethod(String, Class[])}
+     * gives us the parameter types. Use them to disambiguate overloaded Spigot
+     * names before falling back to the unique-name table. This is generic NMS
+     * reflection compatibility and does not depend on any plugin identity.</p>
+     */
+    public String mapRuntimeMethodName(Class<?> runtimeOwner, String spigotName, Class<?>[] parameterTypes) {
         if (!remapNms || runtimeOwner == null || spigotName == null) return spigotName;
-        String cacheKey = runtimeOwner.getName() + '#' + spigotName;
-        return RUNTIME_METHOD_CACHE.computeIfAbsent(cacheKey,
-                ignored -> resolveRuntimeMember(runtimeOwner, spigotName, true));
+        String parameterKey = parameterTypes == null ? "*" : runtimeParameterDescriptor(parameterTypes);
+        String cacheKey = runtimeOwner.getName() + '#' + spigotName + '#' + parameterKey;
+        return boundedComputeIfAbsent(RUNTIME_METHOD_CACHE, cacheKey,
+                ignored -> resolveRuntimeMethod(runtimeOwner, spigotName, parameterTypes));
+    }
+
+
+    private static String boundedComputeIfAbsent(Map<String, String> cache, String key,
+                                                  java.util.function.Function<String, String> mapping) {
+        String existing = cache.get(key);
+        if (existing != null) return existing;
+        // Mapping/reflection inputs can originate in plugin bytecode. Keep memoization
+        // bounded so reloads or pathological plugins cannot grow a process-wide cache forever.
+        // Skip caching past the cap rather than clearing the whole map: under concurrent
+        // plugin/classloading a full clear can race across threads and repeatedly discard
+        // still-useful warm entries instead of just capping growth.
+        if (cache.size() >= DYNAMIC_CACHE_LIMIT) return mapping.apply(key);
+        return cache.computeIfAbsent(key, mapping);
     }
 
     private String resolveRuntimeMember(Class<?> runtimeOwner, String spigotName, boolean method) {
@@ -446,7 +502,77 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 }
             }
         }
+        LOGGER.warn("No reflective mapping found for {} {}#{} — a plugin's reflective lookup is "
+                        + "likely to throw NoSuchFieldException/NoSuchMethodException.",
+                method ? "method" : "field", runtimeOwner.getName(), spigotName);
         return spigotName;
+    }
+
+    private String resolveRuntimeMethod(Class<?> runtimeOwner, String spigotName, Class<?>[] parameterTypes) {
+        String parameterDescriptor = parameterTypes == null ? null : runtimeParameterDescriptor(parameterTypes);
+        for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
+            String spigotOwner = MOJANG_TO_SPIGOT_CLASS.getOrDefault(current.getName().replace('.', '/'),
+                    current.getName().replace('.', '/'));
+            String descriptorMapped = parameterDescriptor == null ? null
+                    : findMethodMappingByParameters(spigotOwner, spigotName, parameterDescriptor);
+            if (descriptorMapped != null) return descriptorMapped;
+
+            String unique = METHOD_NAME_MAP.get(new MemberNameKey(spigotOwner, spigotName));
+            if (unique != null && !AMBIGUOUS.equals(unique)) return unique;
+            for (Class<?> iface : current.getInterfaces()) {
+                String resolved = resolveRuntimeMethod(iface, spigotName, parameterTypes);
+                if (!resolved.equals(spigotName)) return resolved;
+            }
+        }
+        LOGGER.warn("No reflective mapping found for method {}#{}{} — a plugin's reflective lookup is "
+                        + "likely to throw NoSuchMethodException.",
+                runtimeOwner.getName(), spigotName, parameterDescriptor == null ? "(*)" : parameterDescriptor);
+        return spigotName;
+    }
+
+    private static String findMethodMappingByParameters(String spigotOwner, String spigotName,
+                                                         String parameterDescriptor) {
+        List<Map.Entry<MemberKey, String>> overloads =
+                METHOD_OVERLOAD_INDEX.get(new MemberNameKey(spigotOwner, spigotName));
+        if (overloads == null || overloads.isEmpty()) return null;
+        String resolved = null;
+        for (Map.Entry<MemberKey, String> entry : overloads) {
+            String descriptor = entry.getKey().descriptor();
+            if ("*".equals(descriptor)) {
+                if (resolved == null) resolved = entry.getValue();
+                else if (!resolved.equals(entry.getValue())) return null;
+                continue;
+            }
+            int close = descriptor.indexOf(')');
+            if (close < 0 || !descriptor.substring(0, close + 1).equals(parameterDescriptor)) continue;
+            if (resolved == null) resolved = entry.getValue();
+            else if (!resolved.equals(entry.getValue())) return null;
+        }
+        return resolved;
+    }
+
+    private static String runtimeParameterDescriptor(Class<?>[] parameterTypes) {
+        StringBuilder descriptor = new StringBuilder("(");
+        for (Class<?> parameterType : parameterTypes) descriptor.append(runtimeTypeDescriptor(parameterType));
+        return descriptor.append(')').toString();
+    }
+
+    private static String runtimeTypeDescriptor(Class<?> type) {
+        if (type.isArray()) return type.getName().replace('.', '/');
+        if (type.isPrimitive()) {
+            if (type == void.class) return "V";
+            if (type == boolean.class) return "Z";
+            if (type == byte.class) return "B";
+            if (type == char.class) return "C";
+            if (type == short.class) return "S";
+            if (type == int.class) return "I";
+            if (type == long.class) return "J";
+            if (type == float.class) return "F";
+            if (type == double.class) return "D";
+        }
+        String internal = type.getName().replace('.', '/');
+        String spigot = MOJANG_TO_SPIGOT_CLASS.getOrDefault(internal, internal);
+        return 'L' + spigot + ';';
     }
 
     private String toSpigotOwner(String owner) {
@@ -472,26 +598,76 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         try {
             ClassReader reader = new ClassReader(bytecode);
             ClassWriter writer = new ClassWriter(0);
-            ClassVisitor remapper = new ClassRemapper(writer, this);
-            ClassVisitor visitor = remapNms ? new ReflectionMemberVisitor(remapper) : remapper;
-            visitor = compatibilityVisitor(visitor, className);
+
+            // Repair 87: NMS remapping is now selected per class, not per plugin.
+            // Most Paper/Bukkit plugin classes never touch net.minecraft at all and
+            // should not be exposed to NMS member/reflection rewriting. Classes that
+            // actually carry legacy NMS references still use the full remapper.
+            boolean classNeedsNms = remapNms && containsNmsReference(bytecode);
+            LunarArcRemapper effective = classNeedsNms || !remapNms
+                    ? this
+                    : new LunarArcRemapper(false);
+
+            ClassVisitor remapper = new ClassRemapper(writer, effective);
+            ClassVisitor visitor = classNeedsNms ? new ReflectionMemberVisitor(remapper) : remapper;
+            visitor = effective.compatibilityVisitor(visitor, className);
             reader.accept(visitor, 0);
-            return writer.toByteArray();
+            byte[] remapped = writer.toByteArray();
+            return applyPluginPatchers(remapped, className);
         } catch (RuntimeException e) {
             throw new IllegalStateException("Failed to remap plugin class " + className, e);
         }
     }
 
-    private ClassVisitor compatibilityVisitor(ClassVisitor delegate, String className) {
-        // DecentHolograms 2.10.1 uses Server#getVersion() only when it detects
-        // Paper, then splits the normal Paper value (git-Paper-133 ...) at '-'.
-        // That yields "git" instead of the Minecraft version and self-disables.
-        // Its v1_21_R1 support is otherwise present. Rewrite only that detector
-        // class to use Bukkit's stable API-version value, exactly as its Spigot
-        // branch already does. Do not alter Server#getVersion() globally.
-        if (!"eu/decentsoftware/holograms/api/utils/reflect/Version".equals(className)) {
-            return delegate;
+    // Modeled on the real Arclight PluginPatcher framework (ArclightPluginPatcher +
+    // IntegratedPatcher): a second, ClassNode-based pass over the already-remapped bytecode,
+    // for surgical one-off fixes to known third-party incompatibilities that aren't a general
+    // member-remapping problem. Loaded once; see LunarArcPluginPatcherLoader for how patchers
+    // are discovered.
+    private static final java.util.List<io.ampznetwork.lunararc.common.mod.util.remapper.patcher.PluginPatcher> PLUGIN_PATCHERS =
+            io.ampznetwork.lunararc.common.mod.util.remapper.patcher.LunarArcPluginPatcherLoader.load();
+
+    private static byte[] applyPluginPatchers(byte[] remapped, String className) {
+        if (PLUGIN_PATCHERS.isEmpty()) return remapped;
+        org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode();
+        new ClassReader(remapped).accept(node, 0);
+        boolean matched = false;
+        for (io.ampznetwork.lunararc.common.mod.util.remapper.patcher.PluginPatcher patcher : PLUGIN_PATCHERS) {
+            try {
+                patcher.handleClass(node, io.ampznetwork.lunararc.common.mod.util.remapper.patcher.LunarArcGlobalClassRepo.INSTANCE);
+                matched = true;
+            } catch (RuntimeException e) {
+                LOGGER.warn("Plugin patcher {} failed on class {}", patcher.getClass().getName(), className, e);
+            }
         }
+        if (!matched) return remapped;
+        ClassWriter writer = new ClassWriter(0);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private static boolean containsNmsReference(byte[] bytecode) {
+        // Class-file constant-pool UTF-8 entries are stored as raw modified-UTF bytes.
+        // These ASCII needles therefore safely identify ordinary NMS descriptors,
+        // owners, class literals, and reflective class-name strings without parsing
+        // or rewriting the class a first time.
+        return containsAscii(bytecode, "net/minecraft/")
+                || containsAscii(bytecode, "net.minecraft.");
+    }
+
+    private static boolean containsAscii(byte[] haystack, String needle) {
+        byte[] target = needle.getBytes(StandardCharsets.US_ASCII);
+        outer:
+        for (int i = 0; i <= haystack.length - target.length; i++) {
+            for (int j = 0; j < target.length; j++) {
+                if (haystack[i + j] != target[j]) continue outer;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private ClassVisitor compatibilityVisitor(ClassVisitor delegate, String className) {
         return new ClassVisitor(Opcodes.ASM9, delegate) {
             @Override
             public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
@@ -499,10 +675,16 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 return new MethodVisitor(Opcodes.ASM9, method) {
                     @Override
                     public void visitMethodInsn(int opcode, String owner, String methodName, String methodDescriptor, boolean isInterface) {
-                        if (("org/bukkit/Server".equals(owner) || owner.startsWith("org/bukkit/craftbukkit/"))
-                                && "getVersion".equals(methodName)
-                                && "()Ljava/lang/String;".equals(methodDescriptor)) {
-                            super.visitMethodInsn(opcode, owner, "getBukkitVersion", methodDescriptor, isInterface);
+                        // Generic compatibility for the legacy Spigot static accessor. The
+                        // modloader still owns the real MinecraftServer; this only redirects
+                        // old plugin bytecode to LunarArc's concrete server access method.
+                        if (opcode == Opcodes.INVOKESTATIC
+                                && "net/minecraft/server/MinecraftServer".equals(owner)
+                                && "getServer".equals(methodName)
+                                && "()Lnet/minecraft/server/MinecraftServer;".equals(methodDescriptor)) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                    "io/ampznetwork/lunararc/common/LunarArcServerAccess",
+                                    "getMinecraftServer", methodDescriptor, false);
                             return;
                         }
                         super.visitMethodInsn(opcode, owner, methodName, methodDescriptor, isInterface);
@@ -530,58 +712,44 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
             MethodVisitor delegate = super.visitMethod(access, name, descriptor, signature, exceptions);
             return new MethodVisitor(Opcodes.ASM9, delegate) {
-                private String recentClassOwner;
-
-                @Override
-                public void visitLdcInsn(Object value) {
-                    if (value instanceof Type type && type.getSort() == Type.OBJECT) {
-                        recentClassOwner = type.getInternalName();
-                        super.visitLdcInsn(value);
-                        return;
-                    }
-                    if (value instanceof String text) {
-                        String rewritten = mapClassNameString(text);
-                        if (recentClassOwner != null) {
-                            String field = mapFieldName(recentClassOwner, text, "*");
-                            if (!field.equals(text)) rewritten = field;
-                            else {
-                                String method = mapMethodName(recentClassOwner, text, "*");
-                                if (!method.equals(text)) rewritten = method;
-                            }
-                        }
-                        super.visitLdcInsn(rewritten);
-                        recentClassOwner = null;
-                        return;
-                    }
-                    recentClassOwner = null;
-                    super.visitLdcInsn(value);
-                }
-
                 @Override
                 public void visitMethodInsn(int opcode, String owner, String methodName, String methodDescriptor, boolean isInterface) {
+                    String bridgeOwner = "io/ampznetwork/lunararc/common/mod/LunarArcReflectionBridge";
+                    if (opcode == Opcodes.INVOKESTATIC && "java/lang/Class".equals(owner) && "forName".equals(methodName)) {
+                        if ("(Ljava/lang/String;)Ljava/lang/Class;".equals(methodDescriptor)) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "forName", methodDescriptor, false);
+                            return;
+                        }
+                        if ("(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;".equals(methodDescriptor)) {
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "forName", methodDescriptor, false);
+                            return;
+                        }
+                    }
+                    if (opcode == Opcodes.INVOKEVIRTUAL && "java/lang/ClassLoader".equals(owner)
+                            && "loadClass".equals(methodName)
+                            && "(Ljava/lang/String;)Ljava/lang/Class;".equals(methodDescriptor)) {
+                        super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "loadClass",
+                                "(Ljava/lang/ClassLoader;Ljava/lang/String;)Ljava/lang/Class;", false);
+                        return;
+                    }
                     if ("java/lang/Class".equals(owner)) {
-                        String bridgeOwner = "io/ampznetwork/lunararc/common/mod/LunarArcReflectionBridge";
                         switch (methodName) {
                             case "getField" -> {
-                                recentClassOwner = null;
                                 super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "getField",
                                         "(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/reflect/Field;", false);
                                 return;
                             }
                             case "getDeclaredField" -> {
-                                recentClassOwner = null;
                                 super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "getDeclaredField",
                                         "(Ljava/lang/Class;Ljava/lang/String;)Ljava/lang/reflect/Field;", false);
                                 return;
                             }
                             case "getMethod" -> {
-                                recentClassOwner = null;
                                 super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "getMethod",
                                         "(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;", false);
                                 return;
                             }
                             case "getDeclaredMethod" -> {
-                                recentClassOwner = null;
                                 super.visitMethodInsn(Opcodes.INVOKESTATIC, bridgeOwner, "getDeclaredMethod",
                                         "(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;", false);
                                 return;
@@ -590,14 +758,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                             }
                         }
                     }
-                    if (!("java/lang/Class".equals(owner) && "forName".equals(methodName))) recentClassOwner = null;
                     super.visitMethodInsn(opcode, owner, methodName, methodDescriptor, isInterface);
-                }
-
-                @Override
-                public void visitVarInsn(int opcode, int varIndex) {
-                    recentClassOwner = null;
-                    super.visitVarInsn(opcode, varIndex);
                 }
             };
         }

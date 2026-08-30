@@ -1,5 +1,5 @@
 # This workflow will build a Java project with Gradle
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-gradle
+# For more information see: https:
 
 name: Build
 
@@ -41,7 +41,7 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Cache Loom / Paper setup
+      - name: Cache Loom / compile reference setup
         uses: actions/cache@v4
         with:
           path: |
@@ -60,7 +60,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build & Assemble
-        run: ./gradlew setupPaperServer build collect --no-daemon --stacktrace
+        run: ./gradlew clean preparePaperCompileReference forgeBuild collectForge --no-daemon --stacktrace
 
       - name: List Artifacts
         run: ls -R build/libs
@@ -69,6 +69,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: LunarArc
-          path: build/libs/*.jar
-          if-no-files-found: error
-          retention-days: 90
+          path: build/libs
+
+

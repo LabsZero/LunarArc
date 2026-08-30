@@ -1,28 +1,49 @@
 package io.ampznetwork.lunararc.common.mixin.core.server;
 
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
-import io.ampznetwork.lunararc.common.config.LunarArcConfig;
+import io.ampznetwork.lunararc.common.bridge.CommandSourceBridge;
 import io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge;
+import io.ampznetwork.lunararc.common.config.LunarArcConfig;
+import io.ampznetwork.lunararc.common.server.LunarArcCommandMap;
+import io.ampznetwork.lunararc.common.mod.server.LunarArcServer;
+import io.ampznetwork.lunararc.common.mod.server.LunarArcRollingAverage;
+import io.ampznetwork.lunararc.common.mod.util.log.LunarArcConsole;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.WorldLoader;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerChunkCache;
+import net.minecraft.server.level.PlayerRespawnLogic;
+import net.minecraft.server.level.progress.ChunkProgressListener;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.ForcedChunksSavedData;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.storage.PrimaryLevelData;
+import net.minecraft.world.level.Level;
+import org.bukkit.craftbukkit.CraftServer;
+import org.bukkit.craftbukkit.scheduler.CraftScheduler;
+import org.bukkit.plugin.PluginLoadOrder;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
-
-import net.minecraft.server.players.PlayerList;
+import java.util.concurrent.TimeUnit;
 
 @Mixin(value = MinecraftServer.class, priority = Integer.MAX_VALUE)
-public abstract class MinecraftServerMixin implements MinecraftServerBridge {
+public abstract class MinecraftServerMixin implements MinecraftServerBridge, CommandSourceBridge {
 
     @Unique
     private static final Logger lunararc$logger = LoggerFactory.getLogger("LunarArc");
@@ -30,145 +51,351 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge {
     @Unique
     private final Queue<Runnable> lunararc$taskQueue = new ConcurrentLinkedQueue<>();
 
+    @Unique
+    private CraftServer lunararc$craftServer;
+
+    @Unique
+    private WorldLoader.DataLoadContext lunararc$dataLoadContext;
+
+    @Unique
+    private long lunararc$bukkitStartupStartedNanos;
+
+    @Unique
+    private boolean lunararc$serverLoadEventFired;
+
+    @Unique
+    private boolean lunararc$startupPluginsEnabled;
+
+    @Unique
+    private boolean lunararc$postWorldPluginsEnabled;
+
+    @Unique
+    private boolean lunararc$tickingWorlds;
+
+    @Unique
+    private long lunararc$tpsSampleStartedNanos = net.minecraft.Util.getNanos();
+
+    @Unique
+    private final LunarArcRollingAverage lunararc$tps1 = new LunarArcRollingAverage(60);
+
+    @Unique
+    private final LunarArcRollingAverage lunararc$tps5 = new LunarArcRollingAverage(60 * 5);
+
+    @Unique
+    private final LunarArcRollingAverage lunararc$tps15 = new LunarArcRollingAverage(60 * 15);
+
+    @Shadow
+    private int tickCount;
+
+    @Shadow
+    private Map<ResourceKey<Level>, ServerLevel> levels;
+
     @Override
-    public void lunararc$queueTask(Runnable runnable) {
-        this.lunararc$taskQueue.add(runnable);
+    public void lunararc$addLevel(ServerLevel level) {
+        Objects.requireNonNull(level, "level");
+        ServerLevel previous = this.levels.putIfAbsent(level.dimension(), level);
+        if (previous != null && previous != level) {
+            throw new IllegalStateException("A ServerLevel is already registered for " + level.dimension().location());
+        }
+        if (previous == null) {
+            this.lunararc$loaderLevelLoad(level);
+            this.lunararc$loaderMarkLevelsDirty();
+        }
     }
 
-    @Shadow private int tickCount;
+    @Override
+    public void lunararc$removeLevel(ServerLevel level) {
+        Objects.requireNonNull(level, "level");
+        if (this.levels.remove(level.dimension(), level)) {
+            this.lunararc$loaderLevelUnload(level);
+            this.lunararc$loaderMarkLevelsDirty();
+        }
+    }
+
+    @Override
+    public void lunararc$initializeDynamicLevel(ServerLevel level, PrimaryLevelData data, boolean bonusChest) {
+        Objects.requireNonNull(level, "level");
+        Objects.requireNonNull(data, "data");
+        if (!data.isInitialized()) {
+            lunararc$setInitialSpawn(level, data, bonusChest, data.isDebugWorld());
+            data.setInitialized(true);
+        }
+        CraftServer craftServer = this.lunararc$requireCraftServer();
+        craftServer.getPluginManager().callEvent(new org.bukkit.event.world.WorldInitEvent(craftServer.getCraftWorld(level)));
+    }
+
+    @Override
+    public void lunararc$prepareDynamicLevel(ServerLevel level, ChunkProgressListener listener) {
+        Objects.requireNonNull(level, "level");
+        Objects.requireNonNull(listener, "listener");
+        this.lunararc$loaderMarkLevelsDirty();
+        BlockPos spawn = level.getSharedSpawnPos();
+        listener.updateSpawnPos(new ChunkPos(spawn));
+
+        int radius = level.getGameRules().getInt(GameRules.RULE_SPAWN_CHUNK_RADIUS);
+        if (radius > 0) {
+
+            level.getChunk(spawn.getX() >> 4, spawn.getZ() >> 4);
+        }
+
+        ForcedChunksSavedData forced = level.getDataStorage().get(ForcedChunksSavedData.factory(), "chunks");
+        if (forced != null) {
+            it.unimi.dsi.fastutil.longs.LongIterator iterator = forced.getChunks().iterator();
+            while (iterator.hasNext()) {
+                level.getChunkSource().updateChunkForced(new ChunkPos(iterator.nextLong()), true);
+            }
+            this.lunararc$loaderReinstatePersistentChunks(level, forced);
+        }
+        listener.stop();
+        level.setSpawnSettings(true, true);
+    }
+
+    @Unique
+    private static void lunararc$setInitialSpawn(ServerLevel level, net.minecraft.world.level.storage.ServerLevelData data,
+            boolean bonusChest, boolean debug) {
+        if (debug) {
+            data.setSpawn(BlockPos.ZERO.above(80), 0.0F);
+            return;
+        }
+        ServerChunkCache chunks = level.getChunkSource();
+        ChunkPos origin = new ChunkPos(chunks.randomState().sampler().findSpawnPosition());
+        int height = chunks.getGenerator().getSpawnHeight(level);
+        if (height < level.getMinBuildHeight()) {
+            BlockPos pos = origin.getWorldPosition();
+            height = level.getHeight(Heightmap.Types.WORLD_SURFACE, pos.getX() + 8, pos.getZ() + 8);
+        }
+        data.setSpawn(origin.getWorldPosition().offset(8, height, 8), 0.0F);
+        int x = 0, z = 0, dx = 0, dz = -1;
+        for (int i = 0; i < Mth.square(11); ++i) {
+            if (x >= -5 && x <= 5 && z >= -5 && z <= 5) {
+                BlockPos candidate = PlayerRespawnLogic.getSpawnPosInChunk(level, new ChunkPos(origin.x + x, origin.z + z));
+                if (candidate != null) {
+                    data.setSpawn(candidate, 0.0F);
+                    break;
+                }
+            }
+            if (x == z || x < 0 && x == -z || x > 0 && x == 1 - z) {
+                int oldDx = dx;
+                dx = -dz;
+                dz = oldDx;
+            }
+            x += dx;
+            z += dz;
+        }
+        if (bonusChest) {
+            level.registryAccess().registry(net.minecraft.core.registries.Registries.CONFIGURED_FEATURE)
+                    .flatMap(reg -> reg.getHolder(net.minecraft.data.worldgen.features.MiscOverworldFeatures.BONUS_CHEST))
+                    .ifPresent(feature -> feature.value().place(level, chunks.getGenerator(), level.random, data.getSpawnPos()));
+        }
+    }
+
+    @Override
+    public void lunararc$queueTask(Runnable runnable) {
+        this.lunararc$taskQueue.add(Objects.requireNonNull(runnable, "runnable"));
+    }
+
+    @Override
+    public CraftServer lunararc$getCraftServer() {
+        return this.lunararc$craftServer;
+    }
+
+    @Override
+    public void lunararc$setCraftServer(CraftServer craftServer) {
+        Objects.requireNonNull(craftServer, "craftServer");
+        if (this.lunararc$craftServer != null && this.lunararc$craftServer != craftServer) {
+            throw new IllegalStateException("CraftServer already attached to this MinecraftServer");
+        }
+        this.lunararc$craftServer = craftServer;
+    }
+
+    @Override
+    public boolean lunararc$isTickingWorlds() {
+        return this.lunararc$tickingWorlds;
+    }
+
+    @Override
+    public WorldLoader.DataLoadContext lunararc$getDataLoadContext() {
+        WorldLoader.DataLoadContext context = this.lunararc$dataLoadContext;
+        if (context == null) {
+            throw new IllegalStateException("WorldLoader.DataLoadContext is not available");
+        }
+        return context;
+    }
+
+    @Override
+    public double[] lunararc$getTps() {
+        return new double[] {
+                this.lunararc$tps1.getAverage(),
+                this.lunararc$tps5.getAverage(),
+                this.lunararc$tps15.getAverage()
+        };
+    }
+
+    @Inject(method = "tickChildren", at = @At("HEAD"))
+    private void lunararc$beginTickChildren(CallbackInfo ci) {
+        this.lunararc$tickingWorlds = true;
+    }
 
     @Inject(method = "tickChildren", at = @At("TAIL"))
     private void lunararc$processTasks(CallbackInfo ci) {
-        // Run internal tasks
+        this.lunararc$tickingWorlds = false;
+        if (this.tickCount > 0 && this.tickCount % 20 == 0) {
+            long now = net.minecraft.Util.getNanos();
+            long elapsed = Math.max(1L, now - this.lunararc$tpsSampleStartedNanos);
+            BigDecimal currentTps = BigDecimal.valueOf(20_000_000_000L)
+                    .divide(BigDecimal.valueOf(elapsed), 30, RoundingMode.HALF_UP);
+            this.lunararc$tps1.add(currentTps, elapsed);
+            this.lunararc$tps5.add(currentTps, elapsed);
+            this.lunararc$tps15.add(currentTps, elapsed);
+            this.lunararc$tpsSampleStartedNanos = now;
+        }
+
         Runnable task;
         while ((task = this.lunararc$taskQueue.poll()) != null) {
             try {
                 task.run();
-            } catch (Exception e) {
-                lunararc$logger.error("Error executing queued task", e);
+            } catch (Exception exception) {
+                lunararc$logger.error("Error executing queued LunarArc task", exception);
             }
         }
 
-        // Run Bukkit scheduler
-        try {
-            org.bukkit.Server server = org.bukkit.Bukkit.getServer();
-            if (server != null) {
-                org.bukkit.scheduler.BukkitScheduler scheduler = server.getScheduler();
-                if (scheduler instanceof org.bukkit.craftbukkit.v1_21_R1.scheduler.CraftScheduler craftScheduler) {
-                    craftScheduler.mainThreadHeartbeat(this.tickCount);
-                }
-            }
-        } catch (Throwable t) {
-            lunararc$logger.error("Error in Bukkit scheduler heartbeat", t);
+        CraftServer craftServer = this.lunararc$craftServer;
+        if (craftServer != null) {
+            ((CraftScheduler) craftServer.getScheduler()).mainThreadHeartbeat(this.tickCount);
         }
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void lunararc$onInit(CallbackInfo ci) {
-        lunararc$logger.info("Initializing Hybrid Bridge...");
+        this.lunararc$dataLoadContext = io.ampznetwork.lunararc.common.mod.util.LunarArcWorldLoaderCapture.take();
+        LunarArcServer.attach((MinecraftServer) (Object) this);
 
-        // Start capturing console output early so BlockMedic can always upload something.
+        io.ampznetwork.lunararc.common.LunarArcPaths.initialize();
+        io.ampznetwork.lunararc.common.LunarArcPaths.platformRuntime(
+                io.ampznetwork.lunararc.common.mod.server.LunarArcServer.platformName());
         io.ampznetwork.lunararc.common.telemetry.BlockMedicReporter.startConsoleCapture();
-
         LunarArcConfig.load();
         io.ampznetwork.lunararc.common.config.PluginBlacklist.load();
         io.ampznetwork.lunararc.api.LunarArcServer.init();
     }
 
-    @Inject(method = "runServer", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;initServer()Z", shift = At.Shift.AFTER))
-    private void lunararc$afterServerInit(CallbackInfo ci) {
-        lunararc$logger.info("Creating CraftServer bridge via platform factory...");
+    @Inject(method = "loadLevel", at = @At("HEAD"))
+    private void lunararc$beforeWorldLoad(CallbackInfo ci) {
+        if (this.lunararc$startupPluginsEnabled) return;
+        this.lunararc$startupPluginsEnabled = true;
 
-        org.bukkit.craftbukkit.v1_21_R1.CraftServer craftServer =
-                LunarArcPlatform.createCraftServer((MinecraftServer) (Object) this);
-        LunarArcPlatform.setServer(craftServer);
+        if (System.getProperty("worldedit.bukkit.adapter") == null) {
+            System.setProperty("worldedit.bukkit.adapter",
+                    "com.sk89q.worldedit.bukkit.adapter.impl.v1_21.PaperweightAdapter");
+        }
 
+        CraftServer craftServer = this.lunararc$requireCraftServer();
         io.ampznetwork.lunararc.common.server.LunarArcBuiltinCommands.register(craftServer);
-        loadPlugins();
-        enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
-        // loadLevel() is called inside initServer(), so the world is already loaded
-        // by the time this inject fires — enable POSTWORLD here rather than in a
-        // separate loadLevel() TAIL inject (which would fire before the bridge exists).
-        enablePlugins(org.bukkit.plugin.PluginLoadOrder.POSTWORLD);
+        this.lunararc$bukkitStartupStartedNanos = System.nanoTime();
+
+        // Real, confirmed by bootstrap/build.gradle's own verifyNeoforgeHybridShape task: the
+        // isolated-classloader/nested-jar approach this used to switch to here was already
+        // deliberately retired at the project level (that task explicitly fails the build if
+        // META-INF/lunararc/plugin-runtime-libs/ or LunarArcPluginLibraryRuntime.class are
+        // present at all). Maven Resolver's classes are shaded and relocated directly into the
+        // main runtime jar instead (io.ampznetwork.lunararc.libs.maven.*), already on the
+        // normal classpath — no context-classloader switching needed. Building the isolated
+        // classloader was chasing a mechanism that no longer exists, which is why it kept
+        // failing at progressively deeper points instead of just working.
+        craftServer.loadPlugins();
+        this.lunararc$enablePlugins(craftServer, PluginLoadOrder.STARTUP);
+    }
+
+
+    @Inject(method = "loadLevel", at = @At("TAIL"))
+    private void lunararc$afterWorldLoad(CallbackInfo ci) {
+        if (this.lunararc$postWorldPluginsEnabled) return;
+        this.lunararc$postWorldPluginsEnabled = true;
+
+        MinecraftServer minecraftServer = (MinecraftServer) (Object) this;
+        CraftServer craftServer = this.lunararc$requireCraftServer();
+
+        for (net.minecraft.server.level.ServerLevel level : minecraftServer.getAllLevels()) {
+            if (!craftServer.worldLoadEventFired.add(level.dimension())) continue;
+            org.bukkit.craftbukkit.CraftWorld craftWorld = craftServer.getCraftWorld(level);
+            craftServer.getPluginManager().callEvent(new org.bukkit.event.world.WorldInitEvent(craftWorld));
+            craftServer.getPluginManager().callEvent(new org.bukkit.event.world.WorldLoadEvent(craftWorld));
+        }
+
+        this.lunararc$enablePlugins(craftServer, PluginLoadOrder.POSTWORLD);
+
+        long commandSyncStarted = System.nanoTime();
+        this.lunararc$firePaperCommandLifecycle(minecraftServer);
+        this.lunararc$syncCommands(craftServer, minecraftServer);
+        long commandSyncMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - commandSyncStarted);
+        LunarArcConsole.success(lunararc$logger, "Bukkit command tree finalized in {}ms", commandSyncMillis);
+
+        if (!this.lunararc$serverLoadEventFired) {
+            this.lunararc$serverLoadEventFired = true;
+            craftServer.getPluginManager().callEvent(new org.bukkit.event.server.ServerLoadEvent(
+                    org.bukkit.event.server.ServerLoadEvent.LoadType.STARTUP));
+        }
+
+        io.ampznetwork.lunararc.common.server.LunarArcTier3RuntimeProbe.run(craftServer);
+
+        long startupMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - this.lunararc$bukkitStartupStartedNanos);
+        LunarArcConsole.success(lunararc$logger, "Bukkit/Paper 1.21.1 compatibility layer ready ({}ms)", startupMillis);
     }
 
     @Unique
-    private void enablePlugins(org.bukkit.plugin.PluginLoadOrder type) {
-        org.bukkit.Server server = org.bukkit.Bukkit.getServer();
-        if (server instanceof org.bukkit.craftbukkit.v1_21_R1.CraftServer craftServer) {
-            craftServer.enablePlugins(type);
-            lunararc$syncCommands();
-        }
+    private void lunararc$enablePlugins(CraftServer craftServer, PluginLoadOrder order) {
+        LunarArcConsole.info(lunararc$logger, "Beginning plugin enable phase {}", order);
+        craftServer.enablePlugins(order);
+        LunarArcConsole.success(lunararc$logger, "Completed plugin enable phase {}", order);
     }
 
     @Unique
-    private void lunararc$syncCommands() {
-        try {
-            org.bukkit.Server server = org.bukkit.Bukkit.getServer();
-            if (server instanceof org.bukkit.craftbukkit.v1_21_R1.CraftServer craftServer) {
-                net.minecraft.commands.Commands commands = ((net.minecraft.server.MinecraftServer) (Object) this).getCommands();
-                com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher = ((io.ampznetwork.lunararc.common.mixin.core.command.CommandsAccessor) commands).getDispatcher();
+    private void lunararc$firePaperCommandLifecycle(MinecraftServer minecraftServer) {
+        net.minecraft.commands.Commands minecraftCommands = minecraftServer.getCommands();
+        com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher =
+                minecraftCommands.getDispatcher();
+        io.ampznetwork.lunararc.common.server.LunarArcPaperCommands registrar =
+                new io.ampznetwork.lunararc.common.server.LunarArcPaperCommands(dispatcher);
+        io.ampznetwork.lunararc.common.server.LunarArcReloadableRegistrarEvent<io.papermc.paper.command.brigadier.Commands> event =
+                new io.ampznetwork.lunararc.common.server.LunarArcReloadableRegistrarEvent<>(
+                        registrar,
+                        io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEvent.Cause.INITIAL);
+        io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventRunner.fire(
+                io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents.COMMANDS, event);
+    }
 
-                org.bukkit.command.CommandMap commandMap = craftServer.getCommandMap();
-                if (commandMap instanceof io.ampznetwork.lunararc.common.server.LunarArcCommandMap lunarArcMap) {
-                    lunarArcMap.syncToBrigadier(dispatcher);
-                }
-            }
-        } catch (Throwable t) {
-            lunararc$logger.error("Error syncing Bukkit commands", t);
+    @Unique
+    private void lunararc$syncCommands(CraftServer craftServer, MinecraftServer minecraftServer) {
+        net.minecraft.commands.Commands commands = minecraftServer.getCommands();
+        com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher =
+                commands.getDispatcher();
+
+        if (craftServer.getCommandMap() instanceof LunarArcCommandMap lunarArcMap) {
+            lunarArcMap.syncToBrigadier(dispatcher);
+        }
+
+        for (net.minecraft.server.level.ServerPlayer player : minecraftServer.getPlayerList().getPlayers()) {
+            commands.sendCommands(player);
         }
     }
 
-    /**
-     * @author LunarArc
-     * @reason Override NeoForge/vanilla mod name so plugins see "paper" as the server brand.
-     */
-    @Overwrite
-    public String getServerModName() {
-        return "paper";
+    @Override
+    public org.bukkit.command.CommandSender lunararc$getBukkitSender(net.minecraft.commands.CommandSourceStack stack) {
+        return this.lunararc$requireCraftServer().getConsoleSender();
     }
 
     @Inject(method = "stopServer", at = @At("HEAD"))
     private void lunararc$onStop(CallbackInfo ci) {
-        try {
-            // Use reflection to avoid hard references that crash the Mixin transformer if
-            // Bukkit is missing
-            Class<?> bukkitClass = Class.forName("org.bukkit.Bukkit");
-            Object server = bukkitClass.getMethod("getServer").invoke(null);
-            if (server == null)
-                return;
-
-            Object pluginManager = server.getClass().getMethod("getPluginManager").invoke(server);
-            Object[] plugins = (Object[]) pluginManager.getClass().getMethod("getPlugins").invoke(pluginManager);
-
-            lunararc$logger.info("Disabling {} plugins...", plugins.length);
-            java.lang.reflect.Method disableMethod = pluginManager.getClass().getMethod("disablePlugin",
-                    Class.forName("org.bukkit.plugin.Plugin"));
-
-            for (Object plugin : plugins) {
-                try {
-                    disableMethod.invoke(pluginManager, plugin);
-                } catch (Exception e) {
-                    lunararc$logger.error("Error disabling plugin", e);
-                }
-            }
-        } catch (Throwable ignored) {
-            // Bukkit not present or not initialized yet
+        CraftServer craftServer = this.lunararc$craftServer;
+        if (craftServer != null) {
+            craftServer.disablePlugins();
+            craftServer.clearPluginsForShutdown();
+            craftServer.shutdownSchedulers();
         }
+        io.ampznetwork.lunararc.common.network.LunarArcPluginMessageOwnership.clear();
+        io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventRunner.resetServerState();
+        org.bukkit.plugin.java.PluginClassLoader.shutdownSharedLoaders();
+        io.ampznetwork.lunararc.common.server.LunarArcContext.clearServerReferences();
     }
 
-    private void loadPlugins() {
-        try {
-            lunararc$logger.info("[LunarArc] Initializing Bukkit plugin loading...");
-            org.bukkit.Server server = org.bukkit.Bukkit.getServer();
-            if (server instanceof org.bukkit.craftbukkit.v1_21_R1.CraftServer craftServer) {
-                craftServer.loadPlugins();
-                lunararc$syncCommands();
-            } else {
-                lunararc$logger.error("Bukkit Server is not CraftServer instance!");
-            }
-        } catch (Throwable e) {
-            lunararc$logger.error("Critical error in plugin loading sequence", e);
-        }
-    }
 }

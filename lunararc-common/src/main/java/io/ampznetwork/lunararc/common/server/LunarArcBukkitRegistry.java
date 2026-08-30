@@ -7,12 +7,14 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
@@ -55,6 +57,45 @@ final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
 
     static <T extends Keyed> Registry<T> empty() {
         return new LunarArcBukkitRegistry<>(Collections.emptyMap(), Collections.emptyList());
+    }
+
+
+    static <T extends Keyed> Registry<T> lazy(Supplier<Collection<T>> valuesSupplier) {
+        return new LazyRegistry<>(valuesSupplier);
+    }
+
+    private static final class LazyRegistry<T extends Keyed> implements Registry<T> {
+        private final Supplier<Collection<T>> valuesSupplier;
+        private volatile Registry<T> delegate;
+
+        LazyRegistry(Supplier<Collection<T>> valuesSupplier) {
+            this.valuesSupplier = valuesSupplier;
+        }
+
+        private Registry<T> delegate() {
+            Registry<T> current = delegate;
+            if (current != null) return current;
+            synchronized (this) {
+                current = delegate;
+                if (current == null) {
+                    current = delegate = fromValues(valuesSupplier.get());
+                }
+            }
+            return current;
+        }
+
+        @Override public @Nullable T get(@NotNull NamespacedKey key) { return delegate().get(key); }
+
+        @Override
+        public @NotNull T getOrThrow(@NotNull NamespacedKey key) {
+            return delegate().getOrThrow(key);
+        }
+
+        @Override public @Nullable NamespacedKey getKey(@NotNull T value) { return delegate().getKey(value); }
+
+        @Override public @NotNull Iterator<T> iterator() { return delegate().iterator(); }
+
+        @Override public @NotNull Stream<T> stream() { return delegate().stream(); }
     }
 
     private static <T extends Keyed> void add(T value, Map<NamespacedKey, T> byKey, List<T> values) {
