@@ -234,7 +234,9 @@ def createFatJar(String platform) {
                 (id.group == 'com.googlecode.json-simple' && id.name == 'json-simple') ||
                 (id.group == 'org.yaml' && id.name == 'snakeyaml') ||
                 (id.group == 'org.xerial' && id.name == 'sqlite-jdbc') ||
-                (id.group == 'com.mysql' && id.name == 'mysql-connector-j')
+                (id.group == 'com.mysql' && id.name == 'mysql-connector-j') ||
+                id.group == 'org.spongepowered' ||
+                id.group == 'io.leangen.geantyref'
 
             if (flatten) {
                 from(zipTree(artifact.file)) {
