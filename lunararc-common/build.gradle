@@ -499,10 +499,14 @@ tasks.register('verifyCraftNmsOwnership') {
 tasks.register('preparePaperImplementationSurface') {
     dependsOn tasks.named('verifyCraftNmsOwnership')
     group = 'build setup'
-    description = 'Extracts missing exact Paper 1.21.1 CraftBukkit/Spigot implementation classes for loader remapping.'
+    description = 'Extracts missing exact Paper 1.21.1 CraftBukkit/Spigot implementation classes, plus Paper\'s own loader-independent config framework (io.papermc.paper.configuration.*), for loader remapping.'
     dependsOn rootProject.tasks.named('preparePaperCompileReference')
     inputs.file(rootProject.ext.paperServerJar)
-    inputs.files(fileTree('src/main/java') { include 'org/bukkit/craftbukkit/**/*.java'; include 'org/spigotmc/**/*.java' })
+    inputs.files(fileTree('src/main/java') {
+        include 'org/bukkit/craftbukkit/**/*.java'
+        include 'org/spigotmc/**/*.java'
+        include 'io/papermc/paper/configuration/**/*.java'
+    })
     outputs.dir(generatedPaperImplementationSurfaceDir)
 
     doLast {
@@ -546,11 +550,16 @@ tasks.register('preparePaperImplementationSurface') {
                 def entry = entries.nextElement()
                 if (entry.directory || !entry.name.endsWith('.class')) continue
 
-                // Keep the donor boundary narrow: CraftBukkit and Spigot implementation
-                // surface only. Paper API is already a normal dependency and Minecraft/NMS
-                // stays exclusively loader-owned.
+                // Keep the donor boundary narrow: CraftBukkit/Spigot implementation surface,
+                // plus Paper's own config framework (io.papermc.paper.configuration.*) - a
+                // small, loader-independent Configurate/Adventure utility layer that
+                // PaperPluginMeta (LunarArc-owned) needs at runtime and that plugin.yml/
+                // paper-plugin.yml parsing depends on. Paper API is already a normal
+                // dependency and Minecraft/NMS stays exclusively loader-owned; the
+                // verify*HybridShape tasks reject any net.minecraft class that slips in.
                 boolean surfaceClass = entry.name.startsWith('org/bukkit/craftbukkit/') ||
-                    entry.name.startsWith('org/spigotmc/')
+                    entry.name.startsWith('org/spigotmc/') ||
+                    entry.name.startsWith('io/papermc/paper/configuration/')
                 if (!surfaceClass) continue
 
                 if (ownsPaperImplementationClass(entry.name)) {
