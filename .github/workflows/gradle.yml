@@ -60,7 +60,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build & Assemble
-        run: ./gradlew clean preparePaperCompileReference forgeBuild collectForge --no-daemon --stacktrace
+        run: ./gradlew clean preparePaperCompileReference hybridBuild collect --no-daemon --stacktrace
 
       - name: List Artifacts
         run: ls -R build/libs
