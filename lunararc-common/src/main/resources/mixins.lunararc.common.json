@@ -30,6 +30,7 @@
     "core.world.LevelMixin",
     "core.world.ServerLevelMixin",
     "core.world.ServerLevelTickingMixin",
+    "core.world.BoundTickingBlockEntityMixin",
     "core.world.LevelChunkMixin",
     "core.world.BlockEntityMixin",
     "core.world.raid.RaidMixin",
