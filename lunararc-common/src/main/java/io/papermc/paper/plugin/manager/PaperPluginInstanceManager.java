@@ -122,6 +122,26 @@ class PaperPluginInstanceManager {
             .orElseThrow(() -> new InvalidPluginException("Plugin didn't load any plugin providers?"));
     }
 
+    /**
+     * Boot-time load. Same flow as {@link #loadPlugins(File[])}, but backed by
+     * {@link BootPluginProviderStorage} so paper-plugin.yml plugins are not refused - see that
+     * class for why the runtime storage's refusal does not apply at boot.
+     */
+    public @NotNull Plugin[] loadPluginsAtBoot(@NotNull File[] files) {
+        RuntimePluginEntrypointHandler<MultiRuntimePluginProviderStorage> runtimePluginEntrypointHandler =
+                new RuntimePluginEntrypointHandler<>(new BootPluginProviderStorage(this.dependencyTree));
+        try {
+            List<Path> paths = FileArrayProviderSource.INSTANCE.prepareContext(files);
+            DirectoryProviderSource.INSTANCE.registerProviders(runtimePluginEntrypointHandler, paths);
+            runtimePluginEntrypointHandler.enter(Entrypoint.BOOTSTRAPPER);
+            runtimePluginEntrypointHandler.enter(Entrypoint.PLUGIN);
+        } catch (Exception e) {
+            this.server.getLogger().log(Level.SEVERE, "Unknown error occurred while loading plugins at boot.", e);
+        }
+
+        return runtimePluginEntrypointHandler.getPluginProviderStorage().getLoaded().toArray(new JavaPlugin[0]);
+    }
+
     public @NotNull Plugin[] loadPlugins(@NotNull File[] files) {
         RuntimePluginEntrypointHandler<MultiRuntimePluginProviderStorage> runtimePluginEntrypointHandler = new RuntimePluginEntrypointHandler<>(new MultiRuntimePluginProviderStorage(this.dependencyTree));
         try {

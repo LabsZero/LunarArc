@@ -1093,8 +1093,11 @@ public class CraftWorld implements World {
 
     @Override
     public int getViewDistance() {
+        // serverViewDistance is private on ChunkMap; read it through the accessor bridge rather
+        // than directly, which threw IllegalAccessError on respawn (CraftPlayer#getSendViewDistance).
         return lunararcViewDistance != null ? lunararcViewDistance
-                : world.getChunkSource().chunkMap.serverViewDistance;
+                : ((io.ampznetwork.lunararc.common.bridge.access.ChunkMapAccessBridge)
+                        (Object) world.getChunkSource().chunkMap).lunararc$getServerViewDistance();
     }
 
     @Override

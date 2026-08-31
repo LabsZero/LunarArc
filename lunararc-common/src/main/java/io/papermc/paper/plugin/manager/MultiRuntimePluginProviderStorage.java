@@ -24,9 +24,22 @@ public class MultiRuntimePluginProviderStorage extends ServerPluginProviderStora
         this.dependencyTree = dependencyTree;
     }
 
+    /**
+     * Real Paper refuses paper-plugin.yml plugins here because this storage only ever serves the
+     * runtime {@code PluginManager#loadPlugins} API, by which point boot's BOOTSTRAPPER phase is
+     * long past. LunarArc reaches the same code at boot as well - it cannot use Paper's early
+     * {@code LaunchEntryPointHandler} path, so discovery, BOOTSTRAPPER and PLUGIN are all entered
+     * from {@code CraftServer#loadPlugins} - and there the refusal is wrong: the bootstrap has
+     * just run, so the plugin is loadable. Left on for the runtime path, where Paper's reasoning
+     * still holds, and overridden by {@link BootPluginProviderStorage}.
+     */
+    protected boolean skipsPaperPlugins() {
+        return true;
+    }
+
     @Override
     public void register(PluginProvider<JavaPlugin> provider) {
-        if (provider instanceof PaperPluginParent.PaperServerPluginProvider) {
+        if (this.skipsPaperPlugins() && provider instanceof PaperPluginParent.PaperServerPluginProvider) {
             LOGGER.warn("Skipping loading of paper plugin requested from SimplePluginManager.");
             return;
         }

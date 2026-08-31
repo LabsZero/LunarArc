@@ -111,6 +111,11 @@ public class PaperPluginManagerImpl implements PluginManager, DependencyContext 
         return this.instanceManager.loadPlugins(files);
     }
 
+    /** Boot-time load; see {@link PaperPluginInstanceManager#loadPluginsAtBoot(File[])}. */
+    public @NotNull Plugin[] loadPluginsAtBoot(final @NotNull File[] files) {
+        return this.instanceManager.loadPluginsAtBoot(files);
+    }
+
     @Override
     public void disablePlugins() {
         this.instanceManager.disablePlugins();

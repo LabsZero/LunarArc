@@ -486,7 +486,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     private void unregisterEntity(net.minecraft.world.entity.Entity other) {
         net.minecraft.server.level.ChunkMap chunkMap = getHandle().serverLevel().getChunkSource().chunkMap;
         net.minecraft.server.level.ChunkMap.TrackedEntity tracked =
-                chunkMap.entityMap.get(other.getId());
+                ((io.ampznetwork.lunararc.common.bridge.access.ChunkMapAccessBridge) (Object) chunkMap)
+                        .lunararc$getEntityMap().get(other.getId());
         if (tracked != null) {
             tracked.removePlayer(getHandle());
         }
@@ -505,7 +506,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         }
         net.minecraft.server.level.ChunkMap chunkMap = getHandle().serverLevel().getChunkSource().chunkMap;
         net.minecraft.server.level.ChunkMap.TrackedEntity tracked =
-                chunkMap.entityMap.get(other.getId());
+                ((io.ampznetwork.lunararc.common.bridge.access.ChunkMapAccessBridge) (Object) chunkMap)
+                        .lunararc$getEntityMap().get(other.getId());
         if (tracked != null) {
             tracked.updatePlayer(getHandle());
         }

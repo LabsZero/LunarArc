@@ -322,12 +322,24 @@ public class CraftServer implements Server {
         }
     }
 
-    public MinecraftServer getServer() {
+    // CraftBukkit declares these as DedicatedServer/DedicatedPlayerList, and plugins are compiled
+    // against those descriptors. Java resolves a method by name *and* descriptor, so returning the
+    // supertype here is not a widening - it is a different method that plugin bytecode cannot
+    // find: WorldEdit's PaperweightAdapter died on
+    // NoSuchMethodError: CraftServer.getServer()Lnet/minecraft/server/dedicated/DedicatedServer;
+    // even though a getServer() was right here. Both fields are always the dedicated subclasses on
+    // this server-only runtime, which is exactly what CraftBukkit assumes.
+    public net.minecraft.server.dedicated.DedicatedServer getServer() {
+        return (net.minecraft.server.dedicated.DedicatedServer) console;
+    }
+
+    /** Internal accessor kept for LunarArc code that wants the server rather than the player list. */
+    public MinecraftServer getServerHandle() {
         return console;
     }
 
-    public MinecraftServer getHandle() {
-        return console;
+    public net.minecraft.server.dedicated.DedicatedPlayerList getHandle() {
+        return (net.minecraft.server.dedicated.DedicatedPlayerList) playerList;
     }
 
     @Override
@@ -466,7 +478,10 @@ public class CraftServer implements Server {
         if (files != null) {
             io.ampznetwork.lunararc.common.mod.util.log.LunarArcConsole.info(logger,
                     "Found " + files.length + " potential plugins. Loading...");
-            simplePluginManager.loadPlugins(files);
+            // Boot-time load, not the runtime PluginManager API: the runtime path refuses
+            // paper-plugin.yml plugins (correctly, for real Paper's runtime) and was silently
+            // dropping every modern plugin here.
+            simplePluginManager.getInternalManager().loadPluginsAtBoot(files);
         }
     }
 
