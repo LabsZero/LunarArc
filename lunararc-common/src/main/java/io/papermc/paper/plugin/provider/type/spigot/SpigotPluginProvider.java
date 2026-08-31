@@ -144,13 +144,16 @@ public class SpigotPluginProvider implements PluginProvider<JavaPlugin>, Provide
             // We must provide a temporary context in order to properly handle dependencies on the plugin classloader constructor.
             loader.dependencyContext = PaperPluginManagerImpl.getInstance();
 
-            // Real Paper's JavaPluginLoader reflectively instantiates the plugin's main class and
-            // calls loader.initialize(plugin) right here before ever calling loader.getPlugin() -
-            // that step was missing entirely, so getPlugin() below always returned null (the
-            // plugin field is only ever set inside initialize()) and every plugin load failed
-            // with a NullPointerException one step later in PaperPluginInstanceManager.loadPlugin.
-            JavaPlugin pluginMain = loader.createPluginMain();
-            loader.initialize(pluginMain);
+            // Real Paper's JavaPluginLoader reflectively instantiates the plugin's main class here
+            // before ever calling loader.getPlugin() - that step was missing entirely, so
+            // getPlugin() below always returned null (the plugin field is only ever set inside
+            // initialize()) and every plugin load failed with a NullPointerException one step
+            // later in PaperPluginInstanceManager.loadPlugin. createPluginMain() alone is enough:
+            // JavaPlugin's own no-arg constructor already calls
+            // ((PluginClassLoader) classLoader).initialize(this) itself (see JavaPlugin.java) -
+            // calling initialize() again here double-initializes and throws
+            // "Plugin already initialized!" on every single plugin.
+            loader.createPluginMain();
 
             this.status = ProviderStatus.INITIALIZED;
             return loader.getPlugin();
