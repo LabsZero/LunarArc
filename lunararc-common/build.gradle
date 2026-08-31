@@ -829,3 +829,62 @@ tasks.register('preparePaperImplementationSurface') {
 sourceSets.main.output.dir([builtBy: tasks.named('preparePaperImplementationSurface')], generatedPaperImplementationSurfaceDir)
 
 tasks.named('classes') { dependsOn tasks.named('preparePaperImplementationSurface') }
+// Mixin refuses to apply a mixin class that declares a non-private static method - see
+// MixinApplicatorStandard.checkMethodVisibility - and the only exemptions are @Overwrite (which
+// needs the method to already exist in the target) and synthetic methods. Nothing catches this at
+// compile time: the annotation processor is happy, the build is green, and the failure arrives at
+// runtime as an InvalidMixinException during MAIN Applicator Phase, which on NeoForge kills the
+// JVM inside ServerModLoader.load before the server exists at all. That is as expensive as a
+// mistake gets, and it is a one-line mistake to make, so it is checked here instead.
+tasks.register('verifyMixinStaticVisibility') {
+    group = 'verification'
+    description = 'Fails if any @Mixin class declares a non-private static method, which Mixin rejects at apply time.'
+
+    def mixinSources = rootProject.fileTree(rootProject.projectDir) {
+        include '*/src/*/java/**/mixin/**/*.java'
+    }
+    inputs.files(mixinSources).withPropertyName('mixinSources')
+
+    doLast {
+        def methodPattern = java.util.regex.Pattern.compile(
+            '^(?:(public|protected)\\s+static|static)\\s+[\\w<>\\[\\],.?\\s]+\\s+\\w+\\s*\\(')
+        List<String> offenders = []
+
+        mixinSources.each { File source ->
+            String text = source.getText('UTF-8')
+            if (!text.contains('@Mixin')) return
+
+            String[] lines = text.readLines() as String[]
+            for (int index = 0; index < lines.length; index++) {
+                String line = lines[index].trim()
+                if (line.startsWith('//') || line.startsWith('*')) continue
+                if (!methodPattern.matcher(line).find()) continue
+
+                // @Overwrite is the one legal way to declare a non-private static in a mixin, and
+                // it may sit a few annotation lines above the declaration.
+                boolean overwrite = false
+                for (int back = index - 1; back >= 0 && back >= index - 6; back--) {
+                    String previous = lines[back].trim()
+                    if (previous.isEmpty()) continue
+                    if (previous.contains('@Overwrite')) { overwrite = true; break }
+                    if (!previous.startsWith('@')) break
+                }
+                if (overwrite) continue
+
+                String relative = rootProject.relativePath(source)
+                offenders.add("  ${relative}:${index + 1}  ${line}")
+            }
+        }
+
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                "Mixin classes must not declare non-private static methods - Mixin throws " +
+                "InvalidMixinException at apply time and the server dies before it starts. " +
+                "Make the method private, move it to a normal helper class, or use @Overwrite if " +
+                "the target already declares it:\n" + offenders.join('\n'))
+        }
+        logger.lifecycle("Mixin static visibility check passed for ${mixinSources.files.size()} mixin source(s)")
+    }
+}
+
+tasks.named('classes') { dependsOn tasks.named('verifyMixinStaticVisibility') }
