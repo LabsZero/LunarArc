@@ -322,24 +322,24 @@ public class CraftServer implements Server {
         }
     }
 
-    // CraftBukkit declares these as DedicatedServer/DedicatedPlayerList, and plugins are compiled
-    // against those descriptors. Java resolves a method by name *and* descriptor, so returning the
-    // supertype here is not a widening - it is a different method that plugin bytecode cannot
-    // find: WorldEdit's PaperweightAdapter died on
+    // CraftBukkit declares this as DedicatedServer, and plugins are compiled against that
+    // descriptor. Java resolves a method by name *and* descriptor, so returning the supertype here
+    // is not a widening - it is a different method that plugin bytecode cannot find: WorldEdit's
+    // PaperweightAdapter died on
     // NoSuchMethodError: CraftServer.getServer()Lnet/minecraft/server/dedicated/DedicatedServer;
-    // even though a getServer() was right here. Both fields are always the dedicated subclasses on
-    // this server-only runtime, which is exactly what CraftBukkit assumes.
+    // even though a getServer() was right here. console is always the dedicated subclass on this
+    // server-only runtime, which is what CraftBukkit assumes.
     public net.minecraft.server.dedicated.DedicatedServer getServer() {
         return (net.minecraft.server.dedicated.DedicatedServer) console;
     }
 
-    /** Internal accessor kept for LunarArc code that wants the server rather than the player list. */
-    public MinecraftServer getServerHandle() {
+    // NOTE: CraftBukkit declares getHandle() as DedicatedPlayerList, and this returning
+    // MinecraftServer has the same latent defect as getServer() did - a plugin calling it gets
+    // NoSuchMethodError. Left alone deliberately: nothing has hit it yet, and unlike getServer()
+    // it is load-bearing internally, so changing it needs a real call-site audit rather than a
+    // grep (the first attempt broke 11 call sites across several modules).
+    public MinecraftServer getHandle() {
         return console;
-    }
-
-    public net.minecraft.server.dedicated.DedicatedPlayerList getHandle() {
-        return (net.minecraft.server.dedicated.DedicatedPlayerList) playerList;
     }
 
     @Override

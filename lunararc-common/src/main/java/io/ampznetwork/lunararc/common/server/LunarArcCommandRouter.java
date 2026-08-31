@@ -135,7 +135,7 @@ public final class LunarArcCommandRouter {
         if (!(server instanceof CraftServer craftServer)) return false;
         try {
             CommandSourceStack source = source(craftServer, sender);
-            return craftServer.getServerHandle().getCommands().getDispatcher().execute(line, source) > 0;
+            return craftServer.getHandle().getCommands().getDispatcher().execute(line, source) > 0;
         } catch (CommandSyntaxException syntax) {
             sender.sendMessage(syntax.getRawMessage().getString());
             return false;
