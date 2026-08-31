@@ -52,6 +52,13 @@ public class SimplePluginManager implements PluginManager {
         this.paperPluginManager = manager;
     }
 
+    // PaperPluginManagerImpl.getInstance() needs the real singleton back, not this
+    // SimplePluginManager itself - getPluginManager() (CraftServer's public accessor) returns
+    // this instance, so casting *that* to PaperPluginManagerImpl always throws ClassCastException.
+    public PaperPluginManagerImpl getInternalManager() {
+        return (PaperPluginManagerImpl) this.paperPluginManager;
+    }
+
     @Override
     public void registerInterface(@NotNull Class<? extends PluginLoader> loader) {
         if (paperPluginManager != null)

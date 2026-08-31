@@ -7,7 +7,6 @@ import io.papermc.paper.plugin.provider.entrypoint.DependencyContext;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.command.CommandMap;
-import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -63,11 +62,12 @@ public class PaperPluginManagerImpl implements PluginManager, DependencyContext 
     // Just cast and use Bukkit.getServer().getPluginManager()
     public static PaperPluginManagerImpl getInstance() {
         // Real Paper reads a package-visible `paperPluginManager` field directly on CraftServer.
-        // LunarArc's CraftServer instead stores this behind the PluginManager interface as
-        // `pluginManager` (set from this exact class in its constructor — see CraftServer),
-        // so this casts back through the public accessor instead of requiring a CraftServer
-        // field rename.
-        return (PaperPluginManagerImpl) ((CraftServer) Bukkit.getServer()).getPluginManager();
+        // LunarArc's CraftServer.getPluginManager() deliberately returns its SimplePluginManager
+        // (matching real Bukkit's public API contract - see CraftServer), not this class, so
+        // casting that return value here always threw ClassCastException. SimplePluginManager
+        // itself holds the real PaperPluginManagerImpl singleton (CraftServer wires it via
+        // setInternalManager in its constructor) and exposes it via getInternalManager().
+        return ((SimplePluginManager) Bukkit.getServer().getPluginManager()).getInternalManager();
     }
 
     // Plugin Manipulation
