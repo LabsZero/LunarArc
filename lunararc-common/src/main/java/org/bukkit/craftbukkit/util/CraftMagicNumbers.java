@@ -337,13 +337,79 @@ public final class CraftMagicNumbers implements UnsafeValues {
         if (!isSupportedApiVersion(apiVersion)) {
             throw new InvalidPluginException("Unsupported API version " + apiVersion + " for Minecraft 1.21.1");
         }
+        // CraftBukkit keys this off the declared version rather than only off its absence: a
+        // plugin that says api-version: 1.12 is pre-flattening just as much as one that says
+        // nothing, and it needs the legacy Material/block-id tables initialized before its first
+        // MaterialData lookup.
+        if (!DISABLE_OLD_API_SUPPORT && isPreFlattening(apiVersion)) {
+            org.bukkit.craftbukkit.legacy.CraftLegacy.init();
+        }
+    }
+
+    // CraftBukkit keeps one Commodore for the life of the server; it caches its reroute table, so
+    // building a new one per class would be wasteful. Created lazily because Commodore's own class
+    // initialization reads the mapping environment, which is not settled at <clinit> time here.
+    private static volatile Commodore commodore;
+    private static volatile boolean commodoreUnavailable;
+
+    /**
+     * Applies Paper's own plugin rewriter to {@code bytecode}.
+     *
+     * <p>This is the step that makes a plugin built against an older Bukkit API run unchanged:
+     * Commodore rewrites renamed API constants through {@code FieldRename} (Enchantment,
+     * PotionEffectType, Particle, EntityType, Attribute, Sound, Biome, PatternType, DisplaySlot,
+     * MusicInstrument, LootTables, MapCursor.Type, ItemFlag and friends), reroutes methods whose
+     * signatures changed through {@code MaterialRerouting}, and strips the legacy versioned
+     * CraftBukkit package prefix. Those plugins are compatible with 1.21.1 - they only need the
+     * rewrite Paper would give them - so skipping it turned a loadable plugin into one that
+     * enabled and then died on the first NoSuchFieldError.</p>
+     *
+     * <p>A failure here is never fatal. Commodore is donated Paper code operating on third-party
+     * bytecode; if it throws, the original bytes are used, exactly as CraftBukkit does, so one odd
+     * plugin cannot stop the rest of the server from loading.</p>
+     */
+    public static byte[] applyPaperPluginRewrites(PluginDescriptionFile pdf, String path, byte[] bytecode) {
+        if (DISABLE_OLD_API_SUPPORT || commodoreUnavailable || pdf == null) return bytecode;
+
+        Commodore active = commodore;
+        if (active == null) {
+            synchronized (CraftMagicNumbers.class) {
+                active = commodore;
+                if (active == null) {
+                    try {
+                        active = commodore = new Commodore();
+                    } catch (Throwable ex) {
+                        commodoreUnavailable = true;
+                        Bukkit.getLogger().log(java.util.logging.Level.SEVERE,
+                                "Paper's plugin rewriter is unavailable; plugins built against an older "
+                                        + "Bukkit API may fail on renamed API constants", ex);
+                        return bytecode;
+                    }
+                }
+            }
+        }
+
+        try {
+            // Paper disables loadCompatibilities() outright on 1.21.1, so activeCompatibilities is
+            // always empty there; passing an empty set matches that rather than inventing a config.
+            return active.convert(bytecode, pdf.getName(),
+                    ApiVersion.getOrCreateVersion(pdf.getAPIVersion()), java.util.Collections.emptySet());
+        } catch (Throwable ex) {
+            Bukkit.getLogger().log(java.util.logging.Level.SEVERE,
+                    "Fatal error trying to convert " + pdf.getFullName() + ":" + path, ex);
+            return bytecode;
+        }
     }
 
     @Override
     public byte[] processClass(PluginDescriptionFile pdf, String path, byte[] clazz) {
         Objects.requireNonNull(clazz, "clazz");
         String className = path == null ? "<unknown>" : path.replace('\\', '/').replaceAll("\\.class$", "");
-        return new io.ampznetwork.lunararc.common.mod.LunarArcRemapper(true).transform(clazz, className);
+        // Paper's rewrite first, on the bytecode as the plugin author compiled it, then LunarArc's
+        // hybrid NMS remap - the same order CraftBukkit uses, and the order that keeps LunarArc's
+        // remapper helping Paper's transform instead of running ahead of it.
+        byte[] rewritten = applyPaperPluginRewrites(pdf, path, clazz);
+        return new io.ampznetwork.lunararc.common.mod.LunarArcRemapper(true).transform(rewritten, className);
     }
 
     @Override
@@ -493,6 +559,15 @@ public final class CraftMagicNumbers implements UnsafeValues {
         Objects.requireNonNull(registry, "registry");
         Objects.requireNonNull(key, "key");
         return registry.get(key);
+    }
+
+    private static boolean isPreFlattening(String apiVersion) {
+        try {
+            String[] parts = apiVersion.trim().split("\\.");
+            return parts.length >= 2 && Integer.parseInt(parts[0]) == 1 && Integer.parseInt(parts[1]) < 13;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
     }
 
     @Override

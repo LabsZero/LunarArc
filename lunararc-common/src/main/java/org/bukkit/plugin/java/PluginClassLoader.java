@@ -196,7 +196,22 @@ public final class PluginClassLoader extends URLClassLoader
 
             activeRemapper = new LunarArcRemapper(true);
         }
-        byte[] transformed = activeRemapper.transform(original, className.replace('.', '/'));
+        // Paper's own plugin rewriter runs first, on the bytecode exactly as the plugin author
+        // compiled it. CraftBukkit reaches it through Bukkit.getUnsafe().processClass(); LunarArc
+        // calls the same code directly because the remapper this loader picks depends on the
+        // plugin's mapping namespace, which UnsafeValues has no way to know. Choosing
+        // activeRemapper from `original` above is deliberate: Commodore strips the legacy
+        // versioned CraftBukkit prefix, so the detection has to happen before it runs.
+        // Only the classic path gets it, exactly as real Paper does. A paper-plugin.yml plugin is
+        // written against current Mojang-mapped Paper API and carries no plugin.yml api-version,
+        // so Commodore would read it as pre-flattening and apply the whole legacy reroute set to
+        // code that is already correct. Paper routes those plugins through
+        // ClassloaderBytecodeModifier instead, which is a no-op here for the same reason.
+        byte[] staged = this.paperPlugin
+                ? original
+                : org.bukkit.craftbukkit.util.CraftMagicNumbers
+                        .applyPaperPluginRewrites(this.description, resourcePath, original);
+        byte[] transformed = activeRemapper.transform(staged, className.replace('.', '/'));
         // Real technique from MohistMC/Youer's PluginFixManager — patches known-problematic
         // third-party plugin classes (currently: WorldEdit/FAWE version-detection checks) that
         // would otherwise fail on a hybrid server. Applied after remapping, on the final
@@ -248,7 +263,7 @@ public final class PluginClassLoader extends URLClassLoader
             digest.update(io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.minecraftVersion()
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
-            digest.update("compat-transform-v13-plugin-fix-manager".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            digest.update("compat-transform-v14-commodore".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             ClassLoader owner = PluginClassLoader.class.getClassLoader();
             String mappingBase = "mappings/" + io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.minecraftVersion() + "/";

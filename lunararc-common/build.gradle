@@ -75,6 +75,14 @@ loom {
     }
 }
 
+// Resolvable view of the Paper API surface LunarArc actually ships against, used by
+// verifyPaperDonorDependencies below to decide whether a class a donated Paper class references
+// will exist at runtime. Kept separate from compileClasspath so the check never has to resolve
+// project dependencies, which would put a build-order edge on a task that feeds `classes`.
+configurations {
+    paperApiReference
+}
+
 dependencies {
     minecraft libs.minecraft
     mappings loom.layered() {
@@ -132,6 +140,7 @@ dependencies {
     implementation libs.snakeyaml
 
     compileOnly libs.paper.api
+    paperApiReference libs.paper.api
     // Paper server jar for CraftBukkit/Spigot compile reference — unfiltered.
     // Classes LunarArc owns in source are excluded via the filteredPaperCompileRef task below.
     compileOnly fileTree(dir: rootProject.ext.paperDir, include: "paper-server-*.jar")
@@ -635,6 +644,7 @@ tasks.register('preparePaperImplementationSurface') {
     description = 'Extracts missing exact Paper 1.21.1 CraftBukkit/Spigot implementation classes, plus Paper\'s own loader-independent config framework (io.papermc.paper.configuration.*), for loader remapping.'
     dependsOn rootProject.tasks.named('preparePaperCompileReference')
     inputs.file(rootProject.ext.paperServerJar)
+    inputs.files(configurations.paperApiReference)
     inputs.files(fileTree('src/main/java') {
         include 'org/bukkit/craftbukkit/**/*.java'
         include 'org/spigotmc/**/*.java'
@@ -677,6 +687,10 @@ tasks.register('preparePaperImplementationSurface') {
         int donatedClasses = 0
         int ownedClasses = 0
         List<String> blockImplClasses = []
+        Set<String> surfaceEntryNames = new HashSet<>()
+        Map<String, Set<String>> paperRefsByDonor = new TreeMap<>()
+        // Single-quoted so Groovy leaves the '$' of inner-class names alone.
+        def paperTypeReferencePattern = java.util.regex.Pattern.compile('io/papermc/paper/[A-Za-z0-9_$/]+')
         new java.util.jar.JarFile(paperJar).withCloseable { jar ->
             def entries = jar.entries()
             while (entries.hasMoreElements()) {
@@ -694,6 +708,9 @@ tasks.register('preparePaperImplementationSurface') {
                     entry.name.startsWith('org/spigotmc/') ||
                     entry.name.startsWith('io/papermc/paper/configuration/')
                 if (!surfaceClass) continue
+                // Both donated and LunarArc-owned surface classes end up in the compiled
+                // output, so both count as resolvable for the audit below.
+                surfaceEntryNames.add(entry.name)
 
                 if (ownsPaperImplementationClass(entry.name)) {
                     ownedClasses++
@@ -702,6 +719,17 @@ tasks.register('preparePaperImplementationSurface') {
 
                 byte[] classBytes = jar.getInputStream(entry).withCloseable { it.readAllBytes() }
                 classBytes = neutralizeMojangLogUtils(classBytes)
+
+                // Record every io/papermc/paper/** type this donated class names, so the audit
+                // below can tell whether it will still be there at runtime. Reading the constant
+                // pool as text is the same technique the validBlocks audit above uses; it can
+                // over-report (a string literal that happens to look like a class name) but it
+                // never under-reports, which is the direction that matters for a missing class.
+                String donatedConstants = new String(classBytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+                def matcher = paperTypeReferencePattern.matcher(donatedConstants)
+                Set<String> found = new TreeSet<>()
+                while (matcher.find()) found.add(matcher.group())
+                if (!found.isEmpty()) paperRefsByDonor.put(entry.name, found)
 
                 File target = new File(outputDir, entry.name)
                 target.parentFile.mkdirs()
@@ -729,6 +757,66 @@ tasks.register('preparePaperImplementationSurface') {
                 "Paper 1.21.1 implementation donor found only ${blockImplClasses.size()} generated block implementations"
             )
         }
+        // Donated Paper classes can name Paper's own server-internal helpers, which the donor
+        // boundary deliberately does not carry and which LunarArc may not own either. Nothing
+        // fails at build time when one is missing - the class links fine against the compileOnly
+        // paper-server jar - and nothing fails at boot either. It fails the first time a plugin
+        // touches that code path, as a NoClassDefFoundError from inside Paper's own class
+        // initializer, which reads like a broken plugin rather than a missing class.
+        //
+        // That is exactly how Commodore stayed dead here: it needs
+        // io.papermc.paper.util.MappingEnvironment and io.papermc.paper.pluginremap.reflect.
+        // ReflectionRemapper, neither of which existed, so no plugin ever got Paper's API-level
+        // rewrites. This audit names that shape of gap at build time instead.
+        Set<String> resolvable = new HashSet<>(surfaceEntryNames)
+        project.fileTree('src/main/java') { include 'io/papermc/paper/**/*.java' }.each { File source ->
+            String relative = source.absolutePath.substring(
+                project.file('src/main/java').absolutePath.length() + 1).replace(File.separator, '/')
+            resolvable.add(relative.substring(0, relative.length() - '.java'.length()) + '.class')
+        }
+        configurations.paperApiReference.each { File dependency ->
+            if (!dependency.name.endsWith('.jar')) return
+            new java.util.jar.JarFile(dependency).withCloseable { apiJar ->
+                apiJar.entries().each { apiEntry ->
+                    if (apiEntry.name.startsWith('io/papermc/paper/') && apiEntry.name.endsWith('.class')) {
+                        resolvable.add(apiEntry.name)
+                    }
+                }
+            }
+        }
+
+        Map<String, Set<String>> missingByType = new TreeMap<>()
+        paperRefsByDonor.each { String donor, Set<String> references ->
+            references.each { String reference ->
+                // Inner classes live in their outer class's file; resolving the outer one is
+                // enough to know the type will be present.
+                String topLevel = reference.contains('$') ? reference.substring(0, reference.indexOf('$')) : reference
+                if (resolvable.contains(topLevel + '.class')) return
+                Set<String> donorsForType = missingByType.get(topLevel)
+                if (donorsForType == null) {
+                    donorsForType = new TreeSet<>()
+                    missingByType.put(topLevel, donorsForType)
+                }
+                donorsForType.add(donor)
+            }
+        }
+
+        if (missingByType.isEmpty()) {
+            logger.lifecycle("Paper donor dependency audit: all io.papermc.paper references from donated classes resolve")
+        } else {
+            // Reported rather than thrown for now: the reference scan reads the constant pool as
+            // text, so a name that only ever appears in a string literal can show up here without
+            // being a real link-time dependency. Tighten this to a hard failure once the reported
+            // list has been walked once and is understood.
+            logger.warn("Paper donor dependency audit: ${missingByType.size()} io.papermc.paper type(s) referenced by " +
+                "donated Paper classes are neither donated, LunarArc-owned, nor present in paper-api. " +
+                "Each is a NoClassDefFoundError waiting for the first plugin that reaches it:")
+            missingByType.each { String type, Set<String> donors ->
+                String sample = donors.take(3).join(', ')
+                logger.warn("  ${type.replace('/', '.')}  <- ${sample}${donors.size() > 3 ? " (+${donors.size() - 3} more)" : ''}")
+            }
+        }
+
         logger.lifecycle(
             "Prepared exact Paper 1.21.1 implementation surface: ${donatedClasses} donated classes, " +
             "${ownedClasses} LunarArc-owned classes retained, ${blockImplClasses.size()} generated block implementations"
