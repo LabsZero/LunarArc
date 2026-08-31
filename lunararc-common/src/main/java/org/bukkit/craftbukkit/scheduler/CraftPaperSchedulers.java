@@ -402,11 +402,8 @@ public final class CraftPaperSchedulers {
             for (AsyncPaperTask task : Set.copyOf(tasks)) task.cancel();
             tasks.clear();
             executor.shutdownNow();
-            try {
-                executor.awaitTermination(5, TimeUnit.SECONDS);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-            }
+            // Same short grace period as the Bukkit scheduler - see CraftScheduler.shutdown().
+            CraftScheduler.awaitSchedulerShutdown(executor, "Paper async scheduler");
         }
     }
 }

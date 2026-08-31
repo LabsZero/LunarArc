@@ -265,6 +265,30 @@ tasks.register('extractPaperPluginMappings') {
         String spigotText = spigotMappingFile.getText('UTF-8')
         String spigotMappingsUrl = spigotMappingFile.toURI().toString()
 
+        // Spigot member renames. Since 1.17 Spigot only renames NMS *classes* wholesale and
+        // leaves member names obfuscated, renaming just a handful by hand — so this file is
+        // small (and may be absent). Whatever it does not list keeps the obfuscated name on
+        // the Spigot side, which is what a Spigot-compiled plugin's bytecode actually calls.
+        // Keyed CSRG-style: "<obfOwner> <obfName> <spigotName>" for fields and
+        // "<obfOwner> <obfName> <obfDescriptor> <spigotName>" for methods.
+        File spigotMemberFile = new File(buildDataDir, "mappings/bukkit-${minecraftVersion}-members.csrg")
+        Map<String, String> spigotMemberRenames = new LinkedHashMap<>()
+        if (spigotMemberFile.isFile()) {
+            spigotMemberFile.readLines().each { String raw ->
+                String line = raw.trim()
+                if (line.isEmpty() || line.startsWith('#')) return
+                String[] parts = line.split('\\s+')
+                if (parts.length == 3) {
+                    spigotMemberRenames.put(parts[0].replace('.', '/') + '\t' + parts[1], parts[2])
+                } else if (parts.length == 4) {
+                    spigotMemberRenames.put(parts[0].replace('.', '/') + '\t' + parts[1] + '\t' + parts[2], parts[3])
+                }
+            }
+            println "Loaded ${spigotMemberRenames.size()} Spigot member renames from ${spigotMemberFile.name}"
+        } else {
+            println "No ${spigotMemberFile.name} in BuildData; every NMS member keeps its obfuscated Spigot-side name"
+        }
+
         def normalizeInternal = { String name -> name.replace('.', '/') }
         Map<String, String> namedToObf = new LinkedHashMap<>()
         Map<String, String> obfToNamed = new LinkedHashMap<>()
@@ -345,6 +369,38 @@ tasks.register('extractPaperPluginMappings') {
         String currentNamed = null
         List<String> memberParseSamples = new ArrayList<>()
 
+        // members.csrg keys methods by their obfuscated descriptor, so rewrite the Mojang
+        // descriptor we just built back through the class mappings to look a rename up.
+        def toObfDescriptor = { String descriptor ->
+            StringBuilder out = new StringBuilder(descriptor.length())
+            int index = 0
+            while (index < descriptor.length()) {
+                String ch = descriptor.substring(index, index + 1)
+                if (ch == 'L') {
+                    int end = descriptor.indexOf(';', index)
+                    if (end < 0) {
+                        out.append(descriptor.substring(index))
+                        break
+                    }
+                    String internal = descriptor.substring(index + 1, end)
+                    out.append('L').append(namedToObf.getOrDefault(internal, internal)).append(';')
+                    index = end + 1
+                } else {
+                    out.append(ch)
+                    index++
+                }
+            }
+            return out.toString()
+        }
+
+        def spigotMemberName = { String obfOwner, String obfMemberName, String obfDescriptor ->
+            if (obfOwner == null || spigotMemberRenames.isEmpty()) return obfMemberName
+            String renamed = obfDescriptor == null
+                ? spigotMemberRenames.get(obfOwner + '\t' + obfMemberName)
+                : spigotMemberRenames.get(obfOwner + '\t' + obfMemberName + '\t' + obfDescriptor)
+            return renamed != null ? renamed : obfMemberName
+        }
+
         // Mojang server mappings are ProGuard mappings. Do not parse these with a
         // single all-or-nothing regex: 1.21.1 includes indented source metadata
         // comments and optional source line ranges on methods, for example:
@@ -353,11 +409,16 @@ tasks.register('extractPaperPluginMappings') {
         //       int fieldName -> a
         //       68:69:void methodName(java.lang.String) -> b
         //
-        // Paper 1.21.1 is Mojang-mapped for NMS members. BuildData supplies the
-        // Spigot/CraftBukkit class aliases; member names therefore remain the
-        // Mojang names in the Spigot-side Tiny namespace. The official/obfuscated
-        // RHS name is retained only for validation/debugging and is never emitted
-        // as a Spigot member name.
+        // The Spigot-side member name is the OBFUSCATED name (the ProGuard RHS), not the
+        // Mojang name. Spigot has only remapped NMS *classes* since 1.17 and leaves member
+        // names obfuscated, so a Spigot-compiled plugin's bytecode calls e.g.
+        // net/minecraft/util/RandomSource.a() where Mojang has RandomSource.create().
+        // Paper's own build-data/reobf-mappings-patch.tiny shows the same thing for 1.21.1
+        // (mojang+yarn -> spigot: ServerLevel.serverLevelData -> K, LevelChunk.level -> r).
+        // Emitting the Mojang name on both sides, as this task previously did, made every
+        // member entry an identity mapping - the member half of the table did nothing at all,
+        // so any Spigot plugin touching NMS kept its obfuscated call and died with
+        // NoSuchMethodError/NoSuchFieldError (WorldEdit's PaperweightAdapter on RandomSource.a()).
         mojangText.readLines().each { String raw ->
             if (raw == null) return
             String trimmed = raw.trim()
@@ -411,7 +472,9 @@ tasks.register('extractPaperPluginMappings') {
                 String argsText = left.substring(paren + 1, close).trim()
                 List<String> args = argsText.isEmpty() ? [] : argsText.split(',').collect { it.trim() }
                 String descriptor = '(' + args.collect { descriptorForType(it) }.join('') + ')' + descriptorForType(returnType)
-                members.add([method:true, descriptor:descriptor, named:namedName, spigot:namedName, obf:obfName])
+                String spigotName = spigotMemberName(
+                        namedToObf.get(currentNamed), obfName, toObfDescriptor(descriptor))
+                members.add([method:true, descriptor:descriptor, named:namedName, spigot:spigotName, obf:obfName])
             } else {
                 int space = left.lastIndexOf(' ')
                 if (space < 0) {
@@ -422,12 +485,14 @@ tasks.register('extractPaperPluginMappings') {
                 String namedName = left.substring(space + 1).trim()
                 if (type.isEmpty() || namedName.isEmpty()) return
                 String descriptor = descriptorForType(type)
-                members.add([method:false, descriptor:descriptor, named:namedName, spigot:namedName, obf:obfName])
+                String spigotName = spigotMemberName(namedToObf.get(currentNamed), obfName, null)
+                members.add([method:false, descriptor:descriptor, named:namedName, spigot:spigotName, obf:obfName])
             }
         }
 
         long fieldCount = 0L
         long methodCount = 0L
+        long renamingMembers = 0L
         for (List<Map<String, Object>> list : membersByClass.values()) {
             for (Map<String, Object> member : list) {
                 if (Boolean.TRUE.equals(member.get('method'))) {
@@ -435,6 +500,7 @@ tasks.register('extractPaperPluginMappings') {
                 } else {
                     fieldCount++
                 }
+                if (member.get('spigot') != member.get('named')) renamingMembers++
             }
         }
         long memberCount = fieldCount + methodCount
@@ -446,6 +512,18 @@ tasks.register('extractPaperPluginMappings') {
                 "Plugin mapping generation is incomplete: ${fieldCount} fields + ${methodCount} methods. " +
                 "Parsed ${namedToObf.size()} Mojang classes. Unparsed samples: ${samples}. " +
                 "LunarArc must never ship class-only NMS remapping."
+            )
+        }
+        // A member row whose Spigot name equals its Mojang name remaps nothing. A few of those
+        // are legitimate (members Mojang never obfuscates, e.g. interface methods inherited from
+        // the JDK), but the vast majority of NMS members are obfuscated on the Spigot side, so a
+        // low ratio here means the member half of the table has silently gone identity again -
+        // which reads as "mappings present" while remapping nothing at all.
+        if (renamingMembers * 2L < memberCount) {
+            throw new GradleException(
+                "Plugin mapping generation produced ${renamingMembers} of ${memberCount} members whose " +
+                "Spigot-side name actually differs from the Mojang name. NMS members are obfuscated in " +
+                "the Spigot namespace, so this table would remap classes but not members."
             )
         }
 

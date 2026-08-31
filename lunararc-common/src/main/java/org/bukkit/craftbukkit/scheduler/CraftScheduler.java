@@ -291,12 +291,28 @@ public class CraftScheduler implements BukkitScheduler {
         syncTasks.clear();
         tasks.clear();
         asyncExecutor.shutdownNow();
+        // Short grace period only. shutdownNow() has already interrupted these tasks and every
+        // plugin's tasks were cancelled during disablePlugins(), so anything still running is a
+        // task that ignored its interrupt - typically one blocked in uninterruptible socket or
+        // JDBC I/O, which will not finish however long we wait. The threads are daemons and
+        // cannot hold the JVM open, so waiting the old five seconds here (and another five in
+        // the Paper async scheduler) just stalled shutdown. Say which tasks overran instead of
+        // blocking silently on them.
+        awaitSchedulerShutdown(asyncExecutor, "Bukkit async scheduler");
+        activeWorkers.clear();
+    }
+
+    /** Shared shutdown grace-period handling for LunarArc's scheduler executors. */
+    static void awaitSchedulerShutdown(java.util.concurrent.ExecutorService executor, String name) {
         try {
-            asyncExecutor.awaitTermination(5, TimeUnit.SECONDS);
+            if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+                org.slf4j.LoggerFactory.getLogger("LunarArc").info(
+                        "{} still had tasks running after being interrupted; leaving them to the "
+                                + "daemon threads rather than delaying shutdown.", name);
+            }
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         }
-        activeWorkers.clear();
     }
 
     @Override

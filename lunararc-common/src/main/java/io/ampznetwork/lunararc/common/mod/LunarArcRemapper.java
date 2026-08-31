@@ -488,6 +488,20 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         return cache.computeIfAbsent(key, mapping);
     }
 
+    /**
+     * Only NMS symbols can be missing a mapping in a way that actually breaks a plugin: the
+     * bytecode paths above already scope their "no mapping found" warnings to
+     * {@code net/minecraft/} owners for exactly that reason. Reflective lookups arrive here for
+     * every class a plugin reflects on - Bukkit API, Adventure, the plugin's own types - and for
+     * those "no NMS mapping" is the normal, correct answer, not a problem: the name is already
+     * right for the runtime and the plugin's lookup succeeds. Warning on those produced a flood
+     * of alarming-but-meaningless lines (Audience#stopSound, PluginDescriptionFile#softDepend)
+     * that buried the NMS misses that do matter.
+     */
+    private static boolean isNmsRuntimeClass(Class<?> runtimeOwner) {
+        return runtimeOwner != null && runtimeOwner.getName().startsWith("net.minecraft.");
+    }
+
     private String resolveRuntimeMember(Class<?> runtimeOwner, String spigotName, boolean method) {
         for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
             String spigotOwner = MOJANG_TO_SPIGOT_CLASS.getOrDefault(current.getName().replace('.', '/'),
@@ -502,9 +516,11 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 }
             }
         }
-        LOGGER.warn("No reflective mapping found for {} {}#{} — a plugin's reflective lookup is "
-                        + "likely to throw NoSuchFieldException/NoSuchMethodException.",
-                method ? "method" : "field", runtimeOwner.getName(), spigotName);
+        if (isNmsRuntimeClass(runtimeOwner)) {
+            LOGGER.warn("No reflective mapping found for {} {}#{} — a plugin's reflective lookup is "
+                            + "likely to throw NoSuchFieldException/NoSuchMethodException.",
+                    method ? "method" : "field", runtimeOwner.getName(), spigotName);
+        }
         return spigotName;
     }
 
@@ -524,9 +540,11 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 if (!resolved.equals(spigotName)) return resolved;
             }
         }
-        LOGGER.warn("No reflective mapping found for method {}#{}{} — a plugin's reflective lookup is "
-                        + "likely to throw NoSuchMethodException.",
-                runtimeOwner.getName(), spigotName, parameterDescriptor == null ? "(*)" : parameterDescriptor);
+        if (isNmsRuntimeClass(runtimeOwner)) {
+            LOGGER.warn("No reflective mapping found for method {}#{}{} — a plugin's reflective lookup is "
+                            + "likely to throw NoSuchMethodException.",
+                    runtimeOwner.getName(), spigotName, parameterDescriptor == null ? "(*)" : parameterDescriptor);
+        }
         return spigotName;
     }
 

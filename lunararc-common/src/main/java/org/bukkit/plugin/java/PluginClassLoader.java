@@ -77,6 +77,16 @@ public final class PluginClassLoader extends URLClassLoader
                 ? io.ampznetwork.lunararc.common.server.LunarArcPaperPluginSupport.joinedDependencies(file)
                 : java.util.Set.of();
         this.pluginLoader.getClassSpace().register(this, description, this.paperPlugin);
+        // Real Paper registers the classic (Spigot) plugin classloader into a group right here in
+        // the constructor, before the plugin's main class is ever loaded. Without it every classic
+        // plugin stayed outside PaperClassLoaderStorage entirely until enable time, when
+        // PaperPluginInstanceManager's registerUnsafePlugin() fallback caught it and warned
+        // ("Enabled plugin with unregistered ConfiguredPluginClassLoader ..."); until that point
+        // its classes were invisible to the global group, so cross-plugin lookups during onLoad()
+        // could not see them. The group's library predicate only dereferences dependencyContext
+        // at class-resolution time, which is always after the provider has assigned it.
+        this.group = io.papermc.paper.plugin.provider.classloader.PaperClassLoaderStorage.instance()
+                .registerSpigotGroup(this);
     }
 
     @Override

@@ -116,6 +116,10 @@ public final class LunarArcPluginProvider implements AutoCloseable {
                     description,
                     dataDirectory,
                     source);
+            // Same assignment SpigotPluginProvider makes: the classloader's Paper group resolves
+            // shared libraries through dependencyContext, so it has to be set before the plugin's
+            // own classes start loading through that group.
+            this.classLoader.dependencyContext = io.papermc.paper.plugin.manager.PaperPluginManagerImpl.getInstance();
             loader.getServerInstance().getLogger().fine("[LunarArc] " + description.getName() + " mappings="
                     + classLoader.getMappingNamespace().name().toLowerCase(java.util.Locale.ROOT)
                     + (classLoader.isNmsRemappingEnabled()
