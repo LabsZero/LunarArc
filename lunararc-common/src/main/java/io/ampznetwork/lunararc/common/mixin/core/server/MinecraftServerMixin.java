@@ -48,6 +48,22 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
     @Unique
     private static final Logger lunararc$logger = LoggerFactory.getLogger("LunarArc");
 
+    /**
+     * CraftBukkit declares a static {@code MinecraftServer.getServer()}, and a great many plugins
+     * reach for it. LunarArcRemapper already rewrites direct {@code INVOKESTATIC} calls to it, but
+     * a bytecode rewrite cannot satisfy a <em>reflective</em> lookup: ViaVersion does
+     * {@code ReflectionUtil.invokeStatic(MinecraftServer.class, "getServer")} and gets
+     * NoSuchMethodException, so its Bukkit injector never finds the server connection
+     * ("Failed to check if ViaVersion is binded"). Declaring the real method makes both the
+     * rewritten and the reflective path resolve.
+     *
+     * <p>Deliberately not {@code @Unique} - Mixin would rename it, and the whole point is that it
+     * is findable under exactly this name.</p>
+     */
+    public static MinecraftServer getServer() {
+        return io.ampznetwork.lunararc.common.LunarArcServerAccess.getMinecraftServer();
+    }
+
     @Unique
     private final Queue<Runnable> lunararc$taskQueue = new ConcurrentLinkedQueue<>();
 
