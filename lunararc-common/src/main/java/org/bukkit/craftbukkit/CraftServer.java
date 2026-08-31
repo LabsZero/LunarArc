@@ -78,6 +78,21 @@ public class CraftServer implements Server {
         public YamlConfiguration getConfig() {
             return spigotConfig;
         }
+
+        @Override
+        public YamlConfiguration getSpigotConfig() {
+            return spigotConfig;
+        }
+
+        @Override
+        public YamlConfiguration getBukkitConfig() {
+            return bukkitConfig;
+        }
+
+        @Override
+        public YamlConfiguration getPaperConfig() {
+            return paperGlobalConfig;
+        }
     };
     private final StandardMessenger messenger = new StandardMessenger();
     private final org.bukkit.craftbukkit.scheduler.CraftScheduler scheduler = new org.bukkit.craftbukkit.scheduler.CraftScheduler();
