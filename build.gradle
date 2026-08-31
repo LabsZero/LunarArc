@@ -66,6 +66,19 @@ allprojects {
     java {
         toolchain { languageVersion = JavaLanguageVersion.of(libs.versions.java.runtime.get().toInteger()) }
     }
+
+    tasks.withType(JavaCompile).configureEach {
+        // javac enables the `removal` lint by default, and this project cannot avoid tripping it:
+        // implementing the Bukkit/Paper API means overriding the members Paper has deprecated for
+        // removal (ItemMeta#getLocalizedName, LivingEntity's TargetBlockInfo overloads,
+        // InventoryView.Property, ...), of which Paper's API carries 300+. Every one of those
+        // warnings is an @Override that has to exist, so the lint cannot surface a real defect
+        // here - it only buried CI's annotation list, which javac was already truncating at its
+        // default 100-warning ceiling. javac still prints its "uses or overrides a deprecated API
+        // that is marked for removal" summary note, and `deprecation` itself was never enabled
+        // (it needs an explicit -Xlint:deprecation), so this gives up no signal the build had.
+        options.compilerArgs << '-Xlint:-removal'
+    }
 }
 
 def countClassesWithPrefix = { File jarFile, String prefix ->
