@@ -1,6 +1,61 @@
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Type
+import org.objectweb.asm.tree.AbstractInsnNode
+import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.tree.LdcInsnNode
+import org.objectweb.asm.tree.MethodInsnNode
+import org.objectweb.asm.tree.MethodNode
+
 plugins {
     id 'architectury-plugin'
     id 'dev.architectury.loom'
+}
+
+// Donated Paper server classes are real Paper's own compiled bytecode, which routinely does
+// `private static final Logger LOGGER = LogUtils.getClassLogger();` (or LogUtils.getLogger()) -
+// real Paper links against a newer com.mojang:logging than NeoForge 1.21.1 bundles (1.2.7,
+// confirmed from a real crash log), which lacks getClassLogger() entirely. Loading any such
+// class throws NoSuchMethodError at <clinit> (confirmed: io.papermc.paper.configuration.
+// serializer.EnumValueSerializer crashed exactly this way; at least 8 more classes in the same
+// io.papermc.paper.configuration.* package use the identical pattern and would fail one at a
+// time as each got touched). Rather than hand-reimplementing every affected donated class as it
+// crashes, rewrite the bytecode once at donation time: replace every
+// LogUtils.getClassLogger()/getLogger() call (both are `()Lorg/slf4j/Logger;`, no args) with
+// LoggerFactory.getLogger(<the class being transformed>) - functionally identical (that's what
+// getClassLogger() itself resolves to internally via caller-class detection), using only
+// standard SLF4J with no Mojang-specific dependency.
+static byte[] neutralizeMojangLogUtils(byte[] classBytes) {
+    ClassNode classNode = new ClassNode()
+    new ClassReader(classBytes).accept(classNode, 0)
+    Type selfType = Type.getObjectType(classNode.name)
+    boolean changed = false
+    for (MethodNode method : classNode.methods) {
+        for (AbstractInsnNode insn : method.instructions.toArray()) {
+            if (!(insn instanceof MethodInsnNode)) continue
+            MethodInsnNode call = (MethodInsnNode) insn
+            boolean isTargetedLogUtilsCall = call.owner == 'com/mojang/logging/LogUtils' &&
+                (call.name == 'getClassLogger' || call.name == 'getLogger') &&
+                call.desc == '()Lorg/slf4j/Logger;'
+            if (!isTargetedLogUtilsCall) continue
+
+            method.instructions.insertBefore(call, new LdcInsnNode(selfType))
+            call.owner = 'org/slf4j/LoggerFactory'
+            call.name = 'getLogger'
+            call.desc = '(Ljava/lang/Class;)Lorg/slf4j/Logger;'
+            changed = true
+        }
+    }
+    if (!changed) return classBytes
+
+    // COMPUTE_MAXS only, deliberately not COMPUTE_FRAMES: this swap doesn't add branches or
+    // change any existing frame's live types (same return type, straight-line code), so existing
+    // StackMapTable entries stay valid untouched. COMPUTE_FRAMES would need to resolve common
+    // superclasses via Class.forName, which can fail for classes referencing other
+    // not-yet-loaded donated/NMS types - avoiding it entirely sidesteps that failure mode.
+    ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS)
+    classNode.accept(writer)
+    return writer.toByteArray()
 }
 
 if (project == rootProject) {
@@ -567,11 +622,12 @@ tasks.register('preparePaperImplementationSurface') {
                     continue
                 }
 
+                byte[] classBytes = jar.getInputStream(entry).withCloseable { it.readAllBytes() }
+                classBytes = neutralizeMojangLogUtils(classBytes)
+
                 File target = new File(outputDir, entry.name)
                 target.parentFile.mkdirs()
-                jar.getInputStream(entry).withCloseable { input ->
-                    target.withOutputStream { out -> input.transferTo(out) }
-                }
+                target.bytes = classBytes
                 donatedClasses++
 
                 if (entry.name.startsWith('org/bukkit/craftbukkit/block/impl/') &&
