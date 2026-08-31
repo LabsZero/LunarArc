@@ -265,6 +265,22 @@ class PaperPluginInstanceManager {
                 this.server.getLogger().log(Level.SEVERE, "Error occurred while disabling " + pluginName, ex);
             }
 
+            // Drop this plugin's commands before closing its classloader. enablePlugin registers
+            // them into the command map, but nothing removed them again, so a disabled plugin's
+            // commands stayed in the Brigadier tree pointing at a plugin whose classloader is
+            // about to be closed. The next player to join crashed the server tick loop: sendCommands
+            // walks the tree calling canUse on every node, that reaches the dead plugin's
+            // testPermissionSilent, and loading any not-yet-loaded class from the closed loader
+            // throws NoClassDefFoundError (WorldEdit's BukkitPlayer, from wrapCommandSender).
+            try {
+                if (this.commandMap instanceof io.ampznetwork.lunararc.common.server.LunarArcCommandMap lunarArcMap) {
+                    lunarArcMap.unregisterPlugin(plugin);
+                }
+            } catch (Throwable ex) {
+                this.handlePluginException("Error occurred (in the plugin loader) while unregistering commands for "
+                    + pluginName + " (Is it up to date?)", ex, plugin);
+            }
+
             ClassLoader classLoader = plugin.getClass().getClassLoader();
             if (classLoader instanceof ConfiguredPluginClassLoader configuredPluginClassLoader) {
                 try {

@@ -12,11 +12,15 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 
 public final class BukkitCommandWrapper {
+    private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc");
     private final CommandMap commandMap;
     private final String label;
 
@@ -39,7 +43,19 @@ public final class BukkitCommandWrapper {
 
     private boolean canUse(CommandSourceStack source, String commandLabel) {
         Command command = commandMap.getCommand(commandLabel);
-        return command != null && command.testPermissionSilent(sender(source));
+        if (command == null) return false;
+        try {
+            return command.testPermissionSilent(sender(source));
+        } catch (Throwable ex) {
+            // This runs for every command node each time the tree is sent to a player, on the
+            // join path. CraftBukkit calls testPermissionSilent unguarded, but it can afford to:
+            // there a plugin's commands cannot outlive the plugin the way they can here. Letting a
+            // misbehaving or half-unloaded plugin throw takes the server down on player join,
+            // which is a far worse failure than hiding one command from one player.
+            LOGGER.warn("Permission check for command '{}' threw; hiding it from this sender.",
+                    commandLabel, ex);
+            return false;
+        }
     }
 
     private int execute(CommandContext<CommandSourceStack> context, boolean hasArguments) {
