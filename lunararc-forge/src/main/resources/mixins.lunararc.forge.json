@@ -6,6 +6,7 @@
   "mixins": [
     "permission.PermissionAPIMixin",
     "core.server.MinecraftServerMixin_Forge",
+    "bukkit.CraftServerMixin_Forge",
     "bukkit.CraftWorldMixin_Forge",
     "network.NetworkRegistryAccessor_Forge",
     "bukkit.StandardMessengerMixin_Forge",
