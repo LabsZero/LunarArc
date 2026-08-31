@@ -105,7 +105,18 @@ public final class PluginClassLoader extends URLClassLoader
             Class<?> loaded = findLoadedClass(name);
             if (loaded == null) {
                 if (isPlatformClass(name)) {
-                    loaded = loadPlatformClass(name);
+                    try {
+                        loaded = loadPlatformClass(name);
+                    } catch (ClassNotFoundException notOnServer) {
+                        // "Platform" is a prefix guess, not a guarantee the server has the class.
+                        // javax.* in particular is mostly JDK but not entirely: plugins shade
+                        // javax.inject and javax.annotation routinely. Dead-ending here meant a
+                        // plugin's own bundled copy was never consulted - floodgate failed to load
+                        // with NoClassDefFoundError: javax/inject/Provider even though its jar
+                        // contains that class. Classes the server must own are still refused.
+                        if (isServerOwnedClass(name)) throw notOnServer;
+                        loaded = findClass(name, true);
+                    }
                 } else {
                     try {
                         loaded = findClass(name, true);
@@ -307,7 +318,43 @@ public final class PluginClassLoader extends URLClassLoader
                 }
             }
         }
-        return getParent().loadClass(name);
+        try {
+            return getParent().loadClass(name);
+        } catch (ClassNotFoundException notOnParent) {
+            // The parent is whichever loader built this plugin's provider, normally the mod's own
+            // loader, which sees Minecraft. That is an assumption about how the active loader
+            // arranged its class space rather than something LunarArc controls, and findClass
+            // already keeps modClassLoader() as a backstop for the non-platform path. Platform
+            // classes deserve the same backstop: an NMS class reachable from the mod but not from
+            // this plugin's parent should resolve rather than surface as a link error in the
+            // middle of a plugin's method.
+            ClassLoader modClassLoader = LunarArcServer.modClassLoader();
+            if (modClassLoader != null && modClassLoader != getParent()) {
+                try {
+                    return modClassLoader.loadClass(name);
+                } catch (ClassNotFoundException ignored) {
+                }
+            }
+            throw notOnParent;
+        }
+    }
+
+    /**
+     * Classes the server must own outright, where a plugin's bundled copy would be wrong rather
+     * than merely redundant: the JVM's own packages, the Bukkit/Paper API the server implements,
+     * Minecraft itself, and Adventure, which passes objects across the plugin boundary and breaks
+     * if two copies exist. MohistMC/Youer draws the same line, refusing org.bukkit and
+     * net.minecraft in findClass so they can only ever come from the server.
+     */
+    private static boolean isServerOwnedClass(String name) {
+        return name.startsWith("java.")
+                || name.startsWith("jdk.")
+                || name.startsWith("sun.")
+                || name.startsWith("org.bukkit.")
+                || name.startsWith("net.minecraft.")
+                || name.startsWith("io.papermc.paper.")
+                || name.startsWith("com.destroystokyo.paper.")
+                || name.startsWith("net.kyori.");
     }
 
     private ClassLoader wrapPluginLibraryLoader(ClassLoader raw, String cacheName) {

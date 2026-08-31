@@ -42,11 +42,18 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
     private boolean allowsLifecycleRegistration = true;
 
     protected JavaPlugin() {
-        final ClassLoader classLoader = this.getClass().getClassLoader();
-        if (!(classLoader instanceof PluginClassLoader)) {
-            throw new IllegalStateException("JavaPlugin requires " + PluginClassLoader.class.getName());
+        // Paper widened this from CraftBukkit's "instanceof PluginClassLoader" to any
+        // ConfiguredPluginClassLoader, because its own plugin system loads paper-plugin.yml
+        // plugins through PaperPluginClassLoader instead. LunarArc has both loaders too, so
+        // keeping the narrow check rejected every paper-plugin.yml plugin whose main class
+        // extends JavaPlugin - Veinminer died here with "JavaPlugin requires
+        // org.bukkit.plugin.java.PluginClassLoader" before it could load.
+        if (this.getClass().getClassLoader()
+                instanceof io.papermc.paper.plugin.provider.classloader.ConfiguredPluginClassLoader configuredPluginClassLoader) {
+            configuredPluginClassLoader.init(this);
+        } else {
+            throw new IllegalStateException("JavaPlugin requires to be created by a valid classloader.");
         }
-        ((PluginClassLoader) classLoader).initialize(this);
     }
 
     /**
