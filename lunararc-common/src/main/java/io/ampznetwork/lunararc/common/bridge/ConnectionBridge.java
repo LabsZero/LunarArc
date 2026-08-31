@@ -23,7 +23,7 @@ public interface ConnectionBridge {
     ServerPlayer lunararc$getLoginPlayer();
     void lunararc$setLoginPlayer(ServerPlayer player);
 
-    // Used by PaperNmsAccessBridge — exposes the underlying Netty channel from
-    // net.minecraft.network.Connection, which stores it as a non-public field.
+    // Exposes the underlying Netty channel from net.minecraft.network.Connection, which
+    // stores it as a non-public field here while Paper declares it public.
     io.netty.channel.Channel lunararc$getChannel();
 }
