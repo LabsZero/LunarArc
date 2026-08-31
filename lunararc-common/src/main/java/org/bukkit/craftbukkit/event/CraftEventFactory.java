@@ -578,5 +578,46 @@ public class CraftEventFactory {
         return new CraftPortalEvent(event);
     }
 
+    /**
+     * Fires {@link org.bukkit.event.entity.EntityExplodeEvent} for an explosion with a source
+     * entity - TNT, a creeper, a ghast fireball, an end crystal.
+     *
+     * <p>This is the hook every land-protection plugin relies on to stop an explosion eating a
+     * claim: they cancel the event outright, or strip the protected blocks out of
+     * {@code blockList()}. The caller is expected to honour both, which
+     * {@code ExplosionMixin} does.</p>
+     */
+    public static org.bukkit.event.entity.EntityExplodeEvent callEntityExplodeEvent(
+            net.minecraft.world.entity.Entity entity,
+            java.util.List<Block> blocks,
+            float yield,
+            net.minecraft.world.level.Explosion.BlockInteraction effect) {
+        org.bukkit.entity.Entity bukkitEntity =
+                ((io.ampznetwork.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity();
+        org.bukkit.event.entity.EntityExplodeEvent event = new org.bukkit.event.entity.EntityExplodeEvent(
+                bukkitEntity, bukkitEntity.getLocation(), blocks, yield,
+                org.bukkit.craftbukkit.CraftExplosionResult.toBukkit(effect));
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    /**
+     * Fires {@link org.bukkit.event.block.BlockExplodeEvent} for a sourceless explosion - a bed or
+     * respawn anchor detonating in the wrong dimension, or a plugin-created explosion with no
+     * entity behind it. Same contract as the entity variant.
+     */
+    public static org.bukkit.event.block.BlockExplodeEvent callBlockExplodeEvent(
+            Block block,
+            org.bukkit.block.BlockState state,
+            java.util.List<Block> blocks,
+            float yield,
+            net.minecraft.world.level.Explosion.BlockInteraction effect) {
+        org.bukkit.event.block.BlockExplodeEvent event = new org.bukkit.event.block.BlockExplodeEvent(
+                block, state, blocks, yield,
+                org.bukkit.craftbukkit.CraftExplosionResult.toBukkit(effect));
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
 
 }
