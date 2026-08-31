@@ -127,6 +127,11 @@ class PaperPluginInstanceManager {
         try {
             List<Path> paths = FileArrayProviderSource.INSTANCE.prepareContext(files);
             DirectoryProviderSource.INSTANCE.registerProviders(runtimePluginEntrypointHandler, paths);
+            // Bootstrap phase must complete before any plugin is instantiated - real Paper runs
+            // these at two entirely separate points in boot for exactly this reason (a paper-
+            // plugin.yml plugin's bootstrapper populates the PluginBootstrap instance
+            // PaperPluginParent.createInstance() reads via getLastProvided()).
+            runtimePluginEntrypointHandler.enter(Entrypoint.BOOTSTRAPPER);
             runtimePluginEntrypointHandler.enter(Entrypoint.PLUGIN);
         } catch (Exception e) {
             // This should never happen, any errors that occur in this provider should instead be logged.
@@ -144,6 +149,7 @@ class PaperPluginInstanceManager {
         try {
             List<Path> files = DirectoryProviderSource.INSTANCE.prepareContext(directory);
             DirectoryProviderSource.INSTANCE.registerProviders(runtimePluginEntrypointHandler, files);
+            runtimePluginEntrypointHandler.enter(Entrypoint.BOOTSTRAPPER);
             runtimePluginEntrypointHandler.enter(Entrypoint.PLUGIN);
         } catch (Exception e) {
             // This should never happen, any errors that occur in this provider should instead be logged.
