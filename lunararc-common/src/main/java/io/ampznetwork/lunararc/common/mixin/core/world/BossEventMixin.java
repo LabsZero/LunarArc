@@ -96,8 +96,13 @@ public abstract class BossEventMixin implements io.ampznetwork.lunararc.common.b
         }
     }
 
+    // The three flag setters return BossEvent for chaining while the four setters above return
+    // void, so Mixin requires CallbackInfoReturnable here and rejects CallbackInfo outright -
+    // "Invalid descriptor ... CallbackInfoReturnable is required!" at apply time, which killed the
+    // server as BossEvent loaded during EndDragonFight construction. These only observe, so the
+    // callback is never used to set a return value; the field write still falls through to vanilla.
     @Inject(method = "setDarkenScreen", at = @At("HEAD"))
-    private void lunararc$setDarkenScreen(boolean darkenSky, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+    private void lunararc$setDarkenScreen(boolean darkenSky, CallbackInfoReturnable<BossEvent> cir) {
         if (this.lunararc$adventure != null) {
             PaperAdventure.setFlag(this.lunararc$adventure, BossBar.Flag.DARKEN_SCREEN, darkenSky);
         }
@@ -111,7 +116,7 @@ public abstract class BossEventMixin implements io.ampznetwork.lunararc.common.b
     }
 
     @Inject(method = "setPlayBossMusic", at = @At("HEAD"))
-    private void lunararc$setPlayBossMusic(boolean dragonMusic, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+    private void lunararc$setPlayBossMusic(boolean dragonMusic, CallbackInfoReturnable<BossEvent> cir) {
         if (this.lunararc$adventure != null) {
             PaperAdventure.setFlag(this.lunararc$adventure, BossBar.Flag.PLAY_BOSS_MUSIC, dragonMusic);
         }
@@ -125,7 +130,7 @@ public abstract class BossEventMixin implements io.ampznetwork.lunararc.common.b
     }
 
     @Inject(method = "setCreateWorldFog", at = @At("HEAD"))
-    private void lunararc$setCreateWorldFog(boolean thickenFog, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+    private void lunararc$setCreateWorldFog(boolean thickenFog, CallbackInfoReturnable<BossEvent> cir) {
         if (this.lunararc$adventure != null) {
             PaperAdventure.setFlag(this.lunararc$adventure, BossBar.Flag.CREATE_WORLD_FOG, thickenFog);
         }
