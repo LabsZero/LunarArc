@@ -6,7 +6,6 @@
   "mixins": [
     "permission.PermissionAPIMixin",
     "core.server.MinecraftServerMixin_NeoForge",
-    "bukkit.CraftServerMixin_NeoForge",
     "bukkit.CraftWorldMixin_NeoForge",
     "network.NetworkRegistryMixin_NeoForge",
     "network.NetworkRegistryAccessor_NeoForge",
