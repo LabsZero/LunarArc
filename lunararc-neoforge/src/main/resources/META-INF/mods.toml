@@ -10,4 +10,4 @@ authors="Ampz Network"
 description="LunarArc Hybrid Server Core"
 
 [[mixins]]
-config="mixins.lunararc.common.neoforge.json"
+config="mixins.lunararc.common.json"
