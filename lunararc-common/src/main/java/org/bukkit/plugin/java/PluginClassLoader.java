@@ -58,6 +58,11 @@ public final class PluginClassLoader extends URLClassLoader
             File dataFolder, File file) throws MalformedURLException {
         super(new URL[]{file.toURI().toURL()}, parent);
         this.description = description;
+        // Before any of this plugin's classes load: some plugins need a system property in place
+        // ahead of their own class initialization, and the transformed-class cache means a
+        // per-class hook cannot be relied on to run.
+        io.ampznetwork.lunararc.common.server.LunarArcPluginFixManager
+                .applyPluginProperties(description == null ? null : description.getName());
         this.dataFolder = dataFolder;
         this.file = file;
         this.pluginLoader = loader;

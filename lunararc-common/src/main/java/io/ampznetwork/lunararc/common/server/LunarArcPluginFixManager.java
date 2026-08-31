@@ -18,6 +18,40 @@ public final class LunarArcPluginFixManager {
 
     private LunarArcPluginFixManager() {}
 
+    /**
+     * Applies the per-plugin settings that have to be in place before a plugin's first class is
+     * even loaded, keyed on the plugin's name rather than on any one class.
+     *
+     * <p>Called from the plugin's classloader constructor rather than from
+     * {@link #injectPluginFix(String, byte[])}. MohistMC/Youer does this from inside its
+     * class-transform hook, which works there because Youer transforms every class on every
+     * start; LunarArc caches transformed classes on disk, so on the second and every later start
+     * the transform is skipped entirely and a side effect living inside it would simply never
+     * happen. Anchoring it to classloader construction makes it happen exactly once per plugin
+     * per start, cache or no cache.</p>
+     */
+    public static void applyPluginProperties(String pluginName) {
+        if (pluginName == null) return;
+
+        if (pluginName.equals("WorldEdit")) {
+            // WorldEdit picks its NMS adapter through BukkitImplLoader, which identifies the
+            // server it is running on before choosing. On a hybrid that identification does not
+            // land, no adapter is selected, and WorldEdit disables itself during onEnable - after
+            // which every later reference to one of its classes throws NoClassDefFoundError from
+            // the closed plugin classloader, thousands of times, which looks like the fault
+            // rather than the aftermath of it.
+            //
+            // BukkitImplLoader consults this system property first and loads the named adapter
+            // directly, skipping detection. Same value and same only-if-unset guard as Youer, so
+            // FastAsyncWorldEdit - which sets its own fawe adapter under a different plugin name -
+            // keeps whatever it chose.
+            if (System.getProperty("worldedit.bukkit.adapter") == null) {
+                System.setProperty("worldedit.bukkit.adapter",
+                        "com.sk89q.worldedit.bukkit.adapter.impl.v1_21.PaperweightAdapter");
+            }
+        }
+    }
+
     public static byte[] injectPluginFix(String className, byte[] clazz) {
         Consumer<ClassNode> patcher = switch (className) {
             case "com.sk89q.worldedit.bukkit.BukkitConfiguration" -> node -> {
