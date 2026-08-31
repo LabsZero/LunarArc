@@ -1507,6 +1507,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         accessor.lunararc$setLastHurtByMob(nmsKiller);
         accessor.lunararc$setLastHurtByPlayerTime(nmsKiller == null ? 0 : 100);
     }
+    // Deprecated-for-removal Paper API that LivingEntity still declares - see the note on
+    // CraftLivingEntity's matching overloads for why these are suppressed per-method.
+    @SuppressWarnings("removal")
     @Override public @Nullable Block getTargetBlock(int distance, com.destroystokyo.paper.block.TargetBlockInfo.FluidMode fluidMode) {
         RayTraceResult result = rayTraceBlocks(distance, fluidMode == com.destroystokyo.paper.block.TargetBlockInfo.FluidMode.ALWAYS ? FluidCollisionMode.ALWAYS : FluidCollisionMode.NEVER);
         return result != null ? result.getHitBlock() : null;
@@ -1633,6 +1636,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override public Entity getLeashHolder() {
         throw new IllegalStateException("Entity not leashed");
     }
+    @SuppressWarnings("removal")
     @Override public @Nullable org.bukkit.block.BlockFace getTargetBlockFace(int distance, com.destroystokyo.paper.block.TargetBlockInfo.FluidMode fluidMode) {
         return getTargetBlockFace(distance,
                 fluidMode == com.destroystokyo.paper.block.TargetBlockInfo.FluidMode.ALWAYS
@@ -1644,6 +1648,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
 
 
+    @SuppressWarnings("removal")
     @Override public boolean setWindowProperty(InventoryView.Property prop, int value) {
         if (prop == null) return false;
         return getOpenInventory().setProperty(prop, value);
@@ -2274,6 +2279,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         ((LivingEntityAccessBridge) getHandle()).lunararc$setRemoveStingerTime(ticks);
     }
     @Override public int getBeeStingerCooldown() { return ((LivingEntityAccessBridge) getHandle()).lunararc$getRemoveStingerTime(); }
+    @SuppressWarnings("removal")
     @Override public @Nullable com.destroystokyo.paper.block.TargetBlockInfo getTargetBlockInfo(int distance, com.destroystokyo.paper.block.TargetBlockInfo.FluidMode fluidMode) {
         FluidCollisionMode collisionMode = switch (fluidMode) {
             case ALWAYS -> FluidCollisionMode.ALWAYS;
@@ -2284,6 +2290,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         if (result == null || result.getHitBlock() == null || result.getHitBlockFace() == null) return null;
         return new com.destroystokyo.paper.block.TargetBlockInfo(result.getHitBlock(), result.getHitBlockFace());
     }
+    @SuppressWarnings("removal")
     @Override public @Nullable com.destroystokyo.paper.block.TargetBlockInfo getTargetBlockInfo(int distance) { return getTargetBlockInfo(distance, com.destroystokyo.paper.block.TargetBlockInfo.FluidMode.NEVER); }
     @Override public @Nullable com.destroystokyo.paper.entity.TargetEntityInfo getTargetEntityInfo(int distance, boolean ignoreBlocks) {
         RayTraceResult result = rayTraceEntities(distance, ignoreBlocks);

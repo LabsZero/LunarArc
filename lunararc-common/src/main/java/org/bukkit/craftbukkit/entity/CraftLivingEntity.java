@@ -165,9 +165,16 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         return getWorld().rayTraceBlocks(getEyeLocation(), getEyeLocation().getDirection(), maxDistance, fluidMode, false);
     }
 
+    // TargetBlockInfo and its FluidMode are deprecated for removal in the Paper API, but
+    // LivingEntity still declares these overloads, so an implementation has to provide them -
+    // real Paper's own CraftLivingEntity implements exactly the same four members. Suppressed
+    // per-method rather than by disabling the javac `removal` lint for the whole build, so a
+    // genuinely accidental use of a deprecated-for-removal API elsewhere still gets flagged.
+    @SuppressWarnings("removal")
     @Override public @Nullable Block getTargetBlock(int maxDistance, @NotNull com.destroystokyo.paper.block.TargetBlockInfo.FluidMode fluidMode) {
         return getTargetBlockExact(maxDistance, paperFluidMode(fluidMode));
     }
+    @SuppressWarnings("removal")
     @Override public @Nullable org.bukkit.block.BlockFace getTargetBlockFace(int maxDistance, @NotNull com.destroystokyo.paper.block.TargetBlockInfo.FluidMode fluidMode) {
         return getTargetBlockFace(maxDistance, paperFluidMode(fluidMode));
     }
@@ -175,6 +182,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         RayTraceResult result = rayTraceBlocks(maxDistance, fluidMode);
         return result == null ? null : result.getHitBlockFace();
     }
+    @SuppressWarnings("removal")
     @Override public @Nullable com.destroystokyo.paper.block.TargetBlockInfo getTargetBlockInfo(int maxDistance, @NotNull com.destroystokyo.paper.block.TargetBlockInfo.FluidMode fluidMode) {
         RayTraceResult result = rayTraceBlocks(maxDistance, paperFluidMode(fluidMode));
         if (result == null || result.getHitBlock() == null || result.getHitBlockFace() == null) return null;
@@ -199,6 +207,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         return blockHit.getHitPosition().distanceSquared(eye) < entityHit.getHitPosition().distanceSquared(eye) ? null : entityHit;
     }
 
+    @SuppressWarnings("removal")
     private static FluidCollisionMode paperFluidMode(com.destroystokyo.paper.block.TargetBlockInfo.FluidMode mode) {
         return switch (mode) {
             case ALWAYS -> FluidCollisionMode.ALWAYS;
