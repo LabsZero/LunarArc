@@ -528,13 +528,20 @@ public final class PluginClassLoader extends URLClassLoader
         if (this.plugin != null) throw new IllegalStateException("Plugin already initialized!");
 
         this.plugin = plugin;
+        // Real Paper's PluginDescriptionFile implements PluginMeta directly, so classic
+        // (plugin.yml) plugins get the same object for both parameters. Wrapping it in
+        // LunarArcPluginMeta here instead broke every `getPluginMeta() instanceof
+        // PluginDescriptionFile` check in the codebase (e.g. PaperPluginInstanceManager's
+        // enablePlugin(), which uses that check to decide whether to register plugin.yml
+        // "commands:" into the CommandMap) - meaning no classic plugin ever got its declared
+        // commands registered, so getCommand() always returned null for them (crashed Vault).
         plugin.init(
                 pluginLoader.getServerInstance(),
                 description,
                 dataFolder,
                 file,
                 this,
-                new io.ampznetwork.lunararc.common.server.LunarArcPluginMeta(description),
+                description,
                 io.ampznetwork.lunararc.common.server.LunarArcLogger.getLogger(description.getName())
         );
     }

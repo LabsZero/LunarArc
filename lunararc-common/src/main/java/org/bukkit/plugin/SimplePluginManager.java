@@ -167,20 +167,34 @@ public class SimplePluginManager implements PluginManager {
 
     @Override
     public void addPermission(@NotNull Permission permission) {
+        // Real Paper delegates outright here instead of also writing to its own `permissions`
+        // map: StupidSPMPermissionManagerWrapper reads that same map directly, so writing to it
+        // here first made PaperPermissionManager's duplicate-add check always see the permission
+        // as already present, causing every runtime addPermission() call (e.g. LuckPerms's
+        // performFinalSetup()) to throw "already defined" even on a brand new permission.
+        if (paperPluginManager != null) {
+            paperPluginManager.addPermission(permission);
+            return;
+        }
         permissions.put(permission.getName(), permission);
-        if (paperPluginManager != null) paperPluginManager.addPermission(permission);
     }
 
     @Override
     public void removePermission(@NotNull Permission permission) {
+        if (paperPluginManager != null) {
+            paperPluginManager.removePermission(permission);
+            return;
+        }
         permissions.remove(permission.getName());
-        if (paperPluginManager != null) paperPluginManager.removePermission(permission);
     }
 
     @Override
     public void removePermission(@NotNull String name) {
+        if (paperPluginManager != null) {
+            paperPluginManager.removePermission(name);
+            return;
+        }
         permissions.remove(name);
-        if (paperPluginManager != null) paperPluginManager.removePermission(name);
     }
 
     @Override
@@ -247,9 +261,8 @@ public class SimplePluginManager implements PluginManager {
 
     @Override
     public @NotNull Set<Permission> getPermissions() {
-        Set<Permission> all = new java.util.HashSet<>(permissions.values());
-        if (paperPluginManager != null) all.addAll(paperPluginManager.getPermissions());
-        return all;
+        if (paperPluginManager != null) return paperPluginManager.getPermissions();
+        return new java.util.HashSet<>(permissions.values());
     }
 
     @Override
@@ -285,15 +298,19 @@ public class SimplePluginManager implements PluginManager {
 
     @Override
     public void clearPermissions() {
-        permissions.clear();
-        if (paperPluginManager != null)
+        if (paperPluginManager != null) {
             paperPluginManager.clearPermissions();
+            return;
+        }
+        permissions.clear();
     }
 
     @Override
     public void addPermissions(@NotNull List<Permission> perms) {
-        for (Permission p : perms) permissions.put(p.getName(), p);
-        if (paperPluginManager != null)
+        if (paperPluginManager != null) {
             paperPluginManager.addPermissions(perms);
+            return;
+        }
+        for (Permission p : perms) permissions.put(p.getName(), p);
     }
 }
