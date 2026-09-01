@@ -49,6 +49,24 @@ tasks.register('generateAccessTransformer') {
         def lines = ['# Generated from lunararc.accesswidener - do not edit by hand.']
         def dotted = { String internal -> internal.replace('/', '.') }
 
+        // NeoForge's ReplaceFieldWithGetterAccess coremod rewrites reads of these fields into
+        // calls to the matching getModified* getter, which is how the biome modifier system gets
+        // to return a modified value. It asserts the field is still private and instance, and
+        // aborts class transformation if it is not - so widening one here kills the server during
+        // BuiltInRegistries bootstrap, before anything else loads:
+        //
+        //   IllegalStateException: Field climateSettings in net/minecraft/world/level/biome/Biome
+        //   is not private and an instance field
+        //
+        // The widener entry is there for compiling lunararc-common against vanilla; at runtime on
+        // this loader the coremod already provides the access, and CraftWorldMixin_NeoForge
+        // redirects our own call site to getModifiedClimateSettings(). So these belong in the
+        // widener and not in the transformer.
+        def coremodOwnedFields = [
+                'net/minecraft/world/level/biome/Biome climateSettings',
+                'net/minecraft/world/level/biome/Biome specialEffects',
+        ] as Set
+
         widener.eachLine { String raw ->
             def line = raw.trim()
             if (line.isEmpty() || line.startsWith('#') || line.startsWith('accessWidener')) return
@@ -65,6 +83,10 @@ tasks.register('generateAccessTransformer') {
                     break
                 case 'field':
                     if (parts.length < 5) return
+                    if (coremodOwnedFields.contains("${parts[2]} ${parts[3]}".toString())) {
+                        logger.lifecycle("Skipping coremod-owned field ${parts[2]}.${parts[3]} in the access transformer")
+                        return
+                    }
                     // accessible -> public; mutable -> also strip final (public-f).
                     def at = (access == 'mutable') ? 'public-f' : 'public'
                     lines << "${at} ${dotted(parts[2])} ${parts[3]}"
