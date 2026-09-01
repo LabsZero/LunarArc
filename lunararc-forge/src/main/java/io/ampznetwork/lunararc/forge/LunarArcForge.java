@@ -8,6 +8,7 @@ import io.ampznetwork.lunararc.forge.event.ForgeBlockBreakEvents;
 import io.ampznetwork.lunararc.forge.event.ForgeBlockPlaceEvents;
 import io.ampznetwork.lunararc.forge.event.ForgeEntityTeleportEvents;
 import io.ampznetwork.lunararc.forge.event.ForgeEntityJoinEvents;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 
@@ -15,6 +16,9 @@ import net.minecraftforge.fml.common.Mod;
 public final class LunarArcForge {
 
     public LunarArcForge() {
+        // Same as NeoForge: FML shows a mod constructor's exception on its error screen.
+        io.ampznetwork.lunararc.common.LunarArcClientSideGuard.requireDedicatedServer(
+                "Forge", net.minecraftforge.fml.loading.FMLEnvironment.dist == Dist.CLIENT);
         LunarArcServer.installPlatform("Forge", LunarArcForge.class.getClassLoader());
         ForgeCommandHook.install();
         ForgeServerLifecycle.register(MinecraftForge.EVENT_BUS);
