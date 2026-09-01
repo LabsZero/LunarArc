@@ -627,8 +627,11 @@ public class CraftBlock implements Block {
         }
 
         boolean success = world.setBlock(position, blockData, 2 | 16 | 1024); // NOTIFY | NO_OBSERVER | NO_PLACE
-        if (success && world instanceof net.minecraft.world.level.Level) {
-            world.getMinecraftWorld().sendBlockUpdated(position, old, blockData, 3);
+        // CraftBukkit reaches the Level through LevelAccessor#getMinecraftWorld, which CraftBukkit
+        // patches onto NMS; lunararc-common compiles against vanilla, where it does not exist. The
+        // instanceof already narrows to the same object, so bind it and call directly.
+        if (success && world instanceof net.minecraft.world.level.Level level) {
+            level.sendBlockUpdated(position, old, blockData, 3);
         }
         return success;
     }

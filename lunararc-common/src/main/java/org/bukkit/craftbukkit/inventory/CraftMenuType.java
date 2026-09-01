@@ -94,4 +94,17 @@ public final class CraftMenuType<V extends InventoryView> implements org.bukkit.
         if (menu instanceof net.minecraft.world.inventory.CrafterMenu) return InventoryType.CRAFTER;
         return InventoryType.CHEST;
     }
+
+    public static net.minecraft.world.inventory.MenuType<?> bukkitToMinecraft(org.bukkit.inventory.MenuType bukkit) {
+        return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraft(bukkit);
+    }
+
+    public static org.bukkit.inventory.MenuType minecraftToBukkit(net.minecraft.world.inventory.MenuType<?> minecraft) {
+        return org.bukkit.craftbukkit.CraftRegistry.minecraftToBukkit(minecraft, net.minecraft.core.registries.Registries.MENU, org.bukkit.Registry.MENU);
+    }
+
+    public static org.bukkit.inventory.MenuType minecraftHolderToBukkit(
+            net.minecraft.core.Holder<net.minecraft.world.inventory.MenuType<?>> minecraft) {
+        return minecraftToBukkit(minecraft.value());
+    }
 }

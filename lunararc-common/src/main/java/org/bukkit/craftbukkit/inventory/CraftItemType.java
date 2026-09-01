@@ -159,4 +159,17 @@ public final class CraftItemType<M extends ItemMeta> implements ItemType.Typed<M
     @Override public @NotNull NamespacedKey getKey() { return this.key; }
 
     @Override public String toString() { return "CraftItemType[" + this.key + "]"; }
+
+    // CraftBukkit's Material/ItemType conversion set, mirroring CraftBlockType's.
+    public static org.bukkit.Material minecraftToBukkit(net.minecraft.world.item.Item item) {
+        return org.bukkit.craftbukkit.util.CraftMagicNumbers.getMaterial(item);
+    }
+
+    public static net.minecraft.world.item.Item bukkitToMinecraft(org.bukkit.Material material) {
+        return org.bukkit.craftbukkit.util.CraftMagicNumbers.getItem(material);
+    }
+
+    public static net.minecraft.world.item.Item bukkitToMinecraftNew(org.bukkit.inventory.ItemType bukkit) {
+        return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraft(bukkit);
+    }
 }

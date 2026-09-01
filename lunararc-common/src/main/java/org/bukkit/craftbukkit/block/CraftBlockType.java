@@ -101,4 +101,18 @@ public final class CraftBlockType<B extends BlockData> implements BlockType.Type
     @Override public @Nullable Material asMaterial() { return Registry.MATERIAL.get(this.key); }
     @Override public @NotNull NamespacedKey getKey() { return this.key; }
     @Override public String toString() { return "CraftBlockType[" + this.key + "]"; }
+
+    // CraftBukkit's Material/BlockType conversion set. The "New" pair is the typed BlockType API
+    // added in 1.20.5; the plain pair is the long-standing Material one plugins already use.
+    public static org.bukkit.Material minecraftToBukkit(net.minecraft.world.level.block.Block block) {
+        return org.bukkit.craftbukkit.util.CraftMagicNumbers.getMaterial(block);
+    }
+
+    public static net.minecraft.world.level.block.Block bukkitToMinecraft(org.bukkit.Material material) {
+        return org.bukkit.craftbukkit.util.CraftMagicNumbers.getBlock(material);
+    }
+
+    public static net.minecraft.world.level.block.Block bukkitToMinecraftNew(org.bukkit.block.BlockType bukkit) {
+        return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraft(bukkit);
+    }
 }

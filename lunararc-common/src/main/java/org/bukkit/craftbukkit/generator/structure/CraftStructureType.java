@@ -24,4 +24,14 @@ public final class CraftStructureType extends StructureType {
     }
     @Override public int hashCode() { return this.key.hashCode(); }
     @Override public String toString() { return "CraftStructureType[" + this.key + "]"; }
+
+    public static org.bukkit.generator.structure.StructureType minecraftToBukkit(
+            net.minecraft.world.level.levelgen.structure.StructureType<?> minecraft) {
+        return org.bukkit.craftbukkit.CraftRegistry.minecraftToBukkit(minecraft, net.minecraft.core.registries.Registries.STRUCTURE_TYPE, org.bukkit.Registry.STRUCTURE_TYPE);
+    }
+
+    public static net.minecraft.world.level.levelgen.structure.StructureType<?> bukkitToMinecraft(
+            org.bukkit.generator.structure.StructureType bukkit) {
+        return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraft(bukkit);
+    }
 }

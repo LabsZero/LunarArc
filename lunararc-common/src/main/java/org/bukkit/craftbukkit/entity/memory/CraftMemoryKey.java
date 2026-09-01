@@ -15,4 +15,18 @@ public final class CraftMemoryKey {
         return (MemoryModuleType<U>) BuiltInRegistries.MEMORY_MODULE_TYPE.getOptional(id)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown memory key: " + key.getKey()));
     }
+
+    // Brain memory keys, under CraftBukkit's names. Both sides tolerate null, as CraftBukkit's do.
+    public static <T, U> org.bukkit.entity.memory.MemoryKey<U> minecraftToBukkit(
+            net.minecraft.world.entity.ai.memory.MemoryModuleType<T> minecraft) {
+        if (minecraft == null) {
+            return null;
+        }
+
+        net.minecraft.core.Registry<net.minecraft.world.entity.ai.memory.MemoryModuleType<?>> registry =
+                org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(net.minecraft.core.registries.Registries.MEMORY_MODULE_TYPE);
+        return org.bukkit.Registry.MEMORY_MODULE_TYPE.get(
+                org.bukkit.craftbukkit.util.CraftNamespacedKey.fromMinecraft(registry.getResourceKey(minecraft).orElseThrow().location()));
+    }
+
 }

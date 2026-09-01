@@ -204,4 +204,23 @@ public class CraftAttributeInstance implements org.bukkit.attribute.AttributeIns
             }
         }
     }
+
+    // The attribute-modifier conversion pair CraftBukkit exposes; plugins editing attributes
+    // directly on NMS entities use it in both directions.
+    public static net.minecraft.world.entity.ai.attributes.AttributeModifier convert(
+            org.bukkit.attribute.AttributeModifier bukkit) {
+        return new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                org.bukkit.craftbukkit.util.CraftNamespacedKey.toMinecraft(bukkit.getKey()), bukkit.getAmount(),
+                net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation
+                        .values()[bukkit.getOperation().ordinal()]);
+    }
+
+    public static org.bukkit.attribute.AttributeModifier convert(
+            net.minecraft.world.entity.ai.attributes.AttributeModifier nms,
+            net.minecraft.world.entity.EquipmentSlotGroup slot) {
+        return new org.bukkit.attribute.AttributeModifier(
+                org.bukkit.craftbukkit.util.CraftNamespacedKey.fromMinecraft(nms.id()), nms.amount(),
+                org.bukkit.attribute.AttributeModifier.Operation.values()[nms.operation().ordinal()],
+                org.bukkit.craftbukkit.CraftEquipmentSlot.getSlot(slot));
+    }
 }
