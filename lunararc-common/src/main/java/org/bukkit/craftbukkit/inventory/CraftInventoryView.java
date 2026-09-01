@@ -276,4 +276,9 @@ public class CraftInventoryView implements InventoryView {
             return java.util.Collections.singletonList((HumanEntity) owner);
         }
     }
+
+    /** Whether a raw slot index falls in the top inventory, as CraftBukkit asks it. */
+    public boolean isInTop(int rawSlot) {
+        return rawSlot < this.top.getSize();
+    }
 }

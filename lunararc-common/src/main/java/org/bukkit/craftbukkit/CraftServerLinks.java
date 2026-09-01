@@ -144,4 +144,9 @@ public final class CraftServerLinks implements org.bukkit.ServerLinks {
             return handle.link();
         }
     }
+
+    /** CraftBukkit's name for {@link #getHandle}; both return the live NMS ServerLinks. */
+    public ServerLinks getServerLinks() {
+        return this.getHandle();
+    }
 }

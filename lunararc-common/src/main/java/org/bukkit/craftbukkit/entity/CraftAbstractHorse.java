@@ -59,4 +59,13 @@ public abstract class CraftAbstractHorse extends CraftAnimals implements org.buk
     @Override public void setRearing(boolean rearing) { getHandle().setStanding(rearing); }
     @Override public boolean isEating() { return horseBridge().lunararc$isMouthOpen(); }
     @Override public void setEating(boolean eating) { horseBridge().lunararc$setMouthOpen(eating); }
+
+    // CraftBukkit's UUID-level owner accessors, beside the AnimalTamer ones the Bukkit API has.
+    public java.util.UUID getOwnerUUID() {
+        return this.getHandle().getOwnerUUID();
+    }
+
+    public void setOwnerUUID(java.util.UUID uuid) {
+        this.getHandle().setOwnerUUID(uuid);
+    }
 }

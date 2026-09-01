@@ -644,4 +644,23 @@ public class CraftBlockData implements BlockData {
         copy.parsedProperties = parsedProperties == null ? null : new LinkedHashSet<>(parsedProperties);
         return copy;
     }
+
+    /**
+     * This block state's properties as a plain name-to-value string map, as CraftBukkit exposes it.
+     *
+     * <p>Used where a block's properties have to be written somewhere that has no notion of a
+     * Property - configuration, a schematic format, a debug dump.</p>
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public java.util.Map<String, String> toStates() {
+        java.util.Map<String, String> states = new java.util.HashMap<>();
+
+        for (java.util.Map.Entry<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>> entry
+                : this.state.getValues().entrySet()) {
+            net.minecraft.world.level.block.state.properties.Property property = entry.getKey();
+            states.put(property.getName(), property.getName(entry.getValue()));
+        }
+
+        return states;
+    }
 }
