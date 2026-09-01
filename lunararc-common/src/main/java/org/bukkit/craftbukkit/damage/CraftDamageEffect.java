@@ -24,4 +24,18 @@ public final class CraftDamageEffect implements DamageEffect {
         if (sound == null) throw new IllegalStateException("No Bukkit Sound for NMS sound " + id);
         return sound;
     }
+
+    /** CraftBukkit's factory pair: lookup by serialized name, and the NMS-to-Bukkit wrap. */
+    public static DamageEffect getById(String id) {
+        for (DamageEffects effects : DamageEffects.values()) {
+            if (effects.getSerializedName().equalsIgnoreCase(id)) {
+                return toBukkit(effects);
+            }
+        }
+        return null;
+    }
+
+    public static DamageEffect toBukkit(DamageEffects damageEffects) {
+        return new CraftDamageEffect(damageEffects);
+    }
 }

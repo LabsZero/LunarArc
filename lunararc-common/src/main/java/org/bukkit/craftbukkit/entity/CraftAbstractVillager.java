@@ -38,4 +38,9 @@ public class CraftAbstractVillager extends CraftAgeable implements org.bukkit.en
     }
 
     @Override public String toString() { return "CraftAbstractVillager"; }
+
+    /** The NMS Merchant behind this villager, under CraftBukkit's name. */
+    public net.minecraft.world.item.trading.Merchant getMerchant() {
+        return getHandle();
+    }
 }

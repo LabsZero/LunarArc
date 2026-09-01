@@ -215,4 +215,10 @@ public final class CraftLootTable implements org.bukkit.loot.LootTable {
     public String toString() {
         return this.key.toString();
     }
+
+    /** CraftBukkit's ResourceLocation overload; null in, null out, as CraftBukkit has it. */
+    public static org.bukkit.loot.LootTable minecraftToBukkit(net.minecraft.resources.ResourceLocation minecraft) {
+        return minecraft == null ? null : org.bukkit.Bukkit.getLootTable(
+                org.bukkit.craftbukkit.util.CraftNamespacedKey.fromMinecraft(minecraft));
+    }
 }

@@ -44,4 +44,16 @@ public final class CraftSoundGroup implements SoundGroup, com.destroystokyo.pape
     @Override public @NotNull Sound getPlaceSound() { return toBukkit(handle.getPlaceSound()); }
     @Override public @NotNull Sound getHitSound() { return toBukkit(handle.getHitSound()); }
     @Override public @NotNull Sound getFallSound() { return toBukkit(handle.getFallSound()); }
+
+    private static final java.util.Map<SoundType, CraftSoundGroup> SOUND_GROUPS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * CraftBukkit's cached factory. One CraftSoundGroup per SoundType, so identity comparisons on
+     * the Bukkit side hold. ConcurrentHashMap rather than CraftBukkit's plain HashMap because
+     * block queries here are not confined to the main thread.
+     */
+    public static SoundGroup getSoundGroup(SoundType soundEffectType) {
+        return SOUND_GROUPS.computeIfAbsent(soundEffectType, CraftSoundGroup::new);
+    }
 }

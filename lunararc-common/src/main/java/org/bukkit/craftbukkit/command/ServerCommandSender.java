@@ -93,4 +93,14 @@ public abstract class ServerCommandSender implements CommandSender {
     }
 
     public abstract @NotNull Server getServer();
+
+    /**
+     * Whether this sender is a player, as CraftBukkit asks it.
+     *
+     * <p>False here and overridden by the player sender, so command code can branch without an
+     * instanceof against a Craft type.</p>
+     */
+    public boolean isPlayer() {
+        return false;
+    }
 }

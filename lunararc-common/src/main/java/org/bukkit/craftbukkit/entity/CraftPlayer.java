@@ -2968,4 +2968,45 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             default -> GameMode.SURVIVAL;
         };
     }
+
+    // The four look-anchor and relative-teleport-flag converters CraftBukkit exposes as statics.
+    // Paper's teleport API takes the Bukkit forms and NMS wants its own enums; plugins driving a
+    // teleport through NMS directly convert with these.
+    public static net.minecraft.commands.arguments.EntityAnchorArgument.Anchor toNmsAnchor(
+            io.papermc.paper.entity.LookAnchor apiAnchor) {
+        return switch (apiAnchor) {
+            case EYES -> net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES;
+            case FEET -> net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.FEET;
+        };
+    }
+
+    public static io.papermc.paper.entity.LookAnchor toApiAnchor(
+            net.minecraft.commands.arguments.EntityAnchorArgument.Anchor nmsAnchor) {
+        return switch (nmsAnchor) {
+            case EYES -> io.papermc.paper.entity.LookAnchor.EYES;
+            case FEET -> io.papermc.paper.entity.LookAnchor.FEET;
+        };
+    }
+
+    public static net.minecraft.world.entity.RelativeMovement toNmsRelativeFlag(
+            io.papermc.paper.entity.TeleportFlag.Relative apiFlag) {
+        return switch (apiFlag) {
+            case X -> net.minecraft.world.entity.RelativeMovement.X;
+            case Y -> net.minecraft.world.entity.RelativeMovement.Y;
+            case Z -> net.minecraft.world.entity.RelativeMovement.Z;
+            case PITCH -> net.minecraft.world.entity.RelativeMovement.X_ROT;
+            case YAW -> net.minecraft.world.entity.RelativeMovement.Y_ROT;
+        };
+    }
+
+    public static io.papermc.paper.entity.TeleportFlag.Relative toApiRelativeFlag(
+            net.minecraft.world.entity.RelativeMovement nmsFlag) {
+        return switch (nmsFlag) {
+            case X -> io.papermc.paper.entity.TeleportFlag.Relative.X;
+            case Y -> io.papermc.paper.entity.TeleportFlag.Relative.Y;
+            case Z -> io.papermc.paper.entity.TeleportFlag.Relative.Z;
+            case X_ROT -> io.papermc.paper.entity.TeleportFlag.Relative.PITCH;
+            case Y_ROT -> io.papermc.paper.entity.TeleportFlag.Relative.YAW;
+        };
+    }
 }

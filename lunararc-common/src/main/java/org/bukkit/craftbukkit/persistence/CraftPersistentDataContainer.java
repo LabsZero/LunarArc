@@ -301,4 +301,28 @@ public class CraftPersistentDataContainer implements PersistentDataContainer {
     private record StoredValue(Class<?> primitiveType, Object value) {
         StoredValue copy() { return new StoredValue(primitiveType, copyPrimitive(value)); }
     }
+
+    // CraftBukkit's raw-tag surface. Plugins and Paper's own code reach past the typed API through
+    // these when they are moving a container's contents around wholesale.
+    public void clear() {
+        this.customData.clear();
+    }
+
+    public void put(String key, net.minecraft.nbt.Tag base) {
+        this.getRaw().put(key, base);
+    }
+
+    public java.util.Map<String, net.minecraft.nbt.Tag> getTagsCloned() {
+        net.minecraft.nbt.CompoundTag compound = this.toTagCompound();
+        java.util.Map<String, net.minecraft.nbt.Tag> tags = new java.util.HashMap<>();
+        for (String key : compound.getAllKeys()) {
+            net.minecraft.nbt.Tag tag = compound.get(key);
+            if (tag != null) tags.put(key, tag.copy());
+        }
+        return tags;
+    }
+
+    public String serialize() {
+        return org.bukkit.craftbukkit.util.CraftNBTTagConfigSerializer.serialize(this.toTagCompound());
+    }
 }
