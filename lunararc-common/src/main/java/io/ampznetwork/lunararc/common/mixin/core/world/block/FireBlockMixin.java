@@ -47,14 +47,16 @@ public abstract class FireBlockMixin {
         this.lunararc$tickingFire = pos;
     }
 
-    // Owner deliberately omitted from the target: setBlock is declared on Level but invoked through
-    // a ServerLevel-typed local, and matching on name and descriptor alone sidesteps which of the
-    // two the compiler wrote into the call site.
+    // setBlock is declared on Level but invoked here through tick's ServerLevel parameter, and the
+    // owner written into a call site is the static type of the receiver - so ServerLevel, matching
+    // PortalForcerMixin, which already targets this same method the same way.
     @WrapOperation(
             method = "tick",
             at = @At(
                     value = "INVOKE",
-                    target = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
+                    target = "Lnet/minecraft/server/level/ServerLevel;setBlock("
+                            + "Lnet/minecraft/core/BlockPos;"
+                            + "Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
     private boolean lunararc$blockIgniteOnSpread(
             ServerLevel level,
             BlockPos target,
