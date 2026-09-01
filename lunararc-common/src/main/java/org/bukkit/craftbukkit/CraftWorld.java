@@ -2420,24 +2420,88 @@ public class CraftWorld implements World {
                 (org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer(), entity);
     }
 
+    /**
+     * A ticket with no timeout, holding a chunk we asked for asynchronously at FULL until the
+     * load finishes.
+     *
+     * <p>Vanilla's {@code getChunkFutureMainThread} registers {@code TicketType.UNKNOWN}, which
+     * expires after a single tick. That is enough for vanilla's own blocking load, where
+     * {@code managedBlock} drains the chunk system before the tick ends, but not for a load we
+     * deliberately let span ticks - the ticket would lapse and the future might never complete.
+     * CraftBukkit holds it with {@code TicketType.PLUGIN}, a CraftBukkit addition to NMS rather
+     * than a vanilla field, so this is the equivalent through vanilla's public factory. Timeout
+     * defaults to zero, meaning it never expires on its own; it is removed explicitly below.</p>
+     */
+    private static final net.minecraft.server.level.TicketType<net.minecraft.util.Unit> LUNARARC_ASYNC_CHUNK =
+            net.minecraft.server.level.TicketType.create("lunararc_async_chunk", (a, b) -> 0);
+
+    /**
+     * Load a chunk without blocking the server thread.
+     *
+     * <p>This used to call the blocking {@link #getChunkAt(int, int, boolean)} inline, which made
+     * the method synchronous in everything but its return type. Plugins reach for this API
+     * precisely because they have many chunks to pull in and cannot afford to stall the server for
+     * each one - a random-teleport search walks candidate positions in ungenerated terrain until it
+     * finds a safe one, so every attempt became a full worldgen on the server thread with no
+     * ticking in between. Enough attempts back to back and the server stops answering keep-alives,
+     * which the client sees as a timeout.</p>
+     *
+     * <p>Paper answers immediately when the chunk is already resident and otherwise hands the load
+     * to its chunk system, completing the future later. Same shape here on vanilla's own
+     * machinery: {@code getChunkFuture} schedules the work and returns a future that resolves as
+     * the chunk system makes progress across ticks, instead of {@code managedBlock}-ing the server
+     * thread until it is done.</p>
+     *
+     * <p>Everything touching the chunk system runs on the server thread. NeoForge's own chunk
+     * pregenerator notes that acquiring and releasing tickets is not thread safe, and
+     * {@code getChunkFuture} dispatches differently depending on the calling thread; keeping to
+     * one thread avoids both hazards.</p>
+     */
     @Override
     public @NotNull java.util.concurrent.CompletableFuture<org.bukkit.Chunk> getChunkAtAsync(int x, int z, boolean gen,
             boolean urgent) {
         net.minecraft.server.MinecraftServer server = world.getServer();
+        net.minecraft.server.level.ServerChunkCache source = world.getChunkSource();
+
+        // Already resident: hand it straight back without touching the chunk system at all.
+        if (server.isSameThread() && source.getChunkNow(x, z) != null) {
+            return java.util.concurrent.CompletableFuture.completedFuture(lunararcChunk(x, z));
+        }
+
         java.util.concurrent.CompletableFuture<org.bukkit.Chunk> future = new java.util.concurrent.CompletableFuture<>();
-        Runnable load = () -> {
+        net.minecraft.world.level.ChunkPos pos = new net.minecraft.world.level.ChunkPos(x, z);
+
+        Runnable schedule = () -> {
             try {
+                if (source.getChunkNow(x, z) != null) {
+                    future.complete(lunararcChunk(x, z));
+                    return;
+                }
                 if (!gen && !isChunkGenerated(x, z)) {
                     future.complete(null);
                     return;
                 }
-                future.complete(getChunkAt(x, z, gen));
+
+                source.addRegionTicket(LUNARARC_ASYNC_CHUNK, pos, 0, net.minecraft.util.Unit.INSTANCE);
+                source.getChunkFuture(x, z, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, true)
+                        .whenComplete((result, thrown) -> server.execute(() -> {
+                            // Drop the ticket before completing, so the waiting plugin still runs
+                            // against a resident chunk - unloading cannot happen until the chunk
+                            // system next runs, which is after this task returns.
+                            source.removeRegionTicket(LUNARARC_ASYNC_CHUNK, pos, 0, net.minecraft.util.Unit.INSTANCE);
+                            if (thrown != null) {
+                                future.completeExceptionally(thrown);
+                                return;
+                            }
+                            future.complete(result != null && result.isSuccess() ? lunararcChunk(x, z) : null);
+                        }));
             } catch (Throwable throwable) {
                 future.completeExceptionally(throwable);
             }
         };
-        if (server.isSameThread()) load.run();
-        else server.execute(load);
+
+        if (server.isSameThread()) schedule.run();
+        else server.execute(schedule);
         return future;
     }
 
