@@ -74,11 +74,14 @@ public final class CraftMapCanvas implements MapCanvas {
         return this.base[y * 128 + x];
     }
 
-    void setBase(byte[] base) {
+    // Public rather than package-private because CraftBukkit declares them that way: the renderer
+    // reads the drawn buffer straight out, and swaps the base layer in when a map's underlying
+    // image changes. Both hand back the live array by design - callers write through them.
+    public void setBase(byte[] base) {
         this.base = Objects.requireNonNull(base, "base");
     }
 
-    byte[] getBuffer() {
+    public byte[] getBuffer() {
         return this.buffer;
     }
 
@@ -148,16 +151,5 @@ public final class CraftMapCanvas implements MapCanvas {
             }
             x += sprite.getWidth() + 1;
         }
-    }
-
-    // CraftBukkit reads the drawn buffer straight out for rendering, and swaps the base layer in
-    // when a map's underlying image changes. Both are raw arrays by design - the renderer writes
-    // through them - so they are handed back as-is rather than copied.
-    public byte[] getBuffer() {
-        return this.buffer;
-    }
-
-    public void setBase(byte[] base) {
-        this.base = base;
     }
 }
