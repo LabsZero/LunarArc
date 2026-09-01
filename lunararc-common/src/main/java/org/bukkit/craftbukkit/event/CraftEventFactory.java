@@ -649,5 +649,41 @@ public class CraftEventFactory {
         return event;
     }
 
+    /**
+     * Fires {@link org.bukkit.event.entity.EntityChangeBlockEvent}, returning whether the change
+     * may proceed.
+     *
+     * <p>This is the hook for every block a mob alters rather than a player: endermen carrying
+     * blocks away, ravagers tearing through leaves, silverfish infesting stone, sheep cropping
+     * grass, falling sand landing. Returning false rather than the event keeps the call sites
+     * reading the way CraftBukkit's do, since almost all of them only care whether to go ahead.</p>
+     */
+    public static boolean callEntityChangeBlockEvent(
+            net.minecraft.world.entity.Entity entity,
+            net.minecraft.core.BlockPos position,
+            net.minecraft.world.level.block.state.BlockState newState) {
+        return callEntityChangeBlockEvent(entity, position, newState, false);
+    }
+
+    /** As above, with the event pre-cancelled, which a few CraftBukkit call sites rely on. */
+    public static boolean callEntityChangeBlockEvent(
+            net.minecraft.world.entity.Entity entity,
+            net.minecraft.core.BlockPos position,
+            net.minecraft.world.level.block.state.BlockState newState,
+            boolean cancelled) {
+        Block block = ((io.ampznetwork.lunararc.common.bridge.LevelBridge) entity.level())
+                .lunararc$getWorld()
+                .getBlockAt(position.getX(), position.getY(), position.getZ());
+
+        org.bukkit.event.entity.EntityChangeBlockEvent event =
+                new org.bukkit.event.entity.EntityChangeBlockEvent(
+                        ((io.ampznetwork.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity(),
+                        block,
+                        org.bukkit.craftbukkit.block.data.CraftBlockData.fromData(newState));
+        event.setCancelled(cancelled);
+        Bukkit.getPluginManager().callEvent(event);
+        return !event.isCancelled();
+    }
+
 
 }

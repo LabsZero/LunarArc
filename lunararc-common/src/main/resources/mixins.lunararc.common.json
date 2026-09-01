@@ -35,6 +35,7 @@
     "core.world.ExplosionMixin",
     "core.world.material.FlowingFluidMixin",
     "core.world.block.FireBlockMixin",
+    "core.entity.monster.RavagerMixin",
     "core.world.LevelChunkMixin",
     "core.world.BlockEntityMixin",
     "core.world.raid.RaidMixin",
