@@ -2,6 +2,7 @@
   "required": true,
   "minVersion": "0.8",
   "package": "io.ampznetwork.lunararc.common.mixin",
+  "plugin": "io.ampznetwork.lunararc.common.mixinplugin.LunarArcMixinConfigPlugin",
   "compatibilityLevel": "JAVA_21",
   "refmap": "mixins.lunararc.common.refmap.json",
   "mixins": [
