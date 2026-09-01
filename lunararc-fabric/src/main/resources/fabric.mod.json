@@ -15,6 +15,9 @@
   "icon": "assets/lunararc/icon.png",
   "environment": "*",
   "entrypoints": {
+    "preLaunch": [
+      "io.ampznetwork.lunararc.fabric.LunarArcFabricPreLaunch"
+    ],
     "main": [
       "io.ampznetwork.lunararc.fabric.LunarArcFabric"
     ]
