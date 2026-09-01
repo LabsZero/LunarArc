@@ -888,3 +888,94 @@ tasks.register('verifyMixinStaticVisibility') {
 }
 
 tasks.named('classes') { dependsOn tasks.named('verifyMixinStaticVisibility') }
+
+// LunarArc supplies CraftBukkit's added Minecraft members by mixin, because it cannot patch
+// Minecraft the way CraftBukkit does. Paper's own CraftBukkit classes - the ones donated verbatim
+// rather than reimplemented - are compiled against CraftBukkit's exact signatures, and the JVM
+// resolves calls on the full descriptor. A mixin-added member with the right name but a different
+// return type therefore does not satisfy them: the call fails at runtime with NoSuchMethodError
+// while the method visibly exists, which is as quiet as a bug gets. Entity.getBukkitEntity()
+// returned the org.bukkit.entity.Entity interface where CraftBukkit returns CraftEntity for
+// exactly this reason, and nothing caught it.
+tasks.register('verifyCraftBukkitMemberParity') {
+    group = 'verification'
+    description = 'Compares mixin-added members carrying CraftBukkit names against CraftBukkit\'s own signatures.'
+
+    def reference = rootProject.file('gradle/reference/craftbukkit-nms-members.txt')
+    def mixinSources = rootProject.fileTree(rootProject.projectDir) {
+        include '*/src/*/java/**/mixin/**/*.java'
+    }
+    inputs.file(reference)
+    inputs.files(mixinSources).withPropertyName('mixinSources')
+
+    doLast {
+        // owner simple name -> (method -> return type), as CraftBukkit declares it.
+        Map<String, Map<String, String>> expected = [:]
+        reference.eachLine { String line ->
+            if (line.startsWith('#') || line.trim().isEmpty()) return
+            def parts = line.split('\\|')
+            if (parts.length != 3) return
+            String simple = parts[0].substring(parts[0].lastIndexOf('.') + 1)
+            expected.computeIfAbsent(simple, { [:] }).put(parts[1], parts[2])
+        }
+
+        def modifiers = ['final', 'static', 'synchronized', 'abstract', 'transient', 'native',
+                         'default', 'strictfp'] as Set
+        def declaration = java.util.regex.Pattern.compile(
+            '^\\s*public\\s+([\\w.<>\\[\\],? ]+?)\\s+(\\w+)\\s*\\(')
+        def mixinTarget = java.util.regex.Pattern.compile(
+            '@Mixin\\s*\\(\\s*(?:value\\s*=\\s*)?(\\w+)\\.class')
+
+        List<String> mismatches = []
+        int checked = 0
+
+        mixinSources.each { File source ->
+            String text = source.getText('UTF-8')
+            if (!text.contains('@Mixin')) return
+            def target = mixinTarget.matcher(text)
+            if (!target.find()) return
+            Map<String, String> owned = expected.get(target.group(1))
+            if (owned == null) return
+
+            text.readLines().each { String line ->
+                def matcher = declaration.matcher(line)
+                if (!matcher.find()) return
+                String name = matcher.group(2)
+                // lunararc$-prefixed members are LunarArc's own bridge surface, deliberately named
+                // so they cannot collide with anything Minecraft or a loader declares.
+                if (name.startsWith('lunararc')) return
+                String declared = owned.get(name)
+                if (declared == null) return
+
+                String ours = matcher.group(1).trim().split('\\s+')
+                        .findAll { !modifiers.contains(it) }.join(' ')
+                checked++
+                if (simpleTypeName(ours) != simpleTypeName(declared)) {
+                    mismatches.add("  ${target.group(1)}#${name}: LunarArc declares ${ours}, " +
+                                   "CraftBukkit declares ${declared}  [${rootProject.relativePath(source)}]")
+                }
+            }
+        }
+
+        if (mismatches.isEmpty()) {
+            logger.lifecycle("CraftBukkit member parity: ${checked} mixin-added member(s) match CraftBukkit's signatures")
+        } else {
+            // Reported rather than thrown while the comparison is by source text and simple name:
+            // it can disagree on a type that is spelled differently but resolves the same. Tighten
+            // to a hard failure once the reported list has been walked and stays empty.
+            logger.warn("CraftBukkit member parity: ${mismatches.size()} mixin-added member(s) do not match " +
+                        "CraftBukkit's signature. Donated Paper code calling these fails at runtime with " +
+                        "NoSuchMethodError even though the method exists:")
+            mismatches.each { logger.warn(it) }
+        }
+    }
+}
+
+// Compared on the simple name: LunarArc writes some of these fully qualified and some imported,
+// and CraftBukkit's own sources vary the same way, so the package prefix carries no signal here.
+static String simpleTypeName(String type) {
+    String bare = type.replaceAll('<.*>', '').trim()
+    return bare.substring(bare.lastIndexOf('.') + 1)
+}
+
+tasks.named('classes') { dependsOn tasks.named('verifyCraftBukkitMemberParity') }
