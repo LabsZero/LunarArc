@@ -372,10 +372,18 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         if (mapped == null && !java.util.Objects.equals(lookupDescriptor, descriptor)) {
             mapped = METHOD_MAP.get(new MemberKey(spigotOwner, name, descriptor));
         }
-        if (mapped == null) mapped = METHOD_MAP.get(new MemberKey(spigotOwner, name, "*"));
+        // Both lookups below are descriptor-blind, so each answer is checked against the runtime
+        // class before it is allowed to rewrite a call site. See runtimeHasMethod.
+        if (mapped == null) {
+            String wildcard = METHOD_MAP.get(new MemberKey(spigotOwner, name, "*"));
+            if (wildcard != null && runtimeHasMethod(spigotOwner, wildcard, descriptor)) mapped = wildcard;
+        }
         if (mapped == null) {
             String unique = METHOD_NAME_MAP.get(new MemberNameKey(spigotOwner, name));
-            if (unique != null && !AMBIGUOUS.equals(unique)) mapped = unique;
+            if (unique != null && !AMBIGUOUS.equals(unique)
+                    && runtimeHasMethod(spigotOwner, unique, descriptor)) {
+                mapped = unique;
+            }
         }
         if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
             String key = spigotOwner + '#' + name + '#' + descriptor;
@@ -390,6 +398,63 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                     spigotOwner, name, descriptor);
         }
         return mapped != null ? mapped : name;
+    }
+
+    /**
+     * Whether the runtime owner really declares {@code mappedName} taking this call's argument count.
+     *
+     * <p>A name-keyed mapping carries no descriptor, so on its own it will happily rename a call to
+     * a method that shares a name somewhere in the table but has nothing to do with this call site.
+     * That is how WorldEdit's adapter ended up invoking
+     * {@code ServerLevel.containsAnyLiquid(int, int)} returning a LevelChunk - a method that exists
+     * in no namespace. The call was {@code getChunk(int, int)}; only the name was rewritten, and
+     * the JVM threw NoSuchMethodError at the call site.</p>
+     *
+     * <p>The AMBIGUOUS marking is not enough by itself: it only fires when one owner maps a single
+     * name to several different results, so a name that resolves uniquely for the owner it is
+     * looked up on still slips through even when it belongs to an unrelated member. Arity is a
+     * cheap, decisive cross-check - remapping never changes how many arguments a method takes -
+     * and it costs one reflective scan per distinct owner/name/arity, cached.</p>
+     *
+     * <p>When the runtime class cannot be resolved the guess is allowed through unchanged, so a
+     * class LunarArc cannot see is no worse off than before.</p>
+     */
+    private static boolean runtimeHasMethod(String spigotOwner, String mappedName, String descriptor) {
+        Class<?> runtimeOwner = runtimeClassFor(spigotOwner);
+        if (runtimeOwner == null) return true;
+        int arity;
+        try {
+            arity = org.objectweb.asm.Type.getArgumentTypes(descriptor).length;
+        } catch (RuntimeException malformedDescriptor) {
+            return true;
+        }
+        String key = runtimeOwner.getName() + '#' + mappedName + '#' + arity;
+        return "true".equals(boundedComputeIfAbsent(ALREADY_CORRECT_CACHE, key,
+                ignored -> Boolean.toString(declaresMethodWithArity(runtimeOwner, mappedName, arity))));
+    }
+
+    private static boolean declaresMethodWithArity(Class<?> runtimeOwner, String name, int arity) {
+        try {
+            for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
+                for (java.lang.reflect.Method candidate : current.getDeclaredMethods()) {
+                    if (candidate.getName().equals(name) && candidate.getParameterCount() == arity) return true;
+                }
+                if (interfaceDeclaresMethodWithArity(current.getInterfaces(), name, arity)) return true;
+            }
+        } catch (Throwable ignored) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean interfaceDeclaresMethodWithArity(Class<?>[] interfaces, String name, int arity) {
+        for (Class<?> iface : interfaces) {
+            for (java.lang.reflect.Method candidate : iface.getDeclaredMethods()) {
+                if (candidate.getName().equals(name) && candidate.getParameterCount() == arity) return true;
+            }
+            if (interfaceDeclaresMethodWithArity(iface.getInterfaces(), name, arity)) return true;
+        }
+        return false;
     }
 
     private String resolveInheritedBytecodeMember(String spigotOwner, String name, String descriptor, boolean method) {
