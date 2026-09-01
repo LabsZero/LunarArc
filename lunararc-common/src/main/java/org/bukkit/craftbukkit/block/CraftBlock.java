@@ -335,6 +335,23 @@ public class CraftBlock implements Block {
         };
     }
 
+    /**
+     * CraftBukkit's own Direction to BlockFace conversion, public because plugins call it and
+     * because CraftBukkit's implementation classes use it wherever a vanilla Direction has to be
+     * reported to the Bukkit API - the fluid-flow events among them.
+     */
+    public static BlockFace notchToBlockFace(net.minecraft.core.Direction notch) {
+        if (notch == null) return BlockFace.SELF;
+        return switch (notch) {
+            case DOWN -> BlockFace.DOWN;
+            case UP -> BlockFace.UP;
+            case NORTH -> BlockFace.NORTH;
+            case SOUTH -> BlockFace.SOUTH;
+            case WEST -> BlockFace.WEST;
+            case EAST -> BlockFace.EAST;
+        };
+    }
+
     private static net.minecraft.core.Direction toDirection(BlockFace face) {
         return switch (face) {
             case DOWN -> net.minecraft.core.Direction.DOWN;
