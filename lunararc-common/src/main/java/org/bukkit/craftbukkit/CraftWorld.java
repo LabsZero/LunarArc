@@ -96,6 +96,9 @@ public class CraftWorld implements World {
         this.uid = loadOrCreateWorldUid(world, name);
         this.worldBorder = new CraftWorldBorder(this);
         this.persistentDataContainer = org.bukkit.craftbukkit.persistence.CraftWorldPersistentData.get(world).container();
+        // CraftBukkit assigns Level.world as the world is created; plugins read that field
+        // reflectively, so it must be set before anyone can observe the level.
+        ((io.ampznetwork.lunararc.common.bridge.LevelBridge) world).lunararc$attachBukkitWorld(this);
     }
 
     private static String defaultWorldName(ServerLevel world) {

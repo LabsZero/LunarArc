@@ -279,7 +279,16 @@ public final class PluginClassLoader extends URLClassLoader
             digest.update(io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.minecraftVersion()
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
-            digest.update("compat-transform-v14-commodore".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            digest.update("compat-transform-v15-remap-validation".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+            // The token above has to be bumped by hand whenever the transform changes, and it was
+            // missed once already: a remapper fix shipped, every plugin kept loading the bad
+            // bytecode cached under the old key, and the fix looked like it had not worked.
+            // Folding the LunarArc version in makes that failure impossible - any build that
+            // changes the transformer also changes the key. Restarts on an unchanged build still
+            // hit the cache, which is what it is for.
+            digest.update(io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.lunarArcVersion()
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             ClassLoader owner = PluginClassLoader.class.getClassLoader();
             String mappingBase = "mappings/" + io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.minecraftVersion() + "/";

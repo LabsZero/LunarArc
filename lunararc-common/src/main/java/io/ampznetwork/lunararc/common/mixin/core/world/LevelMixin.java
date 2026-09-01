@@ -25,12 +25,33 @@ public abstract class LevelMixin implements io.ampznetwork.lunararc.common.bridg
         return this.getCraftServer();
     }
 
+    /**
+     * CraftBukkit's {@code Level.world} field, under its real name.
+     *
+     * <p>A getter was not enough. ProtocolLib's BukkitConverters resolves the NMS-world to
+     * Bukkit-world conversion by scanning Level for a <em>field</em> whose type is CraftWorld, and
+     * died in its static initializer with "Unable to find a field with the type CraftWorld in
+     * class net.minecraft.world.level.Level" - which took out packet handling for every plugin
+     * built on it. CraftBukkit declares the field and assigns it when the world is created, so
+     * that is what this does.</p>
+     */
+    public org.bukkit.craftbukkit.CraftWorld world;
+
+    @Override
+    public void lunararc$attachBukkitWorld(org.bukkit.craftbukkit.CraftWorld world) {
+        this.world = world;
+    }
+
     public org.bukkit.craftbukkit.CraftWorld getWorld() {
+        if (this.world != null) return this.world;
         Level level = (Level) (Object) this;
         if (!(level instanceof ServerLevel serverLevel)) {
             throw new IllegalStateException("Bukkit world requested from a non-server level");
         }
-        return LunarArcServerAccess.getCraftServer(serverLevel.getServer()).getCraftWorld(serverLevel);
+        // Resolving also populates the field, so a Level that was never handed to CraftWorld's
+        // constructor still ends up with it set rather than staying null for reflective readers.
+        this.world = LunarArcServerAccess.getCraftServer(serverLevel.getServer()).getCraftWorld(serverLevel);
+        return this.world;
     }
 
     public CraftServer getCraftServer() {

@@ -5,5 +5,8 @@ package io.ampznetwork.lunararc.common.bridge;
  * other compilation units at compile time unless surfaced through a real interface like this one. */
 public interface LevelBridge {
     org.bukkit.craftbukkit.CraftWorld lunararc$getWorld();
+
+    /** Binds the Bukkit world to {@code Level.world}; see LevelMixin for why that field exists. */
+    void lunararc$attachBukkitWorld(org.bukkit.craftbukkit.CraftWorld world);
     org.bukkit.craftbukkit.CraftServer lunararc$getCraftServer();
 }
