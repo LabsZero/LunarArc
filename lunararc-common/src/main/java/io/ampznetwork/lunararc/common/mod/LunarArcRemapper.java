@@ -589,19 +589,8 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     }
 
     private String resolveRuntimeMember(Class<?> runtimeOwner, String spigotName, boolean method) {
-        for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
-            String spigotOwner = MOJANG_TO_SPIGOT_CLASS.getOrDefault(current.getName().replace('.', '/'),
-                    current.getName().replace('.', '/'));
-            Map<MemberNameKey, String> names = method ? METHOD_NAME_MAP : FIELD_NAME_MAP;
-            String unique = names.get(new MemberNameKey(spigotOwner, spigotName));
-            if (unique != null && !AMBIGUOUS.equals(unique)) return unique;
-            if (method) {
-                for (Class<?> iface : current.getInterfaces()) {
-                    String resolved = resolveRuntimeMember(iface, spigotName, true);
-                    if (!resolved.equals(spigotName)) return resolved;
-                }
-            }
-        }
+        String resolved = lookupRuntimeMember(runtimeOwner, spigotName, method);
+        if (resolved != null) return resolved;
         if (isNmsRuntimeClass(runtimeOwner) && !namesRuntimeMember(runtimeOwner, spigotName, method)) {
             LOGGER.warn("No reflective mapping found for {} {}#{} — a plugin's reflective lookup is "
                             + "likely to throw NoSuchFieldException/NoSuchMethodException.",
@@ -610,8 +599,53 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         return spigotName;
     }
 
+    /**
+     * The search half of {@link #resolveRuntimeMember}, returning {@code null} rather than the
+     * unchanged name when nothing matches.
+     *
+     * <p>Keeping the search separate from the report is what stops one miss from being logged
+     * dozens of times. The walk descends into every interface of every superclass, so a lookup
+     * that finds nothing used to reach the warning once per interface visited, each line naming
+     * whichever interface the recursion happened to be standing on rather than the class the
+     * plugin actually asked about. A single miss on {@code CompoundTag#putFloat} became forty
+     * lines blaming {@code Tag}, {@code EntityGetter}, {@code LevelHeightAccessor} and the rest.
+     * Only the entry point above reports now, so one miss is one line, against the real owner.</p>
+     */
+    private String lookupRuntimeMember(Class<?> runtimeOwner, String spigotName, boolean method) {
+        for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
+            String spigotOwner = MOJANG_TO_SPIGOT_CLASS.getOrDefault(current.getName().replace('.', '/'),
+                    current.getName().replace('.', '/'));
+            Map<MemberNameKey, String> names = method ? METHOD_NAME_MAP : FIELD_NAME_MAP;
+            String unique = names.get(new MemberNameKey(spigotOwner, spigotName));
+            if (unique != null && !AMBIGUOUS.equals(unique)) return unique;
+            if (method) {
+                for (Class<?> iface : current.getInterfaces()) {
+                    String resolved = lookupRuntimeMember(iface, spigotName, true);
+                    if (resolved != null) return resolved;
+                }
+            }
+        }
+        return null;
+    }
+
     private String resolveRuntimeMethod(Class<?> runtimeOwner, String spigotName, Class<?>[] parameterTypes) {
         String parameterDescriptor = parameterTypes == null ? null : runtimeParameterDescriptor(parameterTypes);
+        String resolved = lookupRuntimeMethod(runtimeOwner, spigotName, parameterTypes, parameterDescriptor);
+        if (resolved != null) return resolved;
+        if (isNmsRuntimeClass(runtimeOwner) && !namesRuntimeMember(runtimeOwner, spigotName, true)) {
+            LOGGER.warn("No reflective mapping found for method {}#{}{} — a plugin's reflective lookup is "
+                            + "likely to throw NoSuchMethodException.",
+                    runtimeOwner.getName(), spigotName, parameterDescriptor == null ? "(*)" : parameterDescriptor);
+        }
+        return spigotName;
+    }
+
+    /**
+     * The search half of {@link #resolveRuntimeMethod}; see {@link #lookupRuntimeMember} for why
+     * the report lives in the caller rather than here.
+     */
+    private String lookupRuntimeMethod(Class<?> runtimeOwner, String spigotName, Class<?>[] parameterTypes,
+                                       String parameterDescriptor) {
         for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
             String spigotOwner = MOJANG_TO_SPIGOT_CLASS.getOrDefault(current.getName().replace('.', '/'),
                     current.getName().replace('.', '/'));
@@ -622,16 +656,11 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
             String unique = METHOD_NAME_MAP.get(new MemberNameKey(spigotOwner, spigotName));
             if (unique != null && !AMBIGUOUS.equals(unique)) return unique;
             for (Class<?> iface : current.getInterfaces()) {
-                String resolved = resolveRuntimeMethod(iface, spigotName, parameterTypes);
-                if (!resolved.equals(spigotName)) return resolved;
+                String resolved = lookupRuntimeMethod(iface, spigotName, parameterTypes, parameterDescriptor);
+                if (resolved != null) return resolved;
             }
         }
-        if (isNmsRuntimeClass(runtimeOwner) && !namesRuntimeMember(runtimeOwner, spigotName, true)) {
-            LOGGER.warn("No reflective mapping found for method {}#{}{} — a plugin's reflective lookup is "
-                            + "likely to throw NoSuchMethodException.",
-                    runtimeOwner.getName(), spigotName, parameterDescriptor == null ? "(*)" : parameterDescriptor);
-        }
-        return spigotName;
+        return null;
     }
 
     private static String findMethodMappingByParameters(String spigotOwner, String spigotName,

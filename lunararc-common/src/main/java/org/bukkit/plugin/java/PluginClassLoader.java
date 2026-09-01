@@ -106,7 +106,7 @@ public final class PluginClassLoader extends URLClassLoader
             if (loaded == null) {
                 if (isPlatformClass(name)) {
                     try {
-                        loaded = loadPlatformClass(name);
+                        loaded = loadPlatformClassWithBackstop(name);
                     } catch (ClassNotFoundException notOnServer) {
                         // "Platform" is a prefix guess, not a guarantee the server has the class.
                         // javax.* in particular is mostly JDK but not entirely: plugins shade
@@ -136,7 +136,7 @@ public final class PluginClassLoader extends URLClassLoader
         if (result != null) return result;
 
         if (isPlatformClass(name)) {
-            try { return loadPlatformClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return loadPlatformClassWithBackstop(name); } catch (ClassNotFoundException ignored) {}
         }
 
         String path = name.replace('.', '/').concat(".class");
@@ -307,19 +307,54 @@ public final class PluginClassLoader extends URLClassLoader
         }
     }
 
+    /**
+     * Resolve a class the server owns, asking for the name exactly as requested before considering
+     * a mapped alternative.
+     *
+     * <p>The order matters, and getting it backwards is not a missed optimisation but a wrong
+     * answer. By the time a plugin class is linking, its bytecode has already been through
+     * {@link LunarArcRemapper}: every class reference in it is a Mojang name. Mapping again here
+     * treats that Mojang name as though it were still Spigot, and the two namespaces are not a
+     * subset of one another - they collide. {@code net/minecraft/core/Registry} is the sharp
+     * example: Spigot calls Mojang's {@code Registry} {@code IRegistry}, and reuses the name
+     * {@code Registry} for Mojang's {@code IdMap}. So a second mapping pass turned a resolved,
+     * correct {@code Registry} reference into {@code IdMap}, this loader handed back a class whose
+     * name did not match the one asked for, and the JVM rejected it with
+     * {@code NoClassDefFoundError: net/minecraft/core/Registry} - which is exactly how WorldEdit
+     * died in {@code PaperweightAdapter.initializeRegistries}. Every NMS class whose name Spigot
+     * left alone survived the double pass untouched, which is why only the colliding handful ever
+     * showed.</p>
+     *
+     * <p>Reflection does not need the mapping to happen here. {@code Class.forName} and
+     * {@code ClassLoader.loadClass} calls in plugin bytecode are rewritten to
+     * {@link io.ampznetwork.lunararc.common.mod.LunarArcReflectionBridge}, which maps the string
+     * name itself and falls back to the unmapped one. What is left for this method is the legacy
+     * versioned CraftBukkit package, whose names genuinely do not exist on a 1.21.1 server, so
+     * trying the requested name first costs one failed lookup and never picks the wrong class.</p>
+     */
     private Class<?> loadPlatformClass(String name) throws ClassNotFoundException {
-        if (name.startsWith("org.bukkit.craftbukkit.") || (this.remapNms && name.startsWith("net.minecraft."))) {
-            String mapped = remapper.map(name.replace('.', '/')).replace('/', '.');
-            if (!mapped.equals(name)) {
-                try {
-                    return getParent().loadClass(mapped);
-                } catch (ClassNotFoundException ignored) {
-
-                }
-            }
-        }
         try {
             return getParent().loadClass(name);
+        } catch (ClassNotFoundException notUnderRequestedName) {
+            if (name.startsWith("org.bukkit.craftbukkit.") || (this.remapNms && name.startsWith("net.minecraft."))) {
+                String mapped = remapper.map(name.replace('.', '/')).replace('/', '.');
+                if (!mapped.equals(name)) {
+                    try {
+                        return getParent().loadClass(mapped);
+                    } catch (ClassNotFoundException ignored) {
+                    }
+                }
+            }
+            throw notUnderRequestedName;
+        }
+    }
+
+    /**
+     * {@link #loadPlatformClass} plus the mod class loader as a last resort.
+     */
+    private Class<?> loadPlatformClassWithBackstop(String name) throws ClassNotFoundException {
+        try {
+            return loadPlatformClass(name);
         } catch (ClassNotFoundException notOnParent) {
             // The parent is whichever loader built this plugin's provider, normally the mod's own
             // loader, which sees Minecraft. That is an assumption about how the active loader
