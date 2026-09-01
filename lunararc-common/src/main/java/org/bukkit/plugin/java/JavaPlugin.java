@@ -222,6 +222,15 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
     }
 
 
+    /**
+     * Bukkit declares this on JavaPlugin and plugins call it - ProtocolLib does so in onLoad, and
+     * without it got NoSuchMethodError before it could initialize. It was simply missing here.
+     */
+    @NotNull
+    protected final ClassLoader getClassLoader() {
+        return this.classLoader;
+    }
+
     public final void init(@NotNull Server server, @NotNull PluginDescriptionFile description, @NotNull File dataFolder,
             @NotNull File file, @NotNull ClassLoader classLoader, @NotNull PluginMeta pluginMeta,
             @NotNull Logger logger) {

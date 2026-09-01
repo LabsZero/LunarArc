@@ -377,7 +377,15 @@ public final class CraftMagicNumbers implements UnsafeValues {
                 active = commodore;
                 if (active == null) {
                     try {
-                        active = commodore = new Commodore();
+                        Commodore created = new Commodore();
+                        // Paper's Commodore does not build its reroute tables in the constructor -
+                        // they stay null until updateReroute runs, and convert() then dies with a
+                        // NullPointerException out of rerouteMethods on the first class that
+                        // reaches a reroute lookup. CraftBukkit drives this from the server once
+                        // its compatibility set is known; Paper disables that set outright and
+                        // leaves it permanently empty, so nothing is enabled here either.
+                        created.updateReroute(compatibility -> false);
+                        active = commodore = created;
                     } catch (Throwable ex) {
                         commodoreUnavailable = true;
                         Bukkit.getLogger().log(java.util.logging.Level.SEVERE,
