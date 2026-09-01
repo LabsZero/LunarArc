@@ -121,9 +121,29 @@ public abstract class ServerLoginPacketListenerMixin implements ServerLoginPacke
         ci.cancel();
     }
 
-    @Override
-    public void lunararc$preLogin(GameProfile profile) throws Exception {
-        String playerName = profile.getName();
+    /**
+     * Fire Bukkit's pre-login events for {@code gameprofile}, under CraftBukkit's own name.
+     *
+     * <p>CraftBukkit declares {@code callPlayerPreLoginEvents} on this class and calls it from
+     * both login paths; Paper widens it to return the profile the events settled on. Plugins that
+     * inject a login of their own drive that pair reflectively rather than reimplementing the
+     * event contract: Floodgate's SpigotDataHandler builds a GameProfile for a Bedrock player,
+     * then invokes {@code callPlayerPreLoginEvents(GameProfile)} followed by
+     * {@code startClientVerification(GameProfile)} - and its ClassNames initializer asserts both
+     * exist before Floodgate will enable at all. Keeping the events behind a
+     * {@code lunararc}-prefixed name left that lookup empty, so this carries the real one.</p>
+     *
+     * <p>Declared public where CraftBukkit has it private, because a private method added by a
+     * mixin is not guaranteed to keep its name through merging. Nothing reads the modifier -
+     * Floodgate calls {@code setAccessible} either way - so the wider one is the safe choice.</p>
+     *
+     * <p>The profile comes back unchanged. Paper replaces it with whatever a listener left on the
+     * event's PlayerProfile, which needs CraftPlayerProfile from Paper's server internals; until
+     * LunarArc carries that, returning the input matches CraftBukkit's own behaviour rather than
+     * pretending to honour a mutation that never happened.</p>
+     */
+    public GameProfile callPlayerPreLoginEvents(GameProfile gameprofile) throws Exception {
+        String playerName = gameprofile.getName();
         SocketAddress remoteAddress = this.connection.getRemoteAddress();
         if (!(remoteAddress instanceof InetSocketAddress inetAddress)) {
             throw new IllegalStateException("Login connection does not expose an InetSocketAddress");
@@ -131,12 +151,12 @@ public abstract class ServerLoginPacketListenerMixin implements ServerLoginPacke
 
         InetAddress address = inetAddress.getAddress();
         AsyncPlayerPreLoginEvent asyncEvent =
-                new AsyncPlayerPreLoginEvent(playerName, address, profile.getId());
+                new AsyncPlayerPreLoginEvent(playerName, address, gameprofile.getId());
         org.bukkit.Bukkit.getPluginManager().callEvent(asyncEvent);
 
         if (PlayerPreLoginEvent.getHandlerList().getRegisteredListeners().length != 0) {
             PlayerPreLoginEvent syncEvent =
-                    new PlayerPreLoginEvent(playerName, address, profile.getId());
+                    new PlayerPreLoginEvent(playerName, address, gameprofile.getId());
 
             if (asyncEvent.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
                 syncEvent.disallow(
@@ -161,16 +181,40 @@ public abstract class ServerLoginPacketListenerMixin implements ServerLoginPacke
 
             if (syncEvent.getResult() != PlayerPreLoginEvent.Result.ALLOWED) {
                 this.disconnect(LunarArcComponentPipeline.fromAdventure(syncEvent.kickMessage()));
-                return;
             }
         } else if (asyncEvent.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
             this.disconnect(LunarArcComponentPipeline.fromAdventure(asyncEvent.kickMessage()));
-            return;
         }
 
+        return gameprofile;
+    }
+
+    /**
+     * Kick with a legacy-formatted string, the overload CraftBukkit adds beside vanilla's
+     * Component one.
+     *
+     * <p>Floodgate rejects a Bedrock login through it ({@code LOGIN_DISCONNECT}), and asserts it
+     * exists during class initialization. The body follows Paper's rather than CraftBukkit's:
+     * section-legacy deserialization instead of {@code Component.literal}, so a kick message
+     * carrying hex colours arrives coloured.</p>
+     */
+    public void disconnect(String reason) {
+        this.disconnect(LunarArcComponentPipeline.fromAdventure(
+                net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection()
+                        .deserialize(reason)));
+    }
+
+    @Override
+    public void lunararc$preLogin(GameProfile profile) throws Exception {
+        GameProfile resolved = this.callPlayerPreLoginEvents(profile);
+
+        // callPlayerPreLoginEvents disconnects on a denied result but still returns, the way
+        // Paper's does. Paper guards the follow-up work with the same connection check rather
+        // than an early return, so a kicked login stops here without a second code path.
         ((MinecraftServerBridge) this.server).lunararc$queueTask(() -> {
+            if (!this.connection.isConnected()) return;
             this.lunararc$preLoginCompleted = true;
-            this.startClientVerification(profile);
+            this.startClientVerification(resolved);
         });
     }
 

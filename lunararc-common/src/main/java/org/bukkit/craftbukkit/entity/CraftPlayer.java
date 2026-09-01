@@ -513,6 +513,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         }
     }
 
+    /**
+     * The player's authlib profile.
+     *
+     * <p>Not part of the Bukkit API - CraftBukkit declares it on CraftPlayer, and plugins reach it
+     * reflectively by exactly this name and signature. Floodgate's SpigotSkinApplier is the one in
+     * front of us: its ClassNames initializer looks up {@code getProfile} on CraftPlayer, asserts
+     * the result is non-null, and died in {@code <clinit>} with "Get profile method cannot be null"
+     * because LunarArc's CraftPlayer never declared it. Same body as CraftBukkit's.</p>
+     */
+    public com.mojang.authlib.GameProfile getProfile() {
+        return getHandle().getGameProfile();
+    }
+
     @Override
     public UUID getUniqueId() {
         return getHandle().getUUID();
