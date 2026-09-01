@@ -34,6 +34,7 @@
     "core.world.BoundTickingBlockEntityMixin",
     "core.world.ExplosionMixin",
     "core.world.material.FlowingFluidMixin",
+    "core.world.block.FireBlockMixin",
     "core.world.LevelChunkMixin",
     "core.world.BlockEntityMixin",
     "core.world.raid.RaidMixin",

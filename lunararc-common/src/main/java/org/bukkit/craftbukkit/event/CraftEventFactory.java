@@ -619,5 +619,35 @@ public class CraftEventFactory {
         return event;
     }
 
+    /**
+     * Fires {@link org.bukkit.event.block.BlockIgniteEvent} for a block set alight by another
+     * block.
+     *
+     * <p>The cause is read off the igniting block rather than passed in, as CraftBukkit does, so
+     * lava reports LAVA and a dispenser reports FLINT_AND_STEEL; anything else, fire included, is
+     * SPREAD. Plugins branch on that cause, so deriving it here keeps every call site honest
+     * without each one having to work it out.</p>
+     */
+    public static org.bukkit.event.block.BlockIgniteEvent callBlockIgniteEvent(
+            net.minecraft.world.level.Level level,
+            net.minecraft.core.BlockPos ignited,
+            net.minecraft.core.BlockPos source) {
+        org.bukkit.World world =
+                ((io.ampznetwork.lunararc.common.bridge.LevelBridge) level).lunararc$getWorld();
+        Block igniter = world.getBlockAt(source.getX(), source.getY(), source.getZ());
+
+        org.bukkit.event.block.BlockIgniteEvent.IgniteCause cause = switch (igniter.getType()) {
+            case LAVA -> org.bukkit.event.block.BlockIgniteEvent.IgniteCause.LAVA;
+            case DISPENSER -> org.bukkit.event.block.BlockIgniteEvent.IgniteCause.FLINT_AND_STEEL;
+            // Fire, or anything else that is not specifically recognised, counts as spread.
+            default -> org.bukkit.event.block.BlockIgniteEvent.IgniteCause.SPREAD;
+        };
+
+        org.bukkit.event.block.BlockIgniteEvent event = new org.bukkit.event.block.BlockIgniteEvent(
+                world.getBlockAt(ignited.getX(), ignited.getY(), ignited.getZ()), cause, igniter);
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
 
 }
