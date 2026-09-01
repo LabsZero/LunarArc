@@ -43,6 +43,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     private static final Map<String, String> RUNTIME_METHOD_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, String> BYTECODE_FIELD_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, String> BYTECODE_METHOD_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, String> ALREADY_CORRECT_CACHE = new ConcurrentHashMap<>();
     private static final int DYNAMIC_CACHE_LIMIT = 16_384;
 
     private final boolean remapNms;
@@ -353,7 +354,8 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                     ignored -> resolveInheritedBytecodeMember(spigotOwner, name, descriptor, false));
             if (name.equals(mapped)) mapped = null;
         }
-        if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
+        if (mapped == null && spigotOwner.startsWith("net/minecraft/")
+                && !namesRuntimeMember(runtimeClassFor(spigotOwner), name, false)) {
             LOGGER.warn("No mapping found for NMS field {}#{} {} — plugin bytecode will keep the "
                             + "unmapped name and is likely to throw NoSuchFieldError at runtime.",
                     spigotOwner, name, descriptor);
@@ -381,7 +383,8 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                     ignored -> resolveInheritedBytecodeMember(spigotOwner, name, descriptor, true));
             if (name.equals(mapped)) mapped = null;
         }
-        if (mapped == null && spigotOwner.startsWith("net/minecraft/")) {
+        if (mapped == null && spigotOwner.startsWith("net/minecraft/")
+                && !namesRuntimeMember(runtimeClassFor(spigotOwner), name, true)) {
             LOGGER.warn("No mapping found for NMS method {}#{} {} — plugin bytecode will keep the "
                             + "unmapped name and is likely to throw NoSuchMethodError at runtime.",
                     spigotOwner, name, descriptor);
@@ -475,6 +478,89 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     }
 
 
+    /**
+     * Whether {@code name} already names a real member of the runtime class.
+     *
+     * <p>Not finding a Spigot mapping is only a problem when the name needed one. Three kinds of
+     * name legitimately pass through unchanged, and all three were being reported as failures:</p>
+     * <ul>
+     *   <li>Members inherited from the JDK. {@code getClass} on an NBT tag comes from Object and
+     *       {@code iterator} from List; Spigot never renamed them because they were never
+     *       Minecraft's to rename.</li>
+     *   <li>Members CraftBukkit and Paper add to Minecraft classes - {@code getBukkitEntity},
+     *       {@code addFreshEntityWithPassengers}, the static {@code getServer}. These carry the
+     *       same name in either namespace by construction, since they are not obfuscated at all.
+     *       LunarArc supplies them by mixin, so by the time a plugin loads they are really there.</li>
+     *   <li>Names that are already Mojang, because the plugin was written against a Mojang-mapped
+     *       API in that spot, or because Spigot left that particular name alone.</li>
+     * </ul>
+     *
+     * <p>Asking the loaded class settles all three at once and needs no table: if the unmapped name
+     * resolves, passing it through was right and there is nothing to report. What remains after
+     * this filter is a name that genuinely should have been mapped and was not - which is the only
+     * case the warning was ever meant to describe, and now the only case it does.</p>
+     */
+    private static boolean namesRuntimeMember(Class<?> runtimeOwner, String name, boolean method) {
+        if (runtimeOwner == null || name == null) return false;
+        String key = runtimeOwner.getName() + '#' + name + '#' + (method ? 'M' : 'F');
+        return "true".equals(boundedComputeIfAbsent(ALREADY_CORRECT_CACHE, key,
+                ignored -> Boolean.toString(declaresMember(runtimeOwner, name, method))));
+    }
+
+    private static boolean declaresMember(Class<?> runtimeOwner, String name, boolean method) {
+        try {
+            for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
+                if (method) {
+                    for (java.lang.reflect.Method candidate : current.getDeclaredMethods()) {
+                        if (candidate.getName().equals(name)) return true;
+                    }
+                    if (interfaceDeclaresMethod(current.getInterfaces(), name)) return true;
+                } else {
+                    for (java.lang.reflect.Field candidate : current.getDeclaredFields()) {
+                        if (candidate.getName().equals(name)) return true;
+                    }
+                }
+            }
+            if (method) {
+                // An interface has no superclass, so the walk above never reaches Object - yet
+                // every interface implicitly declares its public methods, and getClass on an NBT
+                // tag arrives here exactly that way.
+                for (java.lang.reflect.Method candidate : Object.class.getDeclaredMethods()) {
+                    if (candidate.getName().equals(name)) return true;
+                }
+            }
+        } catch (Throwable ignored) {
+            // A member whose own types are missing cannot be inspected. Treat that as "unknown"
+            // rather than "absent": staying quiet is better than a warning we cannot stand behind.
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean interfaceDeclaresMethod(Class<?>[] interfaces, String name) {
+        for (Class<?> iface : interfaces) {
+            for (java.lang.reflect.Method candidate : iface.getDeclaredMethods()) {
+                if (candidate.getName().equals(name)) return true;
+            }
+            if (interfaceDeclaresMethod(iface.getInterfaces(), name)) return true;
+        }
+        return false;
+    }
+
+    /** The loaded Minecraft class behind a Spigot owner name, or null if it cannot be resolved. */
+    private static Class<?> runtimeClassFor(String spigotOwner) {
+        // getOrDefault, not get: the owner may already be a Mojang name, which is one of the cases
+        // this is here to recognise.
+        String mojangOwner = CLASS_MAP.getOrDefault(spigotOwner, spigotOwner);
+        try {
+            ClassLoader loader = LunarArcServer.modClassLoader();
+            if (loader == null) loader = LunarArcRemapper.class.getClassLoader();
+            return Class.forName(mojangOwner.replace('/', '.'), false, loader);
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return null;
+        }
+    }
+
     private static String boundedComputeIfAbsent(Map<String, String> cache, String key,
                                                   java.util.function.Function<String, String> mapping) {
         String existing = cache.get(key);
@@ -516,7 +602,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 }
             }
         }
-        if (isNmsRuntimeClass(runtimeOwner)) {
+        if (isNmsRuntimeClass(runtimeOwner) && !namesRuntimeMember(runtimeOwner, spigotName, method)) {
             LOGGER.warn("No reflective mapping found for {} {}#{} — a plugin's reflective lookup is "
                             + "likely to throw NoSuchFieldException/NoSuchMethodException.",
                     method ? "method" : "field", runtimeOwner.getName(), spigotName);
@@ -540,7 +626,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 if (!resolved.equals(spigotName)) return resolved;
             }
         }
-        if (isNmsRuntimeClass(runtimeOwner)) {
+        if (isNmsRuntimeClass(runtimeOwner) && !namesRuntimeMember(runtimeOwner, spigotName, true)) {
             LOGGER.warn("No reflective mapping found for method {}#{}{} — a plugin's reflective lookup is "
                             + "likely to throw NoSuchMethodException.",
                     runtimeOwner.getName(), spigotName, parameterDescriptor == null ? "(*)" : parameterDescriptor);
