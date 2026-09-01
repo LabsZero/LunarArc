@@ -70,14 +70,14 @@ public abstract class LevelChunkMixin implements io.ampznetwork.lunararc.common.
 
     @Unique
     private org.bukkit.craftbukkit.CraftWorld lunararc$craftWorld() {
-        if (!(this.level instanceof net.minecraft.server.level.ServerLevel serverLevel)) return null;
-        for (org.bukkit.World world : org.bukkit.Bukkit.getWorlds()) {
-            if (world instanceof org.bukkit.craftbukkit.CraftWorld craftWorld
-                    && craftWorld.getHandle() == serverLevel) {
-                return craftWorld;
-            }
-        }
-        return null;
+        // Read the Bukkit world straight off the Level, the way CraftBukkit's own chunk code
+        // does. This used to scan Bukkit.getWorlds() for the one whose handle matched, which
+        // allocated a fresh List.copyOf of every world on each call - and this runs once per
+        // chunk load and once per unload, so a command that generates terrain in bulk (a
+        // random-teleport search walking far, ungenerated chunks) paid for thousands of
+        // throwaway lists and linear scans inside a single tick.
+        if (!(this.level instanceof net.minecraft.server.level.ServerLevel)) return null;
+        return ((io.ampznetwork.lunararc.common.bridge.LevelBridge) this.level).lunararc$getWorld();
     }
 
     @Inject(method = "setLoaded", at = @At("HEAD"), require = 0)

@@ -221,8 +221,22 @@ public final class CraftMagicNumbers implements UnsafeValues {
         return BuiltInRegistries.ITEM.get(key);
     }
 
+    // CraftBukkit resolves a block or item to its Material through a map built once at startup.
+    // Resolving it by name instead - registry key, ResourceLocation.toString(), then
+    // Material.matchMaterial's own normalisation - allocates several strings per lookup, and
+    // this is the hot path behind Block.getType(): a random-teleport search calls it for every
+    // candidate position it probes. Memoise it the same way, lazily rather than at class init,
+    // because on a hybrid server the modded half of the registries is not populated yet when
+    // this class loads and LunarArcDynamicBukkitEnums may still have to mint the Material.
+    // A given Block or Item instance always maps to the same Material, so the memo never goes
+    // stale, and it is bounded by the size of the registries.
+    private static final java.util.Map<Block, Material> BLOCK_MATERIAL = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<Item, Material> ITEM_MATERIAL = new java.util.concurrent.ConcurrentHashMap<>();
+
     public static Material getMaterial(Block block) {
         Objects.requireNonNull(block, "block");
+        Material cached = BLOCK_MATERIAL.get(block);
+        if (cached != null) return cached;
         ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
         if (key == null) throw new IllegalArgumentException("Unregistered block: " + block);
         Material material = Material.matchMaterial(key.toString());
@@ -231,11 +245,14 @@ public final class CraftMagicNumbers implements UnsafeValues {
             material = io.ampznetwork.lunararc.common.server.LunarArcDynamicBukkitEnums.material(key);
         }
         if (material == null) throw new IllegalArgumentException("No Bukkit Material exists for block " + key);
+        BLOCK_MATERIAL.put(block, material);
         return material;
     }
 
     public static Material getMaterial(Item item) {
         Objects.requireNonNull(item, "item");
+        Material cached = ITEM_MATERIAL.get(item);
+        if (cached != null) return cached;
         ResourceLocation key = BuiltInRegistries.ITEM.getKey(item);
         if (key == null) throw new IllegalArgumentException("Unregistered item: " + item);
         Material material = Material.matchMaterial(key.toString());
@@ -244,6 +261,7 @@ public final class CraftMagicNumbers implements UnsafeValues {
             material = io.ampznetwork.lunararc.common.server.LunarArcDynamicBukkitEnums.material(key);
         }
         if (material == null) throw new IllegalArgumentException("No Bukkit Material exists for item " + key);
+        ITEM_MATERIAL.put(item, material);
         return material;
     }
 

@@ -128,11 +128,11 @@ public class CraftBlock implements Block {
     }
 
     private static Material materialFromState(net.minecraft.world.level.block.state.BlockState state) {
-        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
-        if (key == null) throw new IllegalStateException("NMS block is not registered: " + state.getBlock());
-        Material material = Material.matchMaterial(key.toString());
-        if (material == null) throw new IllegalStateException("No Bukkit Material exists for NMS block " + key);
-        return material;
+        // Go through CraftMagicNumbers rather than resolving the name here. It is the same
+        // lookup CraftBukkit's CraftBlock uses, it is memoised so reading a block's type costs
+        // no string building, and it consults the dynamic Material registry - so a block from a
+        // Forge/Fabric mod resolves instead of throwing, which the local copy of this did.
+        return org.bukkit.craftbukkit.util.CraftMagicNumbers.getMaterial(state.getBlock());
     }
 
     @Override

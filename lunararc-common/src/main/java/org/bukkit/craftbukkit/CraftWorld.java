@@ -138,8 +138,19 @@ public class CraftWorld implements World {
         }
     }
 
+    // Derived from an immutable dimension key, so it never changes for a given world. It used to
+    // be recomputed - a fresh String, a fresh byte[] and an MD5 digest - on every call, and
+    // CraftServer.craftWorld() calls it for each world lookup, including the one every chunk
+    // decoration makes on the worldgen threads. Compute it once instead.
+    private volatile UUID lunararcLegacyDimensionUid;
+
     public UUID getLegacyDimensionUID() {
-        return UUID.nameUUIDFromBytes(world.dimension().location().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        UUID cached = lunararcLegacyDimensionUid;
+        if (cached != null) return cached;
+        cached = UUID.nameUUIDFromBytes(
+                world.dimension().location().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        lunararcLegacyDimensionUid = cached;
+        return cached;
     }
 
     public ServerLevel getHandle() {

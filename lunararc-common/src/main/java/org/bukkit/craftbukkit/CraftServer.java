@@ -394,6 +394,14 @@ public class CraftServer implements Server {
             java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private CraftWorld craftWorld(net.minecraft.server.level.ServerLevel level) {
+        // Fast path: an already-registered world needs no index maintenance. This is not a
+        // micro-optimisation for its own sake - every chunk decoration looks its world up here,
+        // on the worldgen threads, and the registration block below touches four maps and used
+        // to hash a UUID out of the dimension name each time. Bulk terrain generation, such as a
+        // random-teleport search walking far chunks, ran all of that per chunk.
+        CraftWorld existing = worldByDimension.get(level.dimension());
+        if (existing != null) return existing;
+
         CraftWorld craft = worldByDimension.computeIfAbsent(level.dimension(), ignored -> new CraftWorld(level));
         worldCache.putIfAbsent(craft.getUID(), craft);
 
