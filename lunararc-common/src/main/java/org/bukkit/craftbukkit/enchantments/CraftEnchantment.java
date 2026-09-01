@@ -31,7 +31,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /** Concrete CraftBukkit view of a live 1.21.1 NMS enchantment. */
-public final class CraftEnchantment extends Enchantment {
+public final class CraftEnchantment extends Enchantment implements org.bukkit.craftbukkit.util.Handleable<net.minecraft.world.item.enchantment.Enchantment> {
     private final NamespacedKey key;
     private final Holder<net.minecraft.world.item.enchantment.Enchantment> handle;
 
@@ -224,5 +224,50 @@ public final class CraftEnchantment extends Enchantment {
         }
 
         @Override public @NotNull RegistryKey<B> registryKey() { return this.registryKey; }
+    }
+
+    // CraftBukkit's conversion pair for this registry type. Plugins call these directly to cross
+    // between the Bukkit handle and the NMS object, so they carry CraftBukkit's names verbatim.
+    public static Enchantment minecraftToBukkit(net.minecraft.world.item.enchantment.Enchantment minecraft) {
+        return org.bukkit.craftbukkit.CraftRegistry.minecraftToBukkit(minecraft, net.minecraft.core.registries.Registries.ENCHANTMENT, org.bukkit.Registry.ENCHANTMENT);
+    }
+
+    public static Enchantment minecraftHolderToBukkit(net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment> minecraft) {
+        return CraftEnchantment.minecraftToBukkit(minecraft.value());
+    }
+
+    public static net.minecraft.world.item.enchantment.Enchantment bukkitToMinecraft(Enchantment bukkit) {
+        return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraft(bukkit);
+    }
+
+    public static net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment> bukkitToMinecraftHolder(Enchantment bukkit) {
+        com.google.common.base.Preconditions.checkArgument(bukkit != null);
+
+        net.minecraft.core.Registry<net.minecraft.world.item.enchantment.Enchantment> registry = org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(net.minecraft.core.registries.Registries.ENCHANTMENT);
+
+        if (registry.wrapAsHolder(CraftEnchantment.bukkitToMinecraft(bukkit)) instanceof net.minecraft.core.Holder.Reference<net.minecraft.world.item.enchantment.Enchantment> holder) {
+            return holder;
+        }
+
+        throw new IllegalArgumentException("No Reference holder found for " + bukkit
+                + ", this can happen if a plugin creates its own enchantment without properly registering it.");
+    }
+
+    public static String bukkitToString(Enchantment bukkit) {
+        com.google.common.base.Preconditions.checkArgument(bukkit != null);
+
+        return bukkit.getKey().toString();
+    }
+
+    public static Enchantment stringToBukkit(String string) {
+        com.google.common.base.Preconditions.checkArgument(string != null);
+
+        // Names were serialized before keys were, so replay the rename first, then the key rename.
+        string = org.bukkit.craftbukkit.legacy.FieldRename.convertEnchantmentName(org.bukkit.craftbukkit.util.ApiVersion.CURRENT, string);
+        string = string.toLowerCase(java.util.Locale.ROOT);
+        org.bukkit.NamespacedKey key = org.bukkit.NamespacedKey.fromString(string);
+        if (key == null) return null;
+
+        return org.bukkit.craftbukkit.CraftRegistry.get(org.bukkit.Registry.ENCHANTMENT, key, org.bukkit.craftbukkit.util.ApiVersion.CURRENT);
     }
 }

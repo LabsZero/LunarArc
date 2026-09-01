@@ -19,7 +19,7 @@ import org.bukkit.potion.PotionEffectTypeCategory;
 import org.jetbrains.annotations.NotNull;
 
 /** Direct Minecraft 1.21.1-backed PotionEffectType adapter. */
-public final class CraftPotionEffectType extends PotionEffectType {
+public final class CraftPotionEffectType extends PotionEffectType implements org.bukkit.craftbukkit.util.Handleable<MobEffect> {
     private final NamespacedKey key;
     private final MobEffect handle;
     private final int id;
@@ -191,5 +191,21 @@ public final class CraftPotionEffectType extends PotionEffectType {
     @Override
     public String toString() {
         return "CraftPotionEffectType[" + this.key + "]";
+    }
+
+    public static MobEffect bukkitToMinecraft(PotionEffectType bukkit) {
+        return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraft(bukkit);
+    }
+
+    public static net.minecraft.core.Holder<MobEffect> bukkitToMinecraftHolder(PotionEffectType bukkit) {
+        return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraftHolder(bukkit, net.minecraft.core.registries.Registries.MOB_EFFECT);
+    }
+
+    public static PotionEffectType.Category fromNMS(MobEffectCategory category) {
+        return switch (category) {
+            case BENEFICIAL -> PotionEffectType.Category.BENEFICIAL;
+            case HARMFUL -> PotionEffectType.Category.HARMFUL;
+            case NEUTRAL -> PotionEffectType.Category.NEUTRAL;
+        };
     }
 }

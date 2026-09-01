@@ -35,4 +35,29 @@ public final class CraftBiome {
         return registry.getHolder(net.minecraft.resources.ResourceKey.create(Registries.BIOME, id))
                 .orElseThrow(() -> new IllegalArgumentException("Unknown biome " + key));
     }
+
+    /**
+     * CraftBukkit's Bukkit-facing conversion pair.
+     *
+     * <p>Routed through this file's own registry lookup rather than
+     * {@code CraftRegistry.minecraftToBukkit}, so all four methods here agree on where a biome
+     * comes from. Paper's null and {@code CUSTOM} handling is kept: a biome the Bukkit registry
+     * does not know reads back as {@code CUSTOM} instead of throwing, and {@code CUSTOM} has no
+     * NMS counterpart to convert to.</p>
+     */
+    public static Biome minecraftToBukkit(net.minecraft.world.level.biome.Biome minecraft) {
+        if (minecraft == null) throw new IllegalArgumentException("minecraft cannot be null");
+        var server = io.ampznetwork.lunararc.common.mod.server.LunarArcServer.minecraftServer();
+        if (server == null) throw new IllegalStateException("MinecraftServer has not been attached to LunarArc yet");
+        ResourceLocation id = server.registryAccess().registryOrThrow(Registries.BIOME).getKey(minecraft);
+        if (id == null) return Biome.CUSTOM;
+        Biome biome = LunarArcRegistryAccess.INSTANCE.getRegistry(Biome.class)
+                .get(new NamespacedKey(id.getNamespace(), id.getPath()));
+        return biome == null ? Biome.CUSTOM : biome;
+    }
+
+    public static net.minecraft.world.level.biome.Biome bukkitToMinecraft(Biome bukkit) {
+        if (bukkit == null || bukkit == Biome.CUSTOM) return null;
+        return bukkitToMinecraftHolder(bukkit).value();
+    }
 }

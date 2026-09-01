@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Bukkit PatternType backed by the active 1.21.1 banner-pattern registry. */
 @SuppressWarnings("removal")
-public final class CraftPatternType implements PatternType {
+public final class CraftPatternType implements PatternType, org.bukkit.craftbukkit.util.Handleable<BannerPattern> {
     private static final AtomicInteger NEXT_ORDINAL = new AtomicInteger();
     private final NamespacedKey key;
     private final BannerPattern handle;
@@ -55,4 +55,31 @@ public final class CraftPatternType implements PatternType {
         return this == other || (other instanceof PatternType pattern && this.key.equals(pattern.getKey()));
     }
     @Override public int hashCode() { return this.key.hashCode(); }
+
+    // CraftBukkit's conversion pair for this registry type. Plugins call these directly to cross
+    // between the Bukkit handle and the NMS object, so they carry CraftBukkit's names verbatim.
+    public static PatternType minecraftToBukkit(BannerPattern minecraft) {
+        return org.bukkit.craftbukkit.CraftRegistry.minecraftToBukkit(minecraft, net.minecraft.core.registries.Registries.BANNER_PATTERN, org.bukkit.Registry.BANNER_PATTERN);
+    }
+
+    public static PatternType minecraftHolderToBukkit(net.minecraft.core.Holder<BannerPattern> minecraft) {
+        return CraftPatternType.minecraftToBukkit(minecraft.value());
+    }
+
+    public static BannerPattern bukkitToMinecraft(PatternType bukkit) {
+        return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraft(bukkit);
+    }
+
+    public static net.minecraft.core.Holder<BannerPattern> bukkitToMinecraftHolder(PatternType bukkit) {
+        com.google.common.base.Preconditions.checkArgument(bukkit != null);
+
+        net.minecraft.core.Registry<BannerPattern> registry = org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(net.minecraft.core.registries.Registries.BANNER_PATTERN);
+
+        if (registry.wrapAsHolder(CraftPatternType.bukkitToMinecraft(bukkit)) instanceof net.minecraft.core.Holder.Reference<BannerPattern> holder) {
+            return holder;
+        }
+
+        throw new IllegalArgumentException("No Reference holder found for " + bukkit
+                + ", this can happen if a plugin creates its own banner pattern without properly registering it.");
+    }
 }

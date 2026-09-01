@@ -79,4 +79,51 @@ public final class CraftPotionType implements PotionType.InternalPotionData {
         if (type == null) throw new IllegalStateException("No Bukkit PotionEffectType for " + id);
         return new PotionEffect(type, effect.getDuration(), effect.getAmplifier(), effect.isAmbient(), effect.isVisible(), effect.showIcon());
     }
+
+    public static PotionType minecraftToBukkit(Potion minecraft) {
+        return org.bukkit.craftbukkit.CraftRegistry.minecraftToBukkit(minecraft, net.minecraft.core.registries.Registries.POTION, org.bukkit.Registry.POTION);
+    }
+
+    public static PotionType minecraftHolderToBukkit(net.minecraft.core.Holder<Potion> minecraft) {
+        return CraftPotionType.minecraftToBukkit(minecraft.value());
+    }
+
+    public static Potion bukkitToMinecraft(PotionType bukkit) {
+        com.google.common.base.Preconditions.checkArgument(bukkit != null);
+
+        return org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(net.minecraft.core.registries.Registries.POTION)
+                .getOptional(org.bukkit.craftbukkit.util.CraftNamespacedKey.toMinecraft(bukkit.getKey()))
+                .orElseThrow();
+    }
+
+    public static net.minecraft.core.Holder<Potion> bukkitToMinecraftHolder(PotionType bukkit) {
+        com.google.common.base.Preconditions.checkArgument(bukkit != null);
+
+        net.minecraft.core.Registry<Potion> registry = org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(net.minecraft.core.registries.Registries.POTION);
+
+        if (registry.wrapAsHolder(CraftPotionType.bukkitToMinecraft(bukkit)) instanceof net.minecraft.core.Holder.Reference<Potion> holder) {
+            return holder;
+        }
+
+        throw new IllegalArgumentException("No Reference holder found for " + bukkit
+                + ", this can happen if a plugin creates its own potion type without properly registering it.");
+    }
+
+    public static String bukkitToString(PotionType bukkit) {
+        com.google.common.base.Preconditions.checkArgument(bukkit != null);
+
+        return bukkit.getKey().toString();
+    }
+
+    public static PotionType stringToBukkit(String string) {
+        com.google.common.base.Preconditions.checkArgument(string != null);
+
+        // Names were serialized before keys were, so replay the rename first, then the key rename.
+        string = org.bukkit.craftbukkit.legacy.FieldRename.convertPotionTypeName(org.bukkit.craftbukkit.util.ApiVersion.CURRENT, string);
+        string = string.toLowerCase(java.util.Locale.ROOT);
+        org.bukkit.NamespacedKey key = org.bukkit.NamespacedKey.fromString(string);
+        if (key == null) return null;
+
+        return org.bukkit.craftbukkit.CraftRegistry.get(org.bukkit.Registry.POTION, key, org.bukkit.craftbukkit.util.ApiVersion.CURRENT);
+    }
 }
