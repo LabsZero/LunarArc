@@ -1,5 +1,6 @@
 package io.ampznetwork.lunararc.quilt;
 
+import io.ampznetwork.lunararc.common.LunarArcClientSideGuard;
 import io.ampznetwork.lunararc.common.mod.server.LunarArcServer;
 import io.ampznetwork.lunararc.quilt.event.QuiltBlockBreakEvents;
 import io.ampznetwork.lunararc.quilt.network.QuiltChannelRegistration;
@@ -13,8 +14,8 @@ public final class LunarArcQuilt implements ModInitializer {
     public void onInitialize() {
         // Quilt runs LunarArc through its Fabric compatibility layer - hence ModInitializer
         // above - so the Fabric loader API answers this here too.
-        io.ampznetwork.lunararc.common.LunarArcClientSideGuard.requireDedicatedServer(
-                "Quilt", FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT);
+        LunarArcClientSideGuard.requireDedicatedServer(
+                FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT);
         LunarArcServer.installPlatform("Quilt", LunarArcQuilt.class.getClassLoader());
         QuiltServerLifecycle.register();
         QuiltChannelRegistration.register();

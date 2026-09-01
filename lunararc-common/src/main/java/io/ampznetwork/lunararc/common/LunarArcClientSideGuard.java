@@ -35,30 +35,22 @@ public final class LunarArcClientSideGuard {
     /**
      * Stops startup if {@code clientSide} is true.
      *
-     * @param platform    the loader's own name, used in the message so the reader can tell which
-     *                    of the four installs they are looking at
-     * @param clientSide  whether the loader reports this process as a client
+     * @param clientSide whether the loader reports this process as a client
      */
-    public static void requireDedicatedServer(String platform, boolean clientSide) {
+    public static void requireDedicatedServer(boolean clientSide) {
         if (!clientSide) return;
-        throw new ClientSideNotSupportedException(message(platform));
+        throw new ClientSideNotSupportedException(MESSAGE);
     }
 
-    /** The wording shown to whoever installed it, kept in one place for all four loaders. */
-    public static String message(String platform) {
-        return """
+    /**
+     * What the person who installed it reads. Deliberately short: it appears in a loader's error
+     * popup, where the only things that help are what is wrong and what to do about it. Someone
+     * who has put a server jar in a client instance does not need the platform explained.
+     */
+    public static final String MESSAGE = """
 
-                LunarArc is a dedicated-server platform, not a client mod.
+            LunarArc is a server-only mod and is not needed on the client.
 
-                This build runs a Bukkit/Spigot/Paper plugin server on top of %s, and only works \
-                when a dedicated server starts it. It has no client-side behaviour at all, so it \
-                cannot run in a client instance or a singleplayer world.
-
-                To fix this: remove LunarArc from this instance's mods folder.
-
-                To use LunarArc: install it into a dedicated server instead. Players join that \
-                server with an ordinary unmodified client - they do not need this mod, or any \
-                other, to connect.
-                """.formatted(platform);
-    }
+            Remove it from this instance's mods folder to continue.
+            """;
 }

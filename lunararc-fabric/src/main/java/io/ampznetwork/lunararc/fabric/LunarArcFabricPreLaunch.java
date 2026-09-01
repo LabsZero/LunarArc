@@ -22,7 +22,6 @@ public final class LunarArcFabricPreLaunch implements PreLaunchEntrypoint {
 
     @Override
     public void onPreLaunch() {
-        LunarArcClientSideGuard.requireDedicatedServer(
-                "Fabric", FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT);
+        LunarArcClientSideGuard.requireDedicatedServer(FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT);
     }
 }
