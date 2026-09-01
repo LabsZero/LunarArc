@@ -80,8 +80,21 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
         return lunararc$bukkitEntity;
     }
 
-    public org.bukkit.entity.Entity getBukkitEntity() {
-        return this.lunararc$getBukkitEntity();
+    /**
+     * CraftBukkit adds this method to {@code net.minecraft.world.entity.Entity} by patching the
+     * class; LunarArc adds it here instead, because the Minecraft runtime belongs to the loader.
+     *
+     * <p>The return type is {@link CraftEntity} rather than the {@code org.bukkit.entity.Entity}
+     * interface, and that is load-bearing rather than cosmetic. Paper's own CraftBukkit classes -
+     * the ones LunarArc donates verbatim out of the Paper jar rather than reimplementing - are
+     * compiled against {@code CraftEntity getBukkitEntity()}, so the call site in their bytecode
+     * carries the descriptor {@code ()Lorg/bukkit/craftbukkit/entity/CraftEntity;}. A method of the
+     * same name returning the interface does not satisfy it: the JVM matches on the full
+     * descriptor, so every such call would fail at runtime with NoSuchMethodError even though the
+     * method visibly exists.</p>
+     */
+    public CraftEntity getBukkitEntity() {
+        return (CraftEntity) this.lunararc$getBukkitEntity();
     }
 
 
