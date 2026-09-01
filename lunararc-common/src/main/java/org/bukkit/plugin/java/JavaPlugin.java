@@ -245,10 +245,13 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
 
         this.lifecycleManager = io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventManager.create(
                 this, () -> this.allowsLifecycleRegistration);
-        if (!(classLoader instanceof PluginClassLoader pluginClassLoader)) {
-            throw new IllegalArgumentException("Plugin class loader is not a PluginClassLoader");
+        // Only the classic loader has a JavaPluginLoader behind it. Paper treats getPluginLoader()
+        // as a deprecated legacy concept and a paper-plugin.yml plugin has none, so its absence is
+        // normal rather than an error - throwing here rejected every paper plugin outright, which
+        // is what stopped Veinminer loading even after its constructor was let through.
+        if (classLoader instanceof PluginClassLoader pluginClassLoader) {
+            this.loader = pluginClassLoader.getPluginLoaderInstance();
         }
-        this.loader = pluginClassLoader.getPluginLoaderInstance();
     }
 
     @NotNull
@@ -257,10 +260,10 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
             throw new IllegalArgumentException("Class cannot be null");
         }
         ClassLoader classLoader = clazz.getClassLoader();
-        if (!(classLoader instanceof PluginClassLoader pluginClassLoader)) {
-            throw new IllegalArgumentException(clazz + " is not initialized by " + PluginClassLoader.class.getName());
+        if (!(classLoader instanceof io.papermc.paper.plugin.provider.classloader.ConfiguredPluginClassLoader configuredPluginClassLoader)) {
+            throw new IllegalArgumentException(clazz + " is not initialized by a " + io.papermc.paper.plugin.provider.classloader.ConfiguredPluginClassLoader.class);
         }
-        JavaPlugin plugin = pluginClassLoader.getPluginInstance();
+        JavaPlugin plugin = configuredPluginClassLoader.getPlugin();
         if (plugin == null) {
             throw new IllegalStateException("Cannot get plugin for " + clazz + " before it is initialized");
         }
@@ -273,10 +276,10 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
             throw new IllegalArgumentException("Class cannot be null");
         }
         ClassLoader classLoader = clazz.getClassLoader();
-        if (!(classLoader instanceof PluginClassLoader pluginClassLoader)) {
-            throw new IllegalArgumentException(clazz + " is not provided by a plugin");
+        if (!(classLoader instanceof io.papermc.paper.plugin.provider.classloader.ConfiguredPluginClassLoader configuredPluginClassLoader)) {
+            throw new IllegalArgumentException(clazz + " is not provided by a " + io.papermc.paper.plugin.provider.classloader.ConfiguredPluginClassLoader.class);
         }
-        JavaPlugin plugin = pluginClassLoader.getPluginInstance();
+        JavaPlugin plugin = configuredPluginClassLoader.getPlugin();
         if (plugin == null) {
             throw new IllegalStateException("Cannot get providing plugin for " + clazz + " before it is initialized");
         }
