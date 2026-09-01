@@ -178,8 +178,17 @@ public final class LunarArcComponentPipeline {
         sendSystem(player, fromLegacy(legacy));
     }
 
+    /**
+     * Chat sent as an Adventure component.
+     *
+     * <p>Linkified like the legacy path above. Only the legacy path used to be, so a plugin
+     * writing "visit https://example.net" as a String got a clickable link while the same plugin
+     * sending it as a component got flat text - and modern plugins overwhelmingly send components.
+     * The replacement leaves any click event the plugin set alone, so this only ever adds a link
+     * where the text had none.</p>
+     */
     public static void sendSystem(ServerPlayer player, Component component) {
-        sendSystem(player, fromAdventure(component));
+        sendSystem(player, fromAdventure(linkifyUrls(component)));
     }
 
     public static void sendSystem(ServerPlayer player, BaseComponent... components) {
