@@ -807,7 +807,23 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                     : new LunarArcRemapper(false);
 
             ClassVisitor remapper = new ClassRemapper(writer, effective);
-            ClassVisitor visitor = classNeedsNms ? new ReflectionMemberVisitor(remapper) : remapper;
+            // The reflection redirect goes on every class of a Spigot-mapped plugin, not only the
+            // ones whose constant pool mentions net.minecraft. Plugins routinely put reflection
+            // behind a generic helper: DecentHolograms looks its NMS members up through a
+            // ReflectField class that holds the owner as a Class<?> and the name as a String, so
+            // nothing in that class names net.minecraft and the constant-pool test says no. The
+            // lookup then reaches the JVM with Spigot's obfuscated name and fails - "Could not
+            // find field 'e' in class ServerCommonPacketListenerImpl" - even though the mapping
+            // for it is right there in plugin-remap.tsv.
+            //
+            // Arclight installs its equivalent (ArclightRedirectAdapter) from
+            // ClassLoaderRemapper#remapClassFile on every class it remaps, with no such test, and
+            // this is why plugins of that shape work there. Widening costs nothing in either
+            // correctness or reach: it only rewrites reflective lookups, never real call sites,
+            // LunarArcReflectionBridge returns the requested name unchanged when no mapping
+            // applies, and remapNms is already false for Paper-mapped plugins, so their bytecode
+            // is untouched exactly as before.
+            ClassVisitor visitor = remapNms ? new ReflectionMemberVisitor(remapper) : remapper;
             visitor = effective.compatibilityVisitor(visitor, className);
             reader.accept(visitor, 0);
             byte[] remapped = writer.toByteArray();

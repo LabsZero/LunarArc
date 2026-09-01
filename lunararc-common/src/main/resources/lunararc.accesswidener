@@ -13,6 +13,9 @@ accessible class net/minecraft/server/network/ServerLoginPacketListenerImpl$Stat
 accessible field net/minecraft/server/network/ServerCommonPacketListenerImpl connection Lnet/minecraft/network/Connection;
 
 # Connection - expose address field for real IP injection
+# TAB's NMSImplementationProvider reads Connection.channel to install its tab-list packet
+# tracker on player join; without this it dies with IllegalAccessError in PlayerJoinEvent.
+accessible field net/minecraft/network/Connection channel Lio/netty/channel/Channel;
 accessible field net/minecraft/network/Connection address Ljava/net/SocketAddress;
 mutable field net/minecraft/network/Connection address Ljava/net/SocketAddress;
 

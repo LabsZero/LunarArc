@@ -95,6 +95,10 @@ public final class BukkitCommandWrapper {
                 : builder;
 
         String remaining = target.getRemainingLowerCase();
+        // A TabCompleter returning null is Bukkit's documented way of saying "no suggestions of
+        // my own"; CraftBukkit treats it as an empty list. DecentHolograms' /dh returns null and
+        // took the whole ServerboundCommandSuggestionPacket down with an NPE here.
+        if (completions == null) return target.buildFuture();
         for (String completion : completions) {
             if (completion != null && completion.toLowerCase(java.util.Locale.ROOT).startsWith(remaining)) {
                 target.suggest(completion);

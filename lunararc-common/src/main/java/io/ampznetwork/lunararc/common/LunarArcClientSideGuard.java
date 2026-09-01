@@ -30,6 +30,18 @@ public final class LunarArcClientSideGuard {
         ClientSideNotSupportedException(String message) {
             super(message);
         }
+
+        /**
+         * No stack trace. Every frame in it would be LunarArc's own startup path, which tells the
+         * person who installed this into a client nothing they can act on, and buries the two
+         * lines that do under a screen of noise. The loader still prints the message; suppressing
+         * the trace is what turns this from a crash report into an instruction. Loaders that
+         * prefix the exception's type name still show it - that is theirs to format, not ours.
+         */
+        @Override
+        public synchronized Throwable fillInStackTrace() {
+            return this;
+        }
     }
 
     /**
