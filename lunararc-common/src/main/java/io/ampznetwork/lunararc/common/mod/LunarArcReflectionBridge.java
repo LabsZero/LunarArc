@@ -54,6 +54,11 @@ public final class LunarArcReflectionBridge {
 
     public static Field getField(Class<?> owner, String name) throws NoSuchFieldException {
         String mapped = REMAPPER.mapRuntimeFieldName(owner, name);
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.REFLECT) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.reflect("getField {}#{} -> {} (from {})",
+                    owner.getName(), name, mapped,
+                    io.ampznetwork.lunararc.common.LunarArcDebug.caller());
+        }
         try {
             return owner.getField(mapped);
         } catch (NoSuchFieldException first) {
@@ -73,6 +78,11 @@ public final class LunarArcReflectionBridge {
 
     public static Field getDeclaredField(Class<?> owner, String name) throws NoSuchFieldException {
         String mapped = REMAPPER.mapRuntimeFieldName(owner, name);
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.REFLECT) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.reflect("getDeclaredField {}#{} -> {} (from {})",
+                    owner.getName(), name, mapped,
+                    io.ampznetwork.lunararc.common.LunarArcDebug.caller());
+        }
         try {
             return owner.getDeclaredField(mapped);
         } catch (NoSuchFieldException first) {
@@ -88,6 +98,11 @@ public final class LunarArcReflectionBridge {
 
     public static Method getMethod(Class<?> owner, String name, Class<?>[] parameterTypes) throws NoSuchMethodException {
         String mapped = REMAPPER.mapRuntimeMethodName(owner, name, parameterTypes);
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.REFLECT) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.reflect("getMethod {}#{}({} args) -> {} (from {})",
+                    owner.getName(), name, parameterTypes == null ? 0 : parameterTypes.length, mapped,
+                    io.ampznetwork.lunararc.common.LunarArcDebug.caller());
+        }
         try {
             return owner.getMethod(mapped, parameterTypes);
         } catch (NoSuchMethodException first) {
@@ -107,6 +122,11 @@ public final class LunarArcReflectionBridge {
 
     public static Method getDeclaredMethod(Class<?> owner, String name, Class<?>[] parameterTypes) throws NoSuchMethodException {
         String mapped = REMAPPER.mapRuntimeMethodName(owner, name, parameterTypes);
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.REFLECT) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.reflect("getDeclaredMethod {}#{}({} args) -> {} (from {})",
+                    owner.getName(), name, parameterTypes == null ? 0 : parameterTypes.length, mapped,
+                    io.ampznetwork.lunararc.common.LunarArcDebug.caller());
+        }
         try {
             return owner.getDeclaredMethod(mapped, parameterTypes);
         } catch (NoSuchMethodException first) {

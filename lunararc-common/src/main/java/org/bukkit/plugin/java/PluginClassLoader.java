@@ -343,16 +343,28 @@ public final class PluginClassLoader extends URLClassLoader
      */
     private Class<?> loadPlatformClass(String name) throws ClassNotFoundException {
         try {
-            return getParent().loadClass(name);
+            Class<?> found = getParent().loadClass(name);
+            if (io.ampznetwork.lunararc.common.LunarArcDebug.CLASSLOAD) {
+                io.ampznetwork.lunararc.common.LunarArcDebug.classload("{}: parent resolved as requested", name);
+            }
+            return found;
         } catch (ClassNotFoundException notUnderRequestedName) {
             if (name.startsWith("org.bukkit.craftbukkit.") || (this.remapNms && name.startsWith("net.minecraft."))) {
                 String mapped = remapper.map(name.replace('.', '/')).replace('/', '.');
                 if (!mapped.equals(name)) {
                     try {
-                        return getParent().loadClass(mapped);
+                        Class<?> found = getParent().loadClass(mapped);
+                        if (io.ampznetwork.lunararc.common.LunarArcDebug.CLASSLOAD) {
+                            io.ampznetwork.lunararc.common.LunarArcDebug.classload(
+                                    "{}: absent under that name, parent resolved mapped name {}", name, mapped);
+                        }
+                        return found;
                     } catch (ClassNotFoundException ignored) {
                     }
                 }
+            }
+            if (io.ampznetwork.lunararc.common.LunarArcDebug.CLASSLOAD) {
+                io.ampznetwork.lunararc.common.LunarArcDebug.classload("{}: not on the parent under any name", name);
             }
             throw notUnderRequestedName;
         }

@@ -824,6 +824,10 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
             // applies, and remapNms is already false for Paper-mapped plugins, so their bytecode
             // is untouched exactly as before.
             ClassVisitor visitor = remapNms ? new ReflectionMemberVisitor(remapper) : remapper;
+            if (io.ampznetwork.lunararc.common.LunarArcDebug.REMAP) {
+                io.ampznetwork.lunararc.common.LunarArcDebug.remap(
+                        "{}: nmsSymbols={} reflectionBridge={}", className, classNeedsNms, remapNms);
+            }
             visitor = effective.compatibilityVisitor(visitor, className);
             reader.accept(visitor, 0);
             byte[] remapped = writer.toByteArray();
