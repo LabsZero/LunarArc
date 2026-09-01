@@ -184,4 +184,9 @@ public final class CraftChunk implements Chunk {
     @Override public boolean equals(Object other) {
         return other instanceof CraftChunk that && x == that.x && z == that.z && world.getUID().equals(that.world.getUID());
     }
+
+    /** CraftBukkit's narrowed {@code getWorld}; plugins holding a CraftChunk use it to skip the cast. */
+    public CraftWorld getCraftWorld() {
+        return (CraftWorld) this.getWorld();
+    }
 }

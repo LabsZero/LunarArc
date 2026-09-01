@@ -382,5 +382,28 @@ public class CraftItemStack extends ItemStack {
         return true;
     }
 
+    // CraftBukkit's NMS bridging statics. unwrap and getOrCloneOnMutation in particular are how
+    // Paper's own code, and plugins copying it, get at the backing stack without a defensive copy.
+    public static net.minecraft.world.item.ItemStack unwrap(ItemStack bukkit) {
+        CraftItemStack craft = getCraftStack(bukkit);
+        return craft == null || craft.handle == null ? net.minecraft.world.item.ItemStack.EMPTY : craft.handle;
+    }
 
+    public static net.minecraft.world.item.ItemStack getOrCloneOnMutation(ItemStack old, ItemStack newInstance) {
+        return old == newInstance ? unwrap(old) : asNMSCopy(newInstance);
+    }
+
+    public static net.minecraft.world.item.ItemStack copyNMSStack(net.minecraft.world.item.ItemStack original, int amount) {
+        net.minecraft.world.item.ItemStack stack = original.copy();
+        stack.setCount(amount);
+        return stack;
+    }
+
+    public static CraftItemStack asNewCraftStack(net.minecraft.world.item.Item item) {
+        return asNewCraftStack(item, 1);
+    }
+
+    public static CraftItemStack asNewCraftStack(net.minecraft.world.item.Item item, int amount) {
+        return new CraftItemStack(new net.minecraft.world.item.ItemStack(item, amount));
+    }
 }

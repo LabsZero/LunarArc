@@ -1030,4 +1030,60 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
 
 
     }
+
+    // CraftBukkit's non-API surface on CraftEntity. getHandleRaw and the momentum pair are how
+    // plugins written against older CraftBukkit still reach the entity and its velocity; the
+    // Bukkit-values pair is the persistent-data round trip CraftBukkit performs on save and load.
+    public Entity getHandleRaw() {
+        return this.entity;
+    }
+
+    public org.bukkit.util.Vector getMomentum() {
+        return this.getVelocity();
+    }
+
+    public void setMomentum(org.bukkit.util.Vector value) {
+        this.setVelocity(value);
+    }
+
+    public void storeBukkitValues(net.minecraft.nbt.CompoundTag c) {
+        if (this.getPersistentDataContainer() instanceof CraftPersistentDataContainer container
+                && !container.isEmpty()) {
+            c.put("BukkitValues", container.toTagCompound());
+        }
+    }
+
+    public void readBukkitValues(net.minecraft.nbt.CompoundTag c) {
+        if (c.get("BukkitValues") instanceof net.minecraft.nbt.CompoundTag base
+                && this.getPersistentDataContainer() instanceof CraftPersistentDataContainer container) {
+            container.putAll(base);
+        }
+    }
+
+    /**
+     * Resend this entity to one player.
+     *
+     * <p>CraftBukkit pushes the add-entity packet straight down the connection, which needs the
+     * tracker's ServerEntity. That field is not reachable here, so the resend goes through the
+     * tracker's own remove/update pair instead - the player is dropped from the tracking set and
+     * immediately re-added, which makes the tracker rebuild and send the entity. Same observable
+     * effect, using only what vanilla exposes.</p>
+     */
+    public void update(net.minecraft.server.level.ServerPlayer player) {
+        if (!this.getHandle().isAlive()) {
+            return;
+        }
+
+        net.minecraft.server.level.ChunkMap chunkMap =
+                ((org.bukkit.craftbukkit.CraftWorld) this.getWorld()).getHandle().getChunkSource().chunkMap;
+        net.minecraft.server.level.ChunkMap.TrackedEntity tracked =
+                ((io.ampznetwork.lunararc.common.bridge.access.ChunkMapAccessBridge) (Object) chunkMap)
+                        .lunararc$getEntityMap().get(this.getEntityId());
+        if (tracked == null) {
+            return;
+        }
+
+        tracked.removePlayer(player);
+        tracked.updatePlayer(player);
+    }
 }

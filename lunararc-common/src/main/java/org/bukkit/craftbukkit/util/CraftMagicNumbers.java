@@ -371,31 +371,8 @@ public final class CraftMagicNumbers implements UnsafeValues {
     public static byte[] applyPaperPluginRewrites(PluginDescriptionFile pdf, String path, byte[] bytecode) {
         if (DISABLE_OLD_API_SUPPORT || commodoreUnavailable || pdf == null) return bytecode;
 
-        Commodore active = commodore;
-        if (active == null) {
-            synchronized (CraftMagicNumbers.class) {
-                active = commodore;
-                if (active == null) {
-                    try {
-                        Commodore created = new Commodore();
-                        // Paper's Commodore does not build its reroute tables in the constructor -
-                        // they stay null until updateReroute runs, and convert() then dies with a
-                        // NullPointerException out of rerouteMethods on the first class that
-                        // reaches a reroute lookup. CraftBukkit drives this from the server once
-                        // its compatibility set is known; Paper disables that set outright and
-                        // leaves it permanently empty, so nothing is enabled here either.
-                        created.updateReroute(compatibility -> false);
-                        active = commodore = created;
-                    } catch (Throwable ex) {
-                        commodoreUnavailable = true;
-                        Bukkit.getLogger().log(java.util.logging.Level.SEVERE,
-                                "Paper's plugin rewriter is unavailable; plugins built against an older "
-                                        + "Bukkit API may fail on renamed API constants", ex);
-                        return bytecode;
-                    }
-                }
-            }
-        }
+        Commodore active = getCommodore();
+        if (active == null) return bytecode;
 
         try {
             // Paper disables loadCompatibilities() outright on 1.21.1, so activeCompatibilities is
@@ -912,5 +889,63 @@ public final class CraftMagicNumbers implements UnsafeValues {
         } catch (IOException exception) {
             throw new IllegalArgumentException("Could not deserialize NBT", exception);
         }
+    }
+
+    /**
+     * The Spigot mappings hash for this Minecraft version, under CraftBukkit's own name.
+     *
+     * <p>Plugins that ship a versioned NMS adapter - ProtocolLib, the NBT libraries, anything
+     * built on a per-mappings-revision shim - read this to decide whether their adapter matches
+     * the server before they touch NMS at all. Reporting Spigot's 1.21.1 revision is the correct
+     * answer here for the same reason it is on Paper: the plugin was compiled against Spigot
+     * mappings, LunarArc remaps it Spigot to Mojang on load, and the adapter it picks off this
+     * value is the one that pipeline expects.</p>
+     *
+     * <p>The value is CraftBukkit's own constant for 1.21.1, not something derived here. It is
+     * tied to the Minecraft version, so it changes only when the server moves versions.</p>
+     */
+    public String getMappingsVersion() {
+        return "7092ff1ff9352ad7e2260dc150e6a3ec";
+    }
+
+    /**
+     * The shared Commodore, under CraftBukkit's name.
+     *
+     * <p>CraftBukkit hands this out so plugin loaders can run the same rewriter it does. Built on
+     * first use here, the same instance {@link #applyPaperPluginRewrites} works with, and null if
+     * Commodore could not be constructed at all rather than throwing at the caller. Static where
+     * CraftBukkit has it on the instance, because everything reaching it here is static too.</p>
+     */
+    public static Commodore getCommodore() {
+        Commodore active = commodore;
+        if (active != null || commodoreUnavailable) {
+            return active;
+        }
+        synchronized (CraftMagicNumbers.class) {
+            if (commodore == null && !commodoreUnavailable) {
+                try {
+                    Commodore created = new Commodore();
+                    // Paper's Commodore does not build its reroute tables in the constructor -
+                    // they stay null until updateReroute runs, and convert() then dies with a
+                    // NullPointerException out of rerouteMethods on the first class that reaches a
+                    // reroute lookup. CraftBukkit drives this from the server once its
+                    // compatibility set is known; Paper disables that set outright and leaves it
+                    // permanently empty, so nothing is enabled here either.
+                    created.updateReroute(compatibility -> false);
+                    commodore = created;
+                } catch (Throwable ex) {
+                    commodoreUnavailable = true;
+                    Bukkit.getLogger().log(java.util.logging.Level.SEVERE,
+                            "Paper's plugin rewriter is unavailable; plugins built against an older "
+                                    + "Bukkit API may fail on renamed API constants", ex);
+                }
+            }
+            return commodore;
+        }
+    }
+
+    /** The registry key backing a Material, as CraftBukkit exposes it. */
+    public static net.minecraft.resources.ResourceLocation key(Material mat) {
+        return org.bukkit.craftbukkit.util.CraftNamespacedKey.toMinecraft(mat.getKey());
     }
 }

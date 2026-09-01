@@ -573,4 +573,63 @@ public class CraftBlock implements Block {
     public @NotNull BoundingBox getBoundingBox() {
         return BoundingBox.of(getLocation(), getLocation().add(1, 1, 1));
     }
+
+    // CraftBukkit's NMS-facing accessors. Plugins that reach past the Bukkit API - schematic
+    // tools, protection plugins, anything that wants the real BlockState - cast to CraftBlock and
+    // call these by name, so they carry CraftBukkit's signatures.
+    public net.minecraft.world.level.block.state.BlockState getNMS() {
+        return this.world.getBlockState(this.position);
+    }
+
+    public net.minecraft.world.level.material.FluidState getNMSFluid() {
+        return this.world.getFluidState(this.position);
+    }
+
+    public CraftWorld getCraftWorld() {
+        return (CraftWorld) this.getWorld();
+    }
+
+    public org.bukkit.util.BlockVector getVector() {
+        return new org.bukkit.util.BlockVector(this.getX(), this.getY(), this.getZ());
+    }
+
+    /** The inverse of {@link #notchToBlockFace}; returns null for any face vanilla has no Direction for. */
+    public static net.minecraft.core.Direction blockFaceToNotch(BlockFace face) {
+        if (face == null) {
+            return null;
+        }
+        return switch (face) {
+            case DOWN -> net.minecraft.core.Direction.DOWN;
+            case UP -> net.minecraft.core.Direction.UP;
+            case NORTH -> net.minecraft.core.Direction.NORTH;
+            case SOUTH -> net.minecraft.core.Direction.SOUTH;
+            case WEST -> net.minecraft.core.Direction.WEST;
+            case EAST -> net.minecraft.core.Direction.EAST;
+            default -> null;
+        };
+    }
+
+    public static boolean setTypeAndData(net.minecraft.world.level.LevelAccessor world, BlockPos position,
+            net.minecraft.world.level.block.state.BlockState old,
+            net.minecraft.world.level.block.state.BlockState blockData, boolean applyPhysics) {
+        // SPIGOT-611: clear the old block entity first, or a block replaced over one leaves a
+        // stale tile behind. SPIGOT-4612: clearing beats a full cleanup pass.
+        if (old.hasBlockEntity() && blockData.getBlock() != old.getBlock()) {
+            if (world instanceof net.minecraft.world.level.Level level) {
+                level.removeBlockEntity(position);
+            } else {
+                world.setBlock(position, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 0);
+            }
+        }
+
+        if (applyPhysics) {
+            return world.setBlock(position, blockData, 3);
+        }
+
+        boolean success = world.setBlock(position, blockData, 2 | 16 | 1024); // NOTIFY | NO_OBSERVER | NO_PLACE
+        if (success && world instanceof net.minecraft.world.level.Level) {
+            world.getMinecraftWorld().sendBlockUpdated(position, old, blockData, 3);
+        }
+        return success;
+    }
 }
