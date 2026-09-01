@@ -7,7 +7,7 @@ An experimental hybrid Minecraft server compatibility layer. **Forge/NeoForge/Fa
 
 |        Release        |  Forge  | NeoForge |  Fabric  |  QuiltMC  | Status |                                                                                                                                              Build                                                           
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Trial Zenith (1.21.1) | 52.1.16 |21.1.248 |  0.19.3  |  0.30.0  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
+| Trial Zenith (1.21.1) | 52.1.16 |21.1.249 |  0.19.3  |  0.30.0  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
 
 ## Installing
 
