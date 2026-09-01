@@ -140,6 +140,11 @@ public abstract class BucketItemMixin {
         lunararc$fireBucketEmpty(player, level, changed, cir);
     }
 
+    // The five-argument emptyContents, taking the container stack, is a loader addition; vanilla
+    // has only the four-argument form injected above. lunararc-common compiles against vanilla, so
+    // the processor reports this target as not found - correctly, for the reference it can see -
+    // while at runtime it resolves on the loaders that add it. require = 0 is what makes that
+    // legal: apply where the overload exists, stay out of the way where it does not.
     @Inject(
             method = "emptyContents(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/BlockHitResult;Lnet/minecraft/world/item/ItemStack;)Z",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/dimension/DimensionType;ultraWarm()Z"),

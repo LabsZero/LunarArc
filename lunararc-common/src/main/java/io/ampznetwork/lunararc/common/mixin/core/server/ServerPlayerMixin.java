@@ -274,6 +274,11 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         lunararc$applyInventoryOpenTitle(cir);
     }
 
+    // The two-argument openMenu is added by NeoForge and Forge for extended menu data; vanilla has
+    // only the one-argument form injected above. lunararc-common compiles against vanilla, so the
+    // processor reports this target as not found - correctly, for the reference it can see - while
+    // at runtime it resolves on the loaders that add it. require = 0 is what makes that legal:
+    // apply where the overload exists, stay out of the way on Fabric and Quilt where it does not.
     @Inject(method = "openMenu(Lnet/minecraft/world/MenuProvider;Ljava/util/function/Consumer;)Ljava/util/OptionalInt;", at = @At("RETURN"), require = 0)
     private void lunararc$finishInventoryOpenWithExtraData(net.minecraft.world.MenuProvider provider,
             java.util.function.Consumer<?> extraDataWriter, CallbackInfoReturnable<java.util.OptionalInt> cir) {
@@ -305,6 +310,11 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         return lunararc$fireInventoryOpen(provider, menu);
     }
 
+    // The two-argument openMenu is added by NeoForge and Forge for extended menu data; vanilla has
+    // only the one-argument form injected above. lunararc-common compiles against vanilla, so the
+    // processor reports this target as not found - correctly, for the reference it can see - while
+    // at runtime it resolves on the loaders that add it. require = 0 is what makes that legal:
+    // apply where the overload exists, stay out of the way on Fabric and Quilt where it does not.
     @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(
             method = "openMenu(Lnet/minecraft/world/MenuProvider;Ljava/util/function/Consumer;)Ljava/util/OptionalInt;",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/MenuProvider;createMenu(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/inventory/AbstractContainerMenu;"),

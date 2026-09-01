@@ -8,6 +8,14 @@ import org.spongepowered.asm.mixin.Overwrite;
 public interface RegistryAccessMixin {
 
 
+    /**
+     * Replaces Paper's registry-access lookup, which reaches for a server instance LunarArc builds
+     * differently. Overwrite rather than inject because the entire result is LunarArc's, not a
+     * modification of Paper's.
+     *
+     * @author LunarArc
+     * @reason Paper resolves registries through its own server holder, which does not exist here.
+     */
     @Overwrite
     static RegistryAccess registryAccess() {
         return io.ampznetwork.lunararc.common.server.LunarArcRegistryAccess.INSTANCE;
