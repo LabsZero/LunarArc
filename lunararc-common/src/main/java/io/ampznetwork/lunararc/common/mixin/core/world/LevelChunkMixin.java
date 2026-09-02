@@ -87,6 +87,7 @@ public abstract class LevelChunkMixin implements io.ampznetwork.lunararc.common.
         // LivingEntity.addEffect() during structure population. Skip firing off-thread rather
         // than let PaperEventManager's safety check throw and abort chunk generation.
         if (loaded || !this.loaded || !org.bukkit.Bukkit.isPrimaryThread()) return;
+        if (org.bukkit.event.world.ChunkUnloadEvent.getHandlerList().getRegisteredListeners().length == 0) return;
         org.bukkit.craftbukkit.CraftWorld world = lunararc$craftWorld();
         if (world == null) return;
         org.bukkit.Chunk chunk = new org.bukkit.craftbukkit.CraftChunk((LevelChunk) (Object) this, world);
@@ -106,12 +107,26 @@ public abstract class LevelChunkMixin implements io.ampznetwork.lunararc.common.
         // chunk would incorrectly look "new" again the next time it's loaded on the main thread.
         this.lunararc$needsDecoration = false;
         if (!org.bukkit.Bukkit.isPrimaryThread()) return;
+
+        // Chunk load is about as hot as a server path gets, and a CraftChunk plus a full event
+        // dispatch per chunk is not free. Checking for a listener first means a server with
+        // nothing watching chunk loads pays two array-length reads instead, which is the same
+        // guard the hopper events use and the reason Paper puts one on its own hot events.
+        boolean wantsLoad = org.bukkit.event.world.ChunkLoadEvent.getHandlerList()
+                .getRegisteredListeners().length > 0;
+        boolean wantsPopulate = isNewChunk && org.bukkit.event.world.ChunkPopulateEvent.getHandlerList()
+                .getRegisteredListeners().length > 0;
+        if (!wantsLoad && !wantsPopulate) return;
+
         org.bukkit.craftbukkit.CraftWorld world = lunararc$craftWorld();
         if (world == null) return;
         org.bukkit.Chunk chunk = new org.bukkit.craftbukkit.CraftChunk((LevelChunk) (Object) this, world);
-        org.bukkit.Bukkit.getPluginManager().callEvent(new org.bukkit.event.world.ChunkLoadEvent(chunk, isNewChunk));
+        if (wantsLoad) {
+            org.bukkit.Bukkit.getPluginManager().callEvent(
+                    new org.bukkit.event.world.ChunkLoadEvent(chunk, isNewChunk));
+        }
 
-        if (!isNewChunk) return;
+        if (!wantsPopulate) return;
 
         // Bukkit BlockPopulators are already executed at the real generation-decoration
         // boundary by LunarArcChunkPopulators. The first live LevelChunk load owns only
