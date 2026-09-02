@@ -72,6 +72,15 @@ public final class LunarArcReflectionBridge {
                     if (field != null) return field;
                 }
             }
+            // An enum constant LunarArc added at runtime has no declared field - a loaded class
+            // cannot gain one - so getField has nothing to find. Libraries look constants up this
+            // way routinely; Gson does it for every constant of every enum it touches, which is
+            // what stopped EssentialsX enabling. See LunarArcDynamicEnumFields.
+            Field dynamic = LunarArcDynamicEnumFields.find(owner, mapped);
+            if (dynamic == null && !mapped.equals(name)) {
+                dynamic = LunarArcDynamicEnumFields.find(owner, name);
+            }
+            if (dynamic != null) return dynamic;
             throw first;
         }
     }
