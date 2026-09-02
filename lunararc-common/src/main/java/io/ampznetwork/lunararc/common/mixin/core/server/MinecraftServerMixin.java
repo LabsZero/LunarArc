@@ -240,7 +240,21 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
     @Override
     public double[] lunararc$getTps() {
-        return this.recentTps.clone();
+        // Built element by element rather than with recentTps.clone(). An array's clone() is an
+        // INVOKEVIRTUAL whose owner is the array descriptor itself, "[D", and Mixin's applicator
+        // resolves every method owner it rewrites through ClassInfo.forName - which has no class
+        // to return for an array type. It NPEs there and the whole mixin fails to apply, taking
+        // the server down before it starts:
+        //
+        //   Apply Methods -> ()[D:lunararc$getTps -> Transform Instructions
+        //   -> INVOKEVIRTUAL [D::clone()Ljava/lang/Object;
+        //   Caused by: NullPointerException: ... ClassInfo.forName(String) is null
+        //
+        // This is also what CraftServer.getTPS() does with the same field, so the shape matches
+        // CraftBukkit rather than merely avoiding the crash. Copying still matters: the array is
+        // published to plugins, and handing out the live one lets a caller rewrite the server's
+        // own TPS record.
+        return new double[] { this.recentTps[0], this.recentTps[1], this.recentTps[2] };
     }
 
     @Inject(method = "tickChildren", at = @At("HEAD"))
