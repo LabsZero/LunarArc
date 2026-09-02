@@ -3,6 +3,7 @@ package io.ampznetwork.lunararc.common.mixin.core.world;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import io.ampznetwork.lunararc.common.bridge.EntityBridge;
+import io.ampznetwork.lunararc.common.bridge.HopperBlockEntityBridge;
 import io.ampznetwork.lunararc.common.mod.server.LunarArcTickingTrackerImpl;
 import io.ampznetwork.lunararc.common.mod.util.LunarArcInventories;
 import net.minecraft.core.Direction;
@@ -16,6 +17,7 @@ import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -53,7 +55,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * saying no to one hopper would have it asked again twenty times a second.</p>
  */
 @Mixin(HopperBlockEntity.class)
-public abstract class HopperBlockEntityMixin {
+public abstract class HopperBlockEntityMixin implements HopperBlockEntityBridge {
+
+    // Private in 1.21.1, and the handler that needs it is static rather than being a hopper, so it
+    // is shadowed here and reached through the bridge - the same route ServerPlayer's private
+    // nextContainerCounter takes, and one that needs no access widener on any loader.
+    @Shadow private void setCooldown(int cooldown) {}
+
+    @Override
+    public void lunararc$setCooldown(int cooldown) {
+        this.setCooldown(cooldown);
+    }
 
     @Inject(
             method = "addItem(Lnet/minecraft/world/Container;Lnet/minecraft/world/entity/item/ItemEntity;)Z",
@@ -144,7 +156,7 @@ public abstract class HopperBlockEntityMixin {
     private static void lunararc$delayTickingHopper() {
         if (LunarArcTickingTrackerImpl.INSTANCE.getTickingSource() instanceof HopperBlockEntity hopper) {
             // 8 ticks: vanilla's own transfer cooldown, and Spigot's default hopper-transfer.
-            hopper.setCooldown(8);
+            ((HopperBlockEntityBridge) hopper).lunararc$setCooldown(8);
         }
     }
 }
