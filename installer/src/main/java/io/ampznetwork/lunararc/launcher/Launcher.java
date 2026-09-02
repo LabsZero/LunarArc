@@ -41,10 +41,12 @@ public class Launcher {
 
             checkEula();
 
-            UpdateChecker.check(projectVersion, buildName);
+            // Started here and collected further down, so the release check runs while the disk
+            // work below is happening instead of in front of it.
+            UpdateChecker.Handle updates = UpdateChecker.begin(projectVersion, buildName);
 
             ConsoleUI.printStep("step.initializing");
-            LibraryExtractor.extractLibraries();
+            StartupTimer.phase("libraries", LibraryExtractor::extractLibraries);
 
             Path workingDir = Paths.get("").toAbsolutePath();
 
@@ -92,7 +94,13 @@ public class Launcher {
                 case "4" -> "quilt";
                 default -> "unknown";
             };
-            LunarArcRuntime.Layout runtime = LunarArcRuntime.prepare(workingDir, selfPath, versions, platformName);
+            LunarArcRuntime.Layout[] prepared = new LunarArcRuntime.Layout[1];
+            StartupTimer.phase("runtime", () ->
+                    prepared[0] = LunarArcRuntime.prepare(workingDir, selfPath, versions, platformName));
+            LunarArcRuntime.Layout runtime = prepared[0];
+
+            updates.finish();
+            StartupTimer.report();
 
             switch (choice) {
                 case "1":

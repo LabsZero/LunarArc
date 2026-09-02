@@ -28,7 +28,83 @@ public final class UpdateChecker {
     public static String LATEST_VERSION = null;
     public static String UPDATE_URL = null;
 
-    public static void check(String currentVersion, String buildName) {
+    // Written on the probe thread, drained on the launcher thread, so both go through this lock.
+    // The probe must not print directly: it runs while the launcher is writing its own progress,
+    // and interleaved lines from two threads is how a startup log becomes unreadable.
+    private static final Object LOCK = new Object();
+    private static final java.util.List<String> MESSAGES = new java.util.ArrayList<>();
+
+    private static void say(String message) {
+        synchronized (LOCK) {
+            MESSAGES.add(message);
+        }
+    }
+
+    /**
+     * Starts the release check on its own thread and hands back something to collect it with.
+     *
+     * <p>This used to run inline, before anything else the launcher does. It is a network call to
+     * GitHub with three seconds to connect and three to read, so on a machine that cannot reach
+     * GitHub - no outbound access, a firewall that drops rather than refuses, slow DNS - it spent
+     * up to six seconds holding up a server boot to print a line of text. Nothing reads what it
+     * finds; it exists to tell the operator a release is out.</p>
+     *
+     * <p>So it now runs alongside the work the launcher was going to do anyway - unpacking
+     * libraries, preparing the internal runtime - and is collected at the end. Where it used to
+     * cost six seconds it now usually costs nothing, because it finished while the disk was busy.
+     * The config read stays on the calling thread: it and the launcher both write lunararc.conf,
+     * and two threads writing one properties file is a corrupted config, not a faster start.</p>
+     */
+    public static Handle begin(String currentVersion, String buildName) {
+        if (!updatesEnabled()) return new Handle(null, null);
+        Thread thread = new Thread(() -> probe(currentVersion, buildName), "LunarArc-update-check");
+        thread.setDaemon(true);
+        thread.start();
+        return new Handle(thread, currentVersion);
+    }
+
+    /** A running check, and the means to report whatever it found. */
+    public static final class Handle {
+        private final Thread thread;
+        private final String currentVersion;
+
+        private Handle(Thread thread, String currentVersion) {
+            this.thread = thread;
+            this.currentVersion = currentVersion;
+        }
+
+        /**
+         * Prints the result if it has arrived, and gives up quickly if it has not.
+         *
+         * <p>The grace period is short on purpose. By this point the check has been running for as
+         * long as the rest of the launcher took, so a check that can answer has answered. One that
+         * has not is talking to something unreachable, and a server should not wait on that to be
+         * told about a release it can read about any time.</p>
+         */
+        public void finish() {
+            if (thread == null) return;
+            try {
+                thread.join(1000L);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (thread.isAlive()) return;
+
+            synchronized (LOCK) {
+                for (String message : MESSAGES) {
+                    System.out.println(message);
+                }
+                MESSAGES.clear();
+                if (LATEST_VERSION != null && UPDATE_URL != null) {
+                    saveUpdateInfo(currentVersion, LATEST_VERSION, UPDATE_URL);
+                }
+            }
+        }
+    }
+
+    /** Reads, and if absent creates, the enable_updates setting. Callers' thread, never the probe's. */
+    private static boolean updatesEnabled() {
         Path configPath = Paths.get("lunararc.conf");
         Properties props = new Properties();
         boolean enableUpdates = true;
@@ -54,10 +130,10 @@ public final class UpdateChecker {
         } catch (Exception ignored) {
         }
 
-        if (!enableUpdates) {
-            return;
-        }
+        return enableUpdates;
+    }
 
+    private static void probe(String currentVersion, String buildName) {
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) URI.create(API_URL).toURL().openConnection();
@@ -109,19 +185,18 @@ public final class UpdateChecker {
                 if (!sameVersion(currentVersion, tagName, name, buildName)) {
                     LATEST_VERSION = tagName;
                     UPDATE_URL = htmlUrl;
-                    System.out.println(TranslationManager.get("update.available", buildName, tagName, currentVersion));
-                    System.out.println(TranslationManager.get("update.download", htmlUrl));
-                    saveUpdateInfo(currentVersion, tagName, htmlUrl);
+                    say(TranslationManager.get("update.available", buildName, tagName, currentVersion));
+                    say(TranslationManager.get("update.download", htmlUrl));
                 } else {
                     LATEST_VERSION = null;
                     UPDATE_URL = null;
-                    System.out.println(NO_UPDATE_MESSAGE);
+                    say(NO_UPDATE_MESSAGE);
                 }
                 break;
             }
 
             if (!foundMatch) {
-                System.out.println(NO_UPDATE_MESSAGE);
+                say(NO_UPDATE_MESSAGE);
             }
         } catch (Exception ignored) {
 

@@ -43,13 +43,37 @@ public final class LunarArcRuntime {
         Files.createDirectories(layout.downloads());
         Files.createDirectories(layout.state());
 
-        String sourceHash = sha256(selfJar);
         Path manifest = layout.state().resolve("runtime.properties");
         Properties state = readProperties(manifest);
         Path runtimeMarker = layout.runtimeClasses().resolve(".lunararc-runtime.sha256");
+
+        // The shipped jar carries every embedded library, so it is tens of megabytes, and this
+        // runs on every single start. It used to hash it twice - once for the jar we were launched
+        // from and once for the copy under .lunararc - which is most of a second of pure repeat
+        // work on a fast disk and considerably worse on a slow one, all to answer "did anything
+        // change" on a boot where nothing had.
+        //
+        // Size and modification time answer that first. They are what every build tool uses for
+        // the same question, and when they match what was recorded the hash is taken from the
+        // state file rather than recomputed. Anything that touches the jar - a new build, a
+        // re-download, an interrupted copy - moves one of them and the hash is computed again, so
+        // the slow path still exists for exactly the case it is for.
+        String fingerprint = fingerprint(selfJar);
+        // An empty fingerprint means the jar could not be stat'd, so it matches nothing - including
+        // an empty one that an earlier failed start may have recorded.
+        String sourceHash = !fingerprint.isEmpty() && fingerprint.equals(state.getProperty("core.fingerprint"))
+                ? state.getProperty("core.sha256", "")
+                : "";
+        if (sourceHash.isEmpty()) sourceHash = sha256(selfJar);
+
+        // The copy is not re-hashed. atomicCopy moves it into place atomically and the marker is
+        // written only after that move and the class extraction have both finished, so a marker
+        // holding this hash is already evidence that the copy completed and is the file we made.
+        // Its length is checked because that is free and catches a truncation the filesystem
+        // allowed anyway.
         boolean current = sourceHash.equals(state.getProperty("core.sha256"))
                 && Files.isRegularFile(layout.coreJar())
-                && sourceHash.equals(safeSha256(layout.coreJar()))
+                && sameLength(selfJar, layout.coreJar())
                 && Files.isDirectory(layout.runtimeClasses())
                 && sourceHash.equals(readString(runtimeMarker))
                 && Files.isRegularFile(layout.runtimeClasses().resolve("META-INF/neoforge.mods.toml"));
@@ -62,11 +86,21 @@ public final class LunarArcRuntime {
 
             state.clear();
             state.setProperty("core.sha256", sourceHash);
+            state.setProperty("core.fingerprint", fingerprint);
             state.setProperty("minecraft", versions.getProperty("minecraft", "unknown"));
             state.setProperty("version", versions.getProperty("version", "unknown"));
             state.setProperty("platform", platform == null ? "unknown" : platform);
             state.setProperty("runtime.format", "2");
             atomicStore(state, manifest);
+        } else if (!fingerprint.equals(state.getProperty("core.fingerprint"))) {
+            // Same bytes, different timestamp - a re-download or a copy of the same build. Record
+            // the new fingerprint so the next start takes the fast path instead of hashing again.
+            state.setProperty("core.fingerprint", fingerprint);
+            try {
+                atomicStore(state, manifest);
+            } catch (IOException ignored) {
+                // Only costs one more hash next time.
+            }
         }
 
         System.setProperty("lunararc.home", layout.root().toString());
@@ -139,8 +173,22 @@ public final class LunarArcRuntime {
         }
     }
 
-    private static String safeSha256(Path path) {
-        try { return sha256(path); } catch (Exception ignored) { return ""; }
+    /** Size and modification time, the cheap stand-in for "is this the same file as last time". */
+    private static String fingerprint(Path path) {
+        try {
+            return Files.size(path) + ":" + Files.getLastModifiedTime(path).toMillis();
+        } catch (IOException unreadable) {
+            // Unknown fingerprint never matches, so the hash is computed - the old behaviour.
+            return "";
+        }
+    }
+
+    private static boolean sameLength(Path a, Path b) {
+        try {
+            return Files.size(a) == Files.size(b);
+        } catch (IOException unreadable) {
+            return false;
+        }
     }
 
     private static String readString(Path path) {
