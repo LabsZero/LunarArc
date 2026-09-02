@@ -4,26 +4,26 @@
 architectury-loom = "1.14.476"
 
 # common
-project-version = "1.0.0-PREVIEW"
+project-version = "1.0.0-SNAPSHOT"
 build-name = "Trial Zenith"
 minecraft = "1.21.1"
 java-runtime = "21"
 craftbukkit-package = "v1_21_R1"
 neoforge = "21.1.249"
 forge = "52.1.16"
-fabric-loader = "0.19.3"
-fabric-api = "0.116.15+1.21.1"
+fabric-loader = "0.19.5"
+fabric-api = "0.116.17+1.21.1"
 fabric-installer = "0.11.2"
-quilt-loader = "0.30.0"
+quilt-loader = "0.30.1"
 quilt-installer = "0.15.1"
 
 # loader
 bungeecord-chat-api = "1.21-R0.4"
 paper-api = "1.21.1-R0.1-SNAPSHOT"
+# Find latest build at https://papermc.io/downloads/paper
 paper-build = "133"
 spigot-builddata-ref = "533b02cd6ba8dbf8c8607250b02bf2d8c36421e8"
 data-version = "3955"
-# Find latest build at https://papermc.io/downloads/paper
 mixin = "0.8.5"
 sqlite = "3.46.0.0"
 parchment = "2024.11.17"

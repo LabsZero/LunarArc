@@ -51,6 +51,15 @@ public class FabricInstaller {
                 return;
             }
 
+            // Same check as the Quilt path: an installer that does not understand its arguments
+            // can print usage and still exit 0, and the failure then surfaces as a missing jar at
+            // launch rather than as the install that never ran.
+            if (!Files.exists(fabricServerJar)) {
+                System.err.println("Fabric installer reported success but did not produce "
+                        + fabricServerJar.getFileName() + ".");
+                return;
+            }
+
             if (!Files.exists(minecraftServerJar)) {
                 Path altJar = workingDir.resolve("minecraft_server." + mcVersion + ".jar");
                 if (Files.exists(altJar)) {

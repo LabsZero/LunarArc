@@ -134,7 +134,15 @@ def createFatJar(String platform) {
             : "transformProduction${platform.capitalize()}"
         def commonJarTask = project(':lunararc-common').tasks.findByName(commonTaskName)
 
-        dependsOn commonJarTask, platformJarTask, 'generateVersions'
+        // The mod metadata files are templates - fabric.mod.json and quilt.mod.json carry
+        // ${version}, ${minecraft} and friends - and only processResources expands them. Depending
+        // on the processResources tasks, and copying from their output below rather than from the
+        // source directories, is what makes the shipped jar carry real values.
+        def commonResources = project(':lunararc-common').tasks.named('processResources')
+        def platformResources = platformProject.tasks.named('processResources')
+        def bootstrapResources = tasks.named('processResources')
+        dependsOn commonJarTask, platformJarTask, 'generateVersions',
+                commonResources, platformResources, bootstrapResources
 
         from(zipTree(commonJarTask.outputs.files.singleFile)) {
 
@@ -171,14 +179,20 @@ def createFatJar(String platform) {
         from project(':installer').sourceSets.main.output
         from project(':lunararc-api').sourceSets.main.output
         from project(':i18n-config').sourceSets.main.output
-        from(project(':lunararc-common').sourceSets.main.resources) {
+        // These take the processed resource output, not src/main/resources. Reading the source
+        // directory shipped fabric.mod.json and quilt.mod.json with their ${...} placeholders
+        // intact, so Fabric read the mod's version as the literal string "${version}" and refused
+        // to load it: "requires version ${fabric_loader} of mod 'Fabric Loader', but only the
+        // wrong version is present: 0.19.5". The same file arrives processed from the platform jar
+        // above, and which of the two won was left to the copy's duplicate handling.
+        from(project(':lunararc-common').sourceSets.main.output.resourcesDir) {
             if (platform == 'neoforge') {
                 exclude 'mixins.lunararc.common.json'
                 exclude 'mixins.lunararc.common.refmap.json'
             }
         }
-        from platformProject.sourceSets.main.resources
-        from sourceSets.main.resources
+        from platformProject.sourceSets.main.output.resourcesDir
+        from sourceSets.main.output.resourcesDir
 
         project.configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.each { artifact ->
             def id = artifact.moduleVersion.id
