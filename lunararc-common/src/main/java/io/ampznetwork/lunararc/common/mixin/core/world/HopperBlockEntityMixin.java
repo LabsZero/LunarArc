@@ -28,7 +28,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * hopper draining a shop's stock, protection plugins to stop one reaching into a claim, and
  * anti-lag plugins to cap transfers. None of it worked here, because neither event was fired.</p>
  *
- * <p>Both are guarded on having a registered listener before anything is built. That is Paper's own
+ * <p>Not every transfer can be reported. LunarArcInventories answers null for a container it
+ * cannot name a real Bukkit inventory for - a double chest, or a mod's own container - and this
+ * skips the event rather than inventing one; see that class for why the alternative would be an
+ * inventory a plugin could not actually act on. Every vanilla single container is covered.</p>
+ *
+ * <p>Both events are guarded on having a registered listener before anything is built. That is Paper's own
  * optimisation and it matters more here than upstream: a hopper runs every tick it is not on
  * cooldown, on every hopper on the server, so resolving two inventories and copying an ItemStack
  * per transfer would be a permanent cost paid by servers that never listen. It also keeps this
