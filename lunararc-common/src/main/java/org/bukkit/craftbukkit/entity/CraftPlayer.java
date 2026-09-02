@@ -2779,11 +2779,70 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         io.ampznetwork.lunararc.common.messaging.LunarArcComponentPipeline.sendActionBar(getHandle(), message);
     }
 
+    /**
+     * Adventure's action bar, missing for the same reason the title was: Audience.sendActionBar is
+     * an empty default, so a plugin calling it saw no error and no action bar. The String and
+     * BaseComponent forms above were implemented; the one modern plugins call was not.
+     */
+    @Override
+    public void sendActionBar(@NotNull net.kyori.adventure.text.Component message) {
+        io.ampznetwork.lunararc.common.messaging.LunarArcComponentPipeline.sendActionBar(getHandle(), message);
+    }
+
     @Override
     public void resetTitle() {
         if (getHandle().connection != null) {
             getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundClearTitlesPacket(true));
         }
+    }
+
+    /**
+     * Adventure's title API, which is the one plugins actually use now.
+     *
+     * <p>Bukkit's sendTitle and Bungee's showTitle were implemented; this was not, and it is the
+     * one that matters. Audience.showTitle does not send anything itself - it takes a Title apart
+     * and calls sendTitlePart three times, once for the times and once for each line - and
+     * Audience.sendTitlePart is an empty default method. So every plugin using the modern API
+     * called showTitle, got no error, and nothing appeared on screen. clearTitle is an empty
+     * default in the same way.</p>
+     *
+     * <p>Nothing needs to override showTitle itself: once the part handler sends packets, the
+     * interface default assembles the title correctly on its own.</p>
+     */
+    @Override
+    public <T> void sendTitlePart(@NotNull net.kyori.adventure.title.TitlePart<T> part, @NotNull T value) {
+        java.util.Objects.requireNonNull(part, "part");
+        java.util.Objects.requireNonNull(value, "value");
+        if (getHandle().connection == null) return;
+
+        if (part == net.kyori.adventure.title.TitlePart.TITLE) {
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(
+                    io.ampznetwork.lunararc.common.messaging.LunarArcComponentPipeline
+                            .fromAdventure((net.kyori.adventure.text.Component) value)));
+        } else if (part == net.kyori.adventure.title.TitlePart.SUBTITLE) {
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(
+                    io.ampznetwork.lunararc.common.messaging.LunarArcComponentPipeline
+                            .fromAdventure((net.kyori.adventure.text.Component) value)));
+        } else if (part == net.kyori.adventure.title.TitlePart.TIMES) {
+            net.kyori.adventure.title.Title.Times times = (net.kyori.adventure.title.Title.Times) value;
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket(
+                    titleTicks(times.fadeIn()), titleTicks(times.stay()), titleTicks(times.fadeOut())));
+        } else {
+            // Adventure can add parts, and a part we do not know is not something to guess at.
+            throw new IllegalArgumentException("Unknown TitlePart: " + part);
+        }
+    }
+
+    @Override
+    public void clearTitle() {
+        if (getHandle().connection != null) {
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundClearTitlesPacket(false));
+        }
+    }
+
+    /** A duration in ticks, with vanilla's -1 for "leave this one as it is". */
+    private static int titleTicks(java.time.Duration duration) {
+        return duration == null ? -1 : (int) (duration.toMillis() / 50L);
     }
 
     @Override
