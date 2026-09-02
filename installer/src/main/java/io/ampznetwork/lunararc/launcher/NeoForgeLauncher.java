@@ -46,19 +46,17 @@ public class NeoForgeLauncher {
         }
     }
 
+    /**
+     * NeoForge's args file, looked for under NeoForge's own path first.
+     *
+     * <p>This used to take the first {@code *_args.txt} anywhere under {@code libraries}, which is
+     * shared with every other loader installed into the same server directory. A directory that has
+     * run both NeoForge and Forge holds one of each, and which was found came down to directory
+     * order - so this could boot NeoForge with Forge's arguments. It has not been observed happening
+     * that way round, which is luck rather than design.</p>
+     */
     private static Path findArgsFile(Path libDir) throws Exception {
-        String preferred = System.getProperty("os.name", "").toLowerCase().contains("win")
-                ? "win_args.txt" : "unix_args.txt";
-        try (var stream = Files.walk(libDir)) {
-            Path found = stream.filter(p -> p.getFileName().toString().equals(preferred))
-                    .findFirst().orElse(null);
-            if (found != null) return found;
-        }
-
-        try (var stream = Files.walk(libDir)) {
-            return stream.filter(p -> p.getFileName().toString().endsWith("_args.txt"))
-                    .findFirst().orElse(null);
-        }
+        return LauncherUtils.findArgsFile(libDir, "net/neoforged/neoforge");
     }
 
     private static void sameJvmLaunch(Path selfPath, Path argsFile) throws Exception {

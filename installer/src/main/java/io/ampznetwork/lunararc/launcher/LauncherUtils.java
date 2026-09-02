@@ -1,8 +1,10 @@
 package io.ampznetwork.lunararc.launcher;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Locale;
 
 public class LauncherUtils {
     public static String requireVersion(java.util.Properties versions, String key) {
@@ -94,4 +96,87 @@ public class LauncherUtils {
         return inherited;
     }
 
+    /**
+     * The loader's own {@code *_args.txt}, looked for under the loader's own path first.
+     *
+     * <p>{@code libraries/} is shared between every loader installed into the same server
+     * directory, so a server that has run both NeoForge and Forge has an args file for each. The
+     * search used to walk the whole tree and take the first match, which meant whichever the
+     * filesystem happened to return - so Forge could boot with NeoForge's arguments, or the other
+     * way round, depending on nothing more than directory order.</p>
+     *
+     * <p>The loader's own subtree is searched first. The whole-tree walk is kept only as a fallback
+     * for a layout that does not match, and it is the caller's job to decide whether finding
+     * nothing is an error.</p>
+     */
+    static Path findArgsFile(Path librariesDir, String loaderPath) throws IOException {
+        return findArgsFile(librariesDir, loaderPath, true);
+    }
+
+    /**
+     * As above, with control over the fallback.
+     *
+     * <p>Pass {@code false} to answer strictly about {@code loaderPath} - a caller deciding whether
+     * a particular loader's install is still intact must not be satisfied by another loader's args
+     * file, which is exactly what the whole-tree fallback would hand it.</p>
+     */
+    static Path findArgsFile(Path librariesDir, String loaderPath, boolean fallBackToWholeTree)
+            throws IOException {
+        if (!Files.isDirectory(librariesDir)) return null;
+        String preferred = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")
+                ? "win_args.txt" : "unix_args.txt";
+
+        Path scoped = librariesDir.resolve(loaderPath);
+        if (Files.isDirectory(scoped)) {
+            Path found = firstMatch(scoped, preferred);
+            if (found == null) found = firstMatch(scoped, null);
+            if (found != null) return found;
+        }
+        if (!fallBackToWholeTree) return null;
+        Path found = firstMatch(librariesDir, preferred);
+        return found != null ? found : firstMatch(librariesDir, null);
+    }
+
+    /**
+     * Every token an args file contributes to a launch command, comments and blank lines dropped.
+     */
+    static java.util.List<String> readArgsFileTokens(Path argsFile) throws IOException {
+        java.util.List<String> tokens = new java.util.ArrayList<>();
+        for (String line : Files.readAllLines(argsFile)) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+            for (String part : trimmed.split(" ")) {
+                if (!part.isEmpty()) tokens.add(part);
+            }
+        }
+        return tokens;
+    }
+
+    private static Path firstMatch(Path root, String exactName) throws IOException {
+        try (java.util.stream.Stream<Path> stream = Files.walk(root)) {
+            return stream
+                    .filter(path -> exactName == null
+                            ? path.getFileName().toString().endsWith("_args.txt")
+                            : path.getFileName().toString().equals(exactName))
+                    .findFirst()
+                    .orElse(null);
+        }
+    }
+
+    /**
+     * The jar a {@code -jar} in this command names but which is not on disk, or null if all resolve.
+     *
+     * <p>A loader's args file can name a jar of its own, and that jar sits in the server directory
+     * rather than beside the args file. When it is missing the JVM says "Unable to access jarfile",
+     * which names the file and not the reason - and the reason is usually that the install never
+     * ran or did not finish. Checking first lets the caller say that instead.</p>
+     */
+    static String missingLaunchJar(java.util.List<String> command) {
+        for (int i = 0; i < command.size() - 1; i++) {
+            if (!"-jar".equals(command.get(i))) continue;
+            String jar = command.get(i + 1);
+            if (!Files.isRegularFile(Path.of(jar))) return jar;
+        }
+        return null;
+    }
 }
