@@ -408,13 +408,12 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         net.minecraft.server.level.ServerLevel level = craftWorld.getHandle();
         double x = destination.getX(), y = destination.getY(), z = destination.getZ();
         float yaw = destination.getYaw(), pitch = destination.getPitch();
-        org.bukkit.World fromWorld = from.getWorld();
+        // PlayerChangedWorldEvent is deliberately not fired here. A cross-world teleport of a
+        // player reaches ServerPlayer.changeDimension through teleportTo, and ServerPlayerMixin
+        // fires the event there - the same place CraftBukkit does, so it also covers portals, an
+        // end-return, and a mod's own transition, none of which come through this method. Firing
+        // it here as well would deliver the event twice for every plugin teleport.
         entity.teleportTo(level, x, y, z, Collections.emptySet(), yaw, pitch);
-        if (this instanceof org.bukkit.entity.Player player
-                && fromWorld != null && !fromWorld.equals(destination.getWorld())) {
-            this.server.getPluginManager().callEvent(
-                    new org.bukkit.event.player.PlayerChangedWorldEvent(player, fromWorld));
-        }
         return true;
     }
 

@@ -55,6 +55,60 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         return this.findRespawnPositionAndUseSpawnBlock(keepEverything, postTransition);
     }
 
+    /**
+     * PlayerChangedWorldEvent at the end of a dimension change, where CraftBukkit fires it.
+     *
+     * <p>Nothing here fired it from NMS. CraftBukkit's ServerPlayer.changeDimension calls it just
+     * before returning from the branch that actually moves the player to another level, and that
+     * method is the one place every dimension change passes through - a portal of any kind, a
+     * plugin teleport across worlds, an end-return, a mod's own transition. Plugins that track
+     * which world a player is in, which is most of the ones that do per-world anything, were never
+     * told that a player had moved. Direct teleports looked like they worked because the player did
+     * arrive; what was missing was everyone else finding out.</p>
+     *
+     * <p>The old level is captured at HEAD because by RETURN the player is already in the new one.
+     * changeDimension also returns early - for a removed player, and from the same-dimension branch
+     * that only re-positions - so the event is fired only when the two levels actually differ, which
+     * is the same condition as upstream being inside the cross-dimension branch.</p>
+     */
+    @Unique private ServerLevel lunararc$levelBeforeDimensionChange;
+
+    @Inject(method = "changeDimension", at = @At("HEAD"), require = 0)
+    private void lunararc$rememberLevelBeforeDimensionChange(
+            net.minecraft.world.level.portal.DimensionTransition transition,
+            CallbackInfoReturnable<net.minecraft.world.entity.Entity> cir) {
+        this.lunararc$levelBeforeDimensionChange = ((ServerPlayer) (Object) this).serverLevel();
+    }
+
+    @Inject(method = "changeDimension", at = @At("RETURN"), require = 0)
+    private void lunararc$playerChangedWorldEvent(
+            net.minecraft.world.level.portal.DimensionTransition transition,
+            CallbackInfoReturnable<net.minecraft.world.entity.Entity> cir) {
+        ServerLevel before = this.lunararc$levelBeforeDimensionChange;
+        this.lunararc$levelBeforeDimensionChange = null;
+        ServerPlayer self = (ServerPlayer) (Object) this;
+        if (before == null || cir.getReturnValue() == null) return;
+        ServerLevel after = self.serverLevel();
+        if (before == after || !org.bukkit.Bukkit.isPrimaryThread()) return;
+
+        Object bukkit = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) self).lunararc$getBukkitEntity();
+        if (!(bukkit instanceof org.bukkit.entity.Player player)) return;
+        // The event names the world left, not the one arrived in, so a level with no CraftWorld
+        // yet - which a mod can hand us mid-transition - has nothing to report rather than a world
+        // to mint from inside NMS.
+        org.bukkit.craftbukkit.CraftWorld from = io.ampznetwork.lunararc.common.LunarArcServerAccess
+                .getCraftServer(self.server).getCraftWorldIfPresent(before);
+        if (from == null) return;
+
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.ENTITY) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.entity(
+                    "changeDimension: {} moved {} -> {}, firing PlayerChangedWorldEvent",
+                    player.getName(), before.dimension().location(), after.dimension().location());
+        }
+        org.bukkit.Bukkit.getPluginManager().callEvent(
+                new org.bukkit.event.player.PlayerChangedWorldEvent(player, from));
+    }
+
     @Unique private long lunararc$firstPlayed = System.currentTimeMillis();
     @Unique private long lunararc$lastPlayed;
     @Unique private long lunararc$loginTime;
