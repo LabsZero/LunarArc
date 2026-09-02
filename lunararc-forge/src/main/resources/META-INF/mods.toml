@@ -27,5 +27,19 @@ versionRange="[1.21.1]"
 ordering="NONE"
 side="SERVER"
 
+# Both configs are declared here, and this is the only declaration that reaches the shipped jar.
+# The Forge module also names them to Loom (forge.mixinConfigs) and in its shadow jar's MixinConfigs
+# manifest attribute, but neither survives: what ships is the bootstrap fat jar, which writes its
+# own manifest. Only mixins.lunararc.forge.json was listed here, so on Forge the entire common
+# layer - the CraftServer bootstrap, plugin enabling, every Bukkit event - was never applied, and
+# the server came up with no plugins at all. NeoForge, Fabric and Quilt all list both in their own
+# metadata, which is why only Forge was affected.
+#
+# The refmap stays for Forge, unlike NeoForge where the fat jar strips it: Forge's runtime is still
+# SRG-named (this module patches tinyMappingsWithSrg and rewrites m_294761_), so the mixin targets
+# do need translating, where NeoForge's Mojang-named runtime does not.
+[[mixins]]
+config="mixins.lunararc.common.json"
+
 [[mixins]]
 config="mixins.lunararc.forge.json"

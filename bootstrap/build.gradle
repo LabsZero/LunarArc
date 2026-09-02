@@ -383,7 +383,46 @@ def createFatJar(String platform) {
                 throw new GradleException("${platform} hybrid JAR is missing LunarArc runtime resources: ${missingLunarArcRuntimeResources}")
             }
 
-            logger.lifecycle("${platform} hybrid ownership/runtime audit passed: loader-owned Minecraft, no copied Paper server runtime, direct Paper library resolver and locale resources packaged.")
+            // Two checks against faults that are invisible until the server is running.
+            //
+            // A loader whose metadata does not name mixins.lunararc.common.json applies none of the
+            // common layer, so the server boots normally and simply has no Bukkit in it and loads no
+            // plugins. That was true of Forge, and nothing in the build noticed.
+            //
+            // And metadata copied from src/main/resources rather than the processResources output
+            // still holds its ${...} placeholders, which Fabric reports as a version conflict
+            // against a version string that is a literal placeholder.
+            String metadataEntry = [
+                neoforge: 'META-INF/neoforge.mods.toml',
+                forge:    'META-INF/mods.toml',
+                fabric:   'fabric.mod.json',
+                quilt:    'quilt.mod.json'
+            ][platform]
+
+            if (!entries.contains(metadataEntry)) {
+                throw new GradleException("${platform} hybrid JAR is missing its loader metadata ${metadataEntry}")
+            }
+            if (!entries.contains('mixins.lunararc.common.json')) {
+                throw new GradleException("${platform} hybrid JAR is missing mixins.lunararc.common.json")
+            }
+
+            String metadata = new java.util.jar.JarFile(hybridJar).withCloseable { jar ->
+                jar.getInputStream(jar.getEntry(metadataEntry)).getText('UTF-8')
+            }
+            if (!metadata.contains('mixins.lunararc.common.json')) {
+                throw new GradleException(
+                    "${platform} loader metadata (${metadataEntry}) does not declare mixins.lunararc.common.json. " +
+                    "Without it the common mixins never apply: the server starts, and has no Bukkit layer and no plugins.")
+            }
+            def placeholder = metadata =~ /\$\{[A-Za-z_][A-Za-z0-9_]*\}/
+            if (placeholder) {
+                throw new GradleException(
+                    "${platform} loader metadata (${metadataEntry}) still contains unexpanded placeholders " +
+                    "(${placeholder[0]}). The jar packaged the template from src/main/resources instead of the " +
+                    "processResources output.")
+            }
+
+            logger.lifecycle("${platform} hybrid ownership/runtime audit passed: loader-owned Minecraft, no copied Paper server runtime, direct Paper library resolver and locale resources packaged, ${metadataEntry} declares the common mixin config with no unexpanded placeholders.")
         }
     }
 }
