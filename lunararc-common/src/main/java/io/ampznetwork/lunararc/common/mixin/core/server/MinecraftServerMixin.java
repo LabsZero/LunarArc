@@ -222,13 +222,25 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         return context;
     }
 
+    /**
+     * CraftBukkit's {@code MinecraftServer.recentTps}, under its real name.
+     *
+     * <p>The rolling averages above are LunarArc-named, so nothing outside this class can see
+     * them. Plugins that read TPS overwhelmingly do not go through Bukkit's getTPS(): they reach
+     * for {@code ((CraftServer) Bukkit.getServer()).getServer().recentTps}, which is the field
+     * CraftBukkit adds to MinecraftServer, and a reflective lookup for it found nothing here -
+     * "No reflective mapping found for field DedicatedServer#recentTps".</p>
+     *
+     * <p>Declared non-final where CraftBukkit has it final. Nothing links against finality - the
+     * descriptor is [D either way - and a final field with an initialiser has to be merged into
+     * every target constructor by Mixin, which is a risk with no benefit. Level.world, added for
+     * ProtocolLib, is non-final for the same reason.</p>
+     */
+    public double[] recentTps = new double[3];
+
     @Override
     public double[] lunararc$getTps() {
-        return new double[] {
-                this.lunararc$tps1.getAverage(),
-                this.lunararc$tps5.getAverage(),
-                this.lunararc$tps15.getAverage()
-        };
+        return this.recentTps.clone();
     }
 
     @Inject(method = "tickChildren", at = @At("HEAD"))
@@ -248,6 +260,11 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
             this.lunararc$tps5.add(currentTps, elapsed);
             this.lunararc$tps15.add(currentTps, elapsed);
             this.lunararc$tpsSampleStartedNanos = now;
+            // Publish to the CraftBukkit-named field in the same place, so a plugin reading
+            // recentTps directly and one calling getTPS() can never disagree.
+            this.recentTps[0] = this.lunararc$tps1.getAverage();
+            this.recentTps[1] = this.lunararc$tps5.getAverage();
+            this.recentTps[2] = this.lunararc$tps15.getAverage();
         }
 
         Runnable task;
