@@ -575,9 +575,80 @@ tasks.register('generateLunarArcBuildInfo') {
 }
 sourceSets.main.resources.srcDir(generatedBuildInfoDir)
 
+// gradle/blacklist.toml is the editable source; this bakes it into the jar so a running server has
+// no copy to edit or lose. Emitted as a flat, tab-separated resource rather than shipping the TOML
+// itself, because the runtime has no TOML parser and adding one to carry two lists is not a trade
+// worth making - the same reasoning as plugin-remap.tsv beside it.
+//
+// The grammar read here is the array-of-tables subset the file documents: [[plugins]] / [[mods]]
+// headers, then key = "value" lines. That is deliberately narrower than TOML. Anything outside it
+// fails the build with the offending line rather than being silently dropped, so an entry someone
+// believes is protecting them always is.
+def generatedBlacklistDir = layout.buildDirectory.dir('generated/blacklist')
+
+tasks.register('generateBlacklist') {
+    def source = rootProject.file('gradle/blacklist.toml')
+    def output = generatedBlacklistDir.map { it.file('lunararc/blacklist.tsv').asFile }
+    inputs.file(source)
+    outputs.file(output)
+
+    doLast {
+        def target = output.get()
+        target.parentFile.mkdirs()
+
+        def rows = []
+        def section = null
+        def current = null
+        def lineNumber = 0
+
+        def flush = {
+            if (current == null) return
+            if (!current.name) {
+                throw new GradleException("gradle/blacklist.toml: [[${current.section}]] entry ending at line ${lineNumber} has no name")
+            }
+            if (!current.reason) {
+                throw new GradleException("gradle/blacklist.toml: ${current.section} entry '${current.name}' has no reason")
+            }
+            rows << "${current.section}\t${current.name}\t${current.version ?: ''}\t${current.reason}"
+            current = null
+        }
+
+        source.eachLine { String raw ->
+            lineNumber++
+            def line = raw.trim()
+            if (line.isEmpty() || line.startsWith('#')) return
+
+            def header = (line =~ /^\[\[(plugins|mods)]]$/)
+            if (header.matches()) {
+                flush()
+                section = header[0][1]
+                current = [section: section, name: null, version: null, reason: null]
+                return
+            }
+
+            def pair = (line =~ /^(name|version|reason)\s*=\s*"(.*)"$/)
+            if (pair.matches()) {
+                if (current == null) {
+                    throw new GradleException("gradle/blacklist.toml:${lineNumber}: '${line}' appears before any [[plugins]] or [[mods]] header")
+                }
+                current[pair[0][1]] = pair[0][2]
+                return
+            }
+
+            throw new GradleException("gradle/blacklist.toml:${lineNumber}: cannot parse '${line}'. Expected [[plugins]], [[mods]], or key = \"value\".")
+        }
+        flush()
+
+        target.text = rows.isEmpty() ? '' : rows.join('\n') + '\n'
+        logger.lifecycle("Generated LunarArc blacklist with ${rows.size()} entries")
+    }
+}
+sourceSets.main.resources.srcDir(generatedBlacklistDir)
+
 processResources {
     dependsOn tasks.named('extractPaperPluginMappings')
     dependsOn tasks.named('generateLunarArcBuildInfo')
+    dependsOn tasks.named('generateBlacklist')
     def javaRuntime = libs.versions.java.runtime.get()
     inputs.property 'version', project.version
     inputs.property 'java_runtime', javaRuntime
