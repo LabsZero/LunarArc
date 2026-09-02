@@ -415,9 +415,16 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
      * started being renamed to getCollisions instead - which takes (Entity, AABB), two arguments,
      * so the count agreed. Parameter shape is checked now: a primitive must match exactly, since
      * remapping never turns an int into an object, while reference types only have to agree on
-     * being references, because the call site names them in Spigot's namespace and the runtime
-     * method in Mojang's. That rejects the wrong answers without inventing a mapping for the
-     * rest.</p>
+     * being references when neither spelling can be mapped. That was still too loose: the third
+     * failure on this path renamed getBlockState(BlockPos) to addFreshEntityWithPassengers, which
+     * takes one Entity - one reference argument against one reference argument, so shape agreed
+     * too.</p>
+     *
+     * <p>Reference types are therefore mapped through the class table before being compared, which
+     * is the same table that produced the guess, so a name that maps must map to the right class.
+     * The return type is checked the same way and is the sharpest of the three: every wrong answer
+     * this path has produced disagreed on it - boolean, an Iterable, and void, against the
+     * LevelChunk and BlockState the call sites wanted.</p>
      *
      * <p>The AMBIGUOUS marking is not enough by itself: it only fires when one owner maps a single
      * name to several different results, so a name that resolves uniquely for the owner it is
@@ -435,53 +442,64 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         } catch (RuntimeException malformedDescriptor) {
             return true;
         }
-        StringBuilder shape = new StringBuilder();
-        for (org.objectweb.asm.Type argument : arguments) shape.append(primitiveShape(argument)).append(',');
-        String key = runtimeOwner.getName() + '#' + mappedName + '#' + shape;
+        org.objectweb.asm.Type returnType;
+        try {
+            returnType = org.objectweb.asm.Type.getReturnType(descriptor);
+        } catch (RuntimeException malformedDescriptor) {
+            return true;
+        }
+        String key = runtimeOwner.getName() + '#' + mappedName + '#' + descriptor;
         return "true".equals(boundedComputeIfAbsent(ALREADY_CORRECT_CACHE, key,
-                ignored -> Boolean.toString(declaresMatchingMethod(runtimeOwner, mappedName, arguments))));
+                ignored -> Boolean.toString(
+                        declaresMatchingMethod(runtimeOwner, mappedName, arguments, returnType))));
     }
 
     /**
-     * A parameter reduced to what can be compared across namespaces.
+     * Whether a runtime type is the one a call site's descriptor names.
      *
-     * <p>A primitive is itself, and is decisive: remapping never turns an int into an Entity. A
-     * reference type collapses to "L", because the call site names it in Spigot's namespace and
-     * the runtime method in Mojang's, and the two spellings of the same class are not equal as
-     * strings. Comparing what is comparable rejects the wrong answers without inventing a mapping
-     * for the rest.</p>
+     * <p>Primitives, void and arity are decisive on their own. A reference is mapped through the
+     * Spigot-to-Mojang class table first: that is the same table the rename came from, so a name
+     * it knows has exactly one right answer and anything else is wrong. A name it does not know -
+     * a plugin's own class, a JDK type, a mod's - cannot be checked, so it is accepted, which
+     * keeps this from rejecting correct answers to catch wrong ones.</p>
      */
-    private static String primitiveShape(org.objectweb.asm.Type type) {
-        return switch (type.getSort()) {
-            case org.objectweb.asm.Type.OBJECT, org.objectweb.asm.Type.ARRAY -> "L";
-            default -> type.getDescriptor();
-        };
+    private static boolean typeMatches(Class<?> runtime, org.objectweb.asm.Type declared) {
+        boolean declaredIsReference = declared.getSort() == org.objectweb.asm.Type.OBJECT
+                || declared.getSort() == org.objectweb.asm.Type.ARRAY;
+        if (!declaredIsReference || runtime.isPrimitive()) {
+            return org.objectweb.asm.Type.getDescriptor(runtime).equals(declared.getDescriptor());
+        }
+        String internal = declared.getInternalName();
+        String mapped = CLASS_MAP.get(internal);
+        // A descriptor already written in Mojang names - some plugins ship them - is its own
+        // answer, and is recognised by the reverse table rather than assumed.
+        if (mapped == null && MOJANG_TO_SPIGOT_CLASS.containsKey(internal)) mapped = internal;
+        if (mapped == null) return true;
+        return mapped.equals(org.objectweb.asm.Type.getInternalName(runtime));
     }
 
-    private static boolean parametersCompatible(Class<?>[] candidate, org.objectweb.asm.Type[] arguments) {
-        if (candidate.length != arguments.length) return false;
-        for (int i = 0; i < candidate.length; i++) {
-            boolean callSitePrimitive = !"L".equals(primitiveShape(arguments[i]));
-            if (callSitePrimitive != candidate[i].isPrimitive()) return false;
-            if (callSitePrimitive
-                    && !org.objectweb.asm.Type.getDescriptor(candidate[i]).equals(arguments[i].getDescriptor())) {
-                return false;
-            }
+    private static boolean signatureMatches(java.lang.reflect.Method candidate,
+            org.objectweb.asm.Type[] arguments, org.objectweb.asm.Type returnType) {
+        Class<?>[] parameters = candidate.getParameterTypes();
+        if (parameters.length != arguments.length) return false;
+        for (int i = 0; i < parameters.length; i++) {
+            if (!typeMatches(parameters[i], arguments[i])) return false;
         }
-        return true;
+        return typeMatches(candidate.getReturnType(), returnType);
     }
 
     private static boolean declaresMatchingMethod(Class<?> runtimeOwner, String name,
-            org.objectweb.asm.Type[] arguments) {
+            org.objectweb.asm.Type[] arguments, org.objectweb.asm.Type returnType) {
         try {
             for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
                 for (java.lang.reflect.Method candidate : current.getDeclaredMethods()) {
-                    if (candidate.getName().equals(name)
-                            && parametersCompatible(candidate.getParameterTypes(), arguments)) {
+                    if (candidate.getName().equals(name) && signatureMatches(candidate, arguments, returnType)) {
                         return true;
                     }
                 }
-                if (interfaceDeclaresMatchingMethod(current.getInterfaces(), name, arguments)) return true;
+                if (interfaceDeclaresMatchingMethod(current.getInterfaces(), name, arguments, returnType)) {
+                    return true;
+                }
             }
         } catch (Throwable ignored) {
             return true;
@@ -490,15 +508,14 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     }
 
     private static boolean interfaceDeclaresMatchingMethod(Class<?>[] interfaces, String name,
-            org.objectweb.asm.Type[] arguments) {
+            org.objectweb.asm.Type[] arguments, org.objectweb.asm.Type returnType) {
         for (Class<?> iface : interfaces) {
             for (java.lang.reflect.Method candidate : iface.getDeclaredMethods()) {
-                if (candidate.getName().equals(name)
-                        && parametersCompatible(candidate.getParameterTypes(), arguments)) {
+                if (candidate.getName().equals(name) && signatureMatches(candidate, arguments, returnType)) {
                     return true;
                 }
             }
-            if (interfaceDeclaresMatchingMethod(iface.getInterfaces(), name, arguments)) return true;
+            if (interfaceDeclaresMatchingMethod(iface.getInterfaces(), name, arguments, returnType)) return true;
         }
         return false;
     }
