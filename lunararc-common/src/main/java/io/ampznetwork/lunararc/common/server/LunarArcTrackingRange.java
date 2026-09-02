@@ -1,5 +1,6 @@
 package io.ampznetwork.lunararc.common.server;
 
+import io.ampznetwork.lunararc.common.LunarArcServerAccess;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
