@@ -21,6 +21,11 @@ public final class LunarArcForge {
         // Same as NeoForge: FML shows a mod constructor's exception on its error screen.
         LunarArcClientSideGuard.requireDedicatedServer(FMLEnvironment.dist == Dist.CLIENT);
         LunarArcServer.installPlatform("Forge", LunarArcForge.class.getClassLoader());
+        io.ampznetwork.lunararc.common.config.PluginBlacklist.screenLoadedMods(
+                net.minecraftforge.fml.ModList.get().getMods().stream()
+                        .collect(java.util.HashMap::new,
+                                (map, mod) -> map.put(mod.getModId(), mod.getVersion().toString()),
+                                java.util.HashMap::putAll));
         ForgeCommandHook.install();
         ForgeServerLifecycle.register(MinecraftForge.EVENT_BUS);
         ForgeChannelRegistration.register(MinecraftForge.EVENT_BUS);

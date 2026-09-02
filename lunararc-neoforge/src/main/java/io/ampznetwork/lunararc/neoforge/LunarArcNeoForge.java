@@ -21,6 +21,11 @@ public final class LunarArcNeoForge {
         // on its mod-loading error screen, so this is what a client user actually reads.
         LunarArcClientSideGuard.requireDedicatedServer(FMLEnvironment.dist == Dist.CLIENT);
         LunarArcServer.installPlatform("NeoForge", LunarArcNeoForge.class.getClassLoader());
+        io.ampznetwork.lunararc.common.config.PluginBlacklist.screenLoadedMods(
+                net.neoforged.fml.ModList.get().getMods().stream()
+                        .collect(java.util.HashMap::new,
+                                (map, mod) -> map.put(mod.getModId(), mod.getVersion().toString()),
+                                java.util.HashMap::putAll));
         NeoForgeCommandHook.install();
         NeoForgeServerLifecycle.register();
         NeoForgeBlockBreakEvents.register();

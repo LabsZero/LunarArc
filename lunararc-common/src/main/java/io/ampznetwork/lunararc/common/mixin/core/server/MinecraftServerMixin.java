@@ -275,7 +275,6 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
                 io.ampznetwork.lunararc.common.mod.server.LunarArcServer.platformName());
         io.ampznetwork.lunararc.common.telemetry.BlockMedicReporter.startConsoleCapture();
         LunarArcConfig.load();
-        io.ampznetwork.lunararc.common.config.PluginBlacklist.load();
         io.ampznetwork.lunararc.api.LunarArcServer.init();
     }
 
