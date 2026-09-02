@@ -39,6 +39,7 @@
     "core.entity.monster.RavagerMixin",
     "core.world.LevelChunkMixin",
     "core.world.BlockEntityMixin",
+    "core.world.HopperBlockEntityMixin",
     "core.world.raid.RaidMixin",
     "core.world.raid.RaidsMixin",
     "core.world.PrimaryLevelDataAccessor",
