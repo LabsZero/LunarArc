@@ -33,3 +33,7 @@
 # [[mods]]
 # name = "examplemod"
 # reason = "Replaces the chunk system; conflicts with LunarArc's chunk handling."
+
+[[mods]]
+name = "lithium"
+reason = "Rewrites vanilla entity storage and collection internals that Spigot-derived optimisations assume. Arclight disables its own ClassInstanceMultiMap optimisation whenever Lithium is present, for that reason. LunarArc ships nothing that overlaps today, so this is a heads-up rather than an observed break: if entity handling, spawning or tracking misbehaves, remove Lithium before reporting it."
