@@ -158,6 +158,7 @@
     "core.entity.AttributeMapAccessor",
     "core.server.MinecraftServerAccessor",
     "core.server.ChunkMapAccessor",
+    "core.server.ChunkMapMixin_TrackingRange",
     "core.server.PlayerListAccessor",
     "core.entity.ThrowableItemProjectileAccessor",
     "core.entity.ContainerEntityMixin"
