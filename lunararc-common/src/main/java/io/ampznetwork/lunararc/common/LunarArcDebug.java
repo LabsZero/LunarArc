@@ -65,6 +65,9 @@ public final class LunarArcDebug {
     /** Plugin class loading: which loader answered a name, and under which of the requested or mapped spellings. */
     public static final boolean CLASSLOAD;
 
+    /** Entity-side decisions LunarArc overrides, such as letting a player through a portal vanilla would refuse. */
+    public static final boolean ENTITY;
+
     private static BufferedWriter writer;
     private static boolean unusable;
 
@@ -79,12 +82,14 @@ public final class LunarArcDebug {
         REFLECT = all || channels.contains("reflect");
         REMAP = all || channels.contains("remap");
         CLASSLOAD = all || channels.contains("classload");
+        ENTITY = all || channels.contains("entity");
 
-        if (REFLECT || REMAP || CLASSLOAD) {
+        if (REFLECT || REMAP || CLASSLOAD || ENTITY) {
             StringBuilder enabled = new StringBuilder();
             if (REFLECT) enabled.append(" reflect");
             if (REMAP) enabled.append(" remap");
             if (CLASSLOAD) enabled.append(" classload");
+            if (ENTITY) enabled.append(" entity");
             LOGGER.info("Debug channels enabled:{} - writing to {}. Verbose by design; not meant to "
                     + "be left on for a running server.", enabled, OUTPUT.toAbsolutePath());
         }
@@ -106,6 +111,11 @@ public final class LunarArcDebug {
     /** Log on the classload channel. Call behind {@code if (LunarArcDebug.CLASSLOAD)}. */
     public static void classload(String format, Object... args) {
         write("classload", format, args);
+    }
+
+    /** Log on the entity channel. Call behind {@code if (LunarArcDebug.ENTITY)}. */
+    public static void entity(String format, Object... args) {
+        write("entity", format, args);
     }
 
     private static void write(String channel, String format, Object... args) {
@@ -139,7 +149,8 @@ public final class LunarArcDebug {
             writer.write("channels:"
                     + (REFLECT ? " reflect" : "")
                     + (REMAP ? " remap" : "")
-                    + (CLASSLOAD ? " classload" : "") + "\n");
+                    + (CLASSLOAD ? " classload" : "")
+                    + (ENTITY ? " entity" : "") + "\n");
             writer.write("This file is passive tracing only; it does not change plugin behaviour.\n\n");
             writer.flush();
             Runtime.getRuntime().addShutdownHook(new Thread(LunarArcDebug::close, "LunarArc-debug-close"));

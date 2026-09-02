@@ -28,6 +28,43 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Entity.class)
 public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
 
+    /**
+     * Let a player through a portal even when canChangeDimensions() says no.
+     *
+     * <p>Ported from Arclight's EntityMixin, which pins the same Minecraft version we do, so the
+     * target and its descriptor are read rather than guessed. Entity.handlePortal() asks
+     * canChangeDimensions(from, to) before it will actually move an entity between levels, and
+     * that is the single gate every portal passes through - vanilla and modded alike, since a
+     * modded portal block sets the entity as inside a portal and lets handlePortal do the work.
+     * Travelling to a modded dimension directly still worked because a direct teleport never
+     * consults it.</p>
+     *
+     * <p>Widening only, and only for players: the original answer is still asked for first, so
+     * nothing that could already change dimension is affected, and no other entity's behaviour
+     * moves at all.</p>
+     *
+     * <p>require = 0 because a portal that stays broken is a better outcome than a server that
+     * will not start. The debug line says which of those happened: on the entity channel it prints
+     * only when the original answer was no and this overrode it, so silence under
+     * -Dlunararc.debug=entity while a portal fails means the hook never applied.</p>
+     */
+    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(
+            method = "handlePortal",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/Entity;canChangeDimensions(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/Level;)Z"),
+            require = 0)
+    private boolean lunararc$playersMayAlwaysChangeDimension(Entity entity, Level from, Level to,
+            Operation<Boolean> original) {
+        boolean vanilla = original.call(entity, from, to);
+        if (vanilla || !((Object) this instanceof net.minecraft.server.level.ServerPlayer)) return vanilla;
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.ENTITY) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.entity(
+                    "handlePortal: canChangeDimensions said no for a player going {} -> {}; allowing it",
+                    from.dimension().location(), to.dimension().location());
+        }
+        return true;
+    }
+
     @Shadow private int portalCooldown;
     @Shadow private int remainingFireTicks;
     @Shadow private boolean hasVisualFire;
