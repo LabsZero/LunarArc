@@ -62,6 +62,18 @@ public class NeoForgeLauncher {
     private static void sameJvmLaunch(Path selfPath, Path argsFile) throws Exception {
         System.out.println("[LunarArc] Launching NeoForge in-process...");
 
+        // On this path the game runs in the JVM that is already running, so the heap it gets is
+        // the one this process was started with and nothing can raise it afterwards. The child
+        // process path picks a size when the operator gave none; here the only thing left to do
+        // is say so before a modded server spends an hour discovering it the hard way.
+        long maxHeap = Runtime.getRuntime().maxMemory();
+        if (maxHeap != Long.MAX_VALUE && maxHeap < 2L * 1024 * 1024 * 1024) {
+            System.out.println("[LunarArc] Warning: this JVM's maximum heap is "
+                    + (maxHeap / (1024 * 1024)) + "M, which a modded server will exhaust. The heap"
+                    + " cannot be changed once the JVM is running - restart LunarArc as"
+                    + " java -Xmx6G -jar <jar>.");
+        }
+
         List<String> tokens = new ArrayList<>();
         for (String raw : Files.readAllLines(argsFile)) {
             for (String tok : raw.trim().split("\\s+")) {
@@ -213,7 +225,7 @@ public class NeoForgeLauncher {
         command.add("-Dlunararc.home=" + lunararcHome);
         command.add("-Dlunararc.runtime.classes=" + runtimeClasses.toAbsolutePath());
 
-        List<String> inherited = LauncherUtils.inheritedJvmArguments(
+        List<String> inherited = LauncherUtils.serverJvmArguments(
                 "lunararc.home", "lunararc.runtime.classes");
         if (!inherited.isEmpty()) {
             System.out.println("[LunarArc] Passing JVM arguments through to the server: "

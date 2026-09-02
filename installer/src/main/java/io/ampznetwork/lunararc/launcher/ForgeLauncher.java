@@ -35,7 +35,7 @@ public class ForgeLauncher {
         // after the main class is a game argument, not a system property. fml.modsDir was being
         // added after it and so was never set.
         command.add("-Dfml.modsDir=" + bridgeModsDir.toAbsolutePath());
-        List<String> inherited = LauncherUtils.inheritedJvmArguments("fml.modsDir");
+        List<String> inherited = LauncherUtils.serverJvmArguments("fml.modsDir");
         if (!inherited.isEmpty()) {
             System.out.println("[LunarArc] Passing JVM arguments through to the server: "
                     + String.join(" ", inherited));

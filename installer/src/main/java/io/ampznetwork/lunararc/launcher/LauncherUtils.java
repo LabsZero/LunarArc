@@ -96,6 +96,101 @@ public class LauncherUtils {
         return inherited;
     }
 
+    private static final long LUNARARC_GIB = 1024L * 1024L * 1024L;
+
+    /**
+     * The full JVM argument list for a server LunarArc is about to start as a child process.
+     *
+     * <p>This is {@link #inheritedJvmArguments} plus a heap size when the operator did not choose
+     * one. Without it a server started as {@code java -jar lunararc.jar} runs the game on HotSpot's
+     * default maximum heap, a quarter of physical memory, which a modded server exhausts: a real
+     * crash report showed "JVM Flags: 0 total" and "up to 1404 MiB" before dying with
+     * java.lang.OutOfMemoryError. A quarter of RAM is a desktop application's default, not a
+     * server's, and LunarArc knows perfectly well what it is starting.</p>
+     *
+     * <p>Anything the operator set wins - an inherited -Xmx, -XX:MaxHeapSize or -XX:MaxRAMPercentage
+     * suppresses the default entirely. Only the maximum is chosen: setting -Xms as well would
+     * commit the memory up front on a machine LunarArc is only guessing about.</p>
+     */
+    public static java.util.List<String> serverJvmArguments(String... ownProperties) {
+        java.util.List<String> arguments = new java.util.ArrayList<>(inheritedJvmArguments(ownProperties));
+        for (String argument : arguments) {
+            if (argument.startsWith("-Xmx") || argument.startsWith("-XX:MaxHeapSize")
+                    || argument.startsWith("-XX:MaxRAMPercentage") || argument.startsWith("-XX:MaxRAMFraction")) {
+                return arguments;
+            }
+        }
+
+        String heap = defaultMaxHeapArgument();
+        if (heap == null) {
+            System.out.println("[LunarArc] No maximum heap was given and this machine is too small to"
+                    + " improve on the JVM's own default. Start LunarArc as"
+                    + " java -Xmx<size> -jar <jar> to choose one.");
+            return arguments;
+        }
+
+        arguments.add(heap);
+        System.out.println("[LunarArc] No maximum heap was given, so the server will run with "
+                + heap.substring("-Xmx".length()) + ". A modded server that runs out of heap dies with"
+                + " \"java.lang.OutOfMemoryError: Java heap space\"; to choose your own, start LunarArc"
+                + " as java -Xmx6G -jar <jar>.");
+        return arguments;
+    }
+
+    /**
+     * A maximum heap for a server on this machine, or null when the machine is too small to better
+     * the JVM's own default.
+     *
+     * <p>Sixty percent of physical memory, never within a gigabyte of all of it, never above 8G -
+     * past that the collector's pause times cost more than the extra room buys, which is why the
+     * usual advice for a Minecraft server stops there too.</p>
+     */
+    static String defaultMaxHeapArgument() {
+        long physical = physicalMemoryBytes();
+        if (physical < 3 * LUNARARC_GIB) return null;
+
+        long target = (long) (physical * 0.6d);
+        long ceiling = physical - LUNARARC_GIB;
+        if (target > ceiling) target = ceiling;
+        if (target > 8 * LUNARARC_GIB) target = 8 * LUNARARC_GIB;
+        if (target < 2 * LUNARARC_GIB) return null;
+
+        long megabytes = (target / (1024L * 1024L) / 256L) * 256L;
+        return "-Xmx" + megabytes + "M";
+    }
+
+    /**
+     * Physical memory in bytes, or 0 when it cannot be established.
+     *
+     * <p>Read through {@code com.sun.management.OperatingSystemMXBean}, which is an exported
+     * interface, so no access has to be forced open to call it. Failing that, the launcher's own
+     * maximum heap is HotSpot's default of a quarter of physical memory, which recovers the same
+     * figure closely enough to size a server by.</p>
+     */
+    static long physicalMemoryBytes() {
+        try {
+            Object bean = java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+            Class<?> extended = Class.forName("com.sun.management.OperatingSystemMXBean");
+            if (extended.isInstance(bean)) {
+                for (String name : new String[] {"getTotalMemorySize", "getTotalPhysicalMemorySize"}) {
+                    try {
+                        Object value = extended.getMethod(name).invoke(bean);
+                        if (value instanceof Number number && number.longValue() > 0L) {
+                            return number.longValue();
+                        }
+                    } catch (ReflectiveOperationException | RuntimeException unavailable) {
+                        // getTotalMemorySize is Java 14 and newer; the other is its predecessor.
+                    }
+                }
+            }
+        } catch (Throwable unavailable) {
+            // No management bean at all, or a runtime without com.sun.management.
+        }
+
+        long own = Runtime.getRuntime().maxMemory();
+        return own == Long.MAX_VALUE ? 0L : own * 4L;
+    }
+
     /**
      * The loader's own {@code *_args.txt}, looked for under the loader's own path first.
      *
