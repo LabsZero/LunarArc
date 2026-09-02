@@ -60,12 +60,12 @@ public final class LunarArcPluginProvider implements AutoCloseable {
         } catch (org.bukkit.plugin.InvalidDescriptionException error) {
             throw new InvalidPluginException(error);
         }
-        io.ampznetwork.lunararc.common.config.PluginBlacklist.Entry blacklist =
-                io.ampznetwork.lunararc.common.config.PluginBlacklist.check(
+        io.ampznetwork.lunararc.common.config.IncompatibilityList.Entry incompatible =
+                io.ampznetwork.lunararc.common.config.IncompatibilityList.check(
                         description.getName(), description.getVersion());
-        if (blacklist != null) {
+        if (incompatible != null) {
             throw new InvalidPluginException("Plugin " + description.getFullName()
-                    + " is incompatible with LunarArc: " + blacklist.reason());
+                    + " is incompatible with LunarArc: " + incompatible.reason());
         }
         // Paper/CraftBukkit validates api-version here and initializes the legacy
         // Bukkit compatibility layer for descriptors without api-version. Keeping

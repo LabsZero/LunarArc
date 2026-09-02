@@ -17,7 +17,7 @@ public final class LunarArcQuilt implements ModInitializer {
         LunarArcClientSideGuard.requireDedicatedServer(
                 FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT);
         LunarArcServer.installPlatform("Quilt", LunarArcQuilt.class.getClassLoader());
-        io.ampznetwork.lunararc.common.config.PluginBlacklist.screenLoadedMods(
+        io.ampznetwork.lunararc.common.config.IncompatibilityList.screenLoadedMods(
                 FabricLoader.getInstance().getAllMods().stream()
                         .collect(java.util.HashMap::new,
                                 (map, mod) -> map.put(mod.getMetadata().getId(),

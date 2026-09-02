@@ -575,7 +575,7 @@ tasks.register('generateLunarArcBuildInfo') {
 }
 sourceSets.main.resources.srcDir(generatedBuildInfoDir)
 
-// gradle/blacklist.toml is the editable source; this bakes it into the jar so a running server has
+// gradle/incompatibility.toml is the editable source; this bakes it into the jar so a running server has
 // no copy to edit or lose. Emitted as a flat, tab-separated resource rather than shipping the TOML
 // itself, because the runtime has no TOML parser and adding one to carry two lists is not a trade
 // worth making - the same reasoning as plugin-remap.tsv beside it.
@@ -584,11 +584,11 @@ sourceSets.main.resources.srcDir(generatedBuildInfoDir)
 // headers, then key = "value" lines. That is deliberately narrower than TOML. Anything outside it
 // fails the build with the offending line rather than being silently dropped, so an entry someone
 // believes is protecting them always is.
-def generatedBlacklistDir = layout.buildDirectory.dir('generated/blacklist')
+def generatedIncompatibilityDir = layout.buildDirectory.dir('generated/incompatibility')
 
-tasks.register('generateBlacklist') {
-    def source = rootProject.file('gradle/blacklist.toml')
-    def output = generatedBlacklistDir.map { it.file('lunararc/blacklist.tsv').asFile }
+tasks.register('generateIncompatibilityList') {
+    def source = rootProject.file('gradle/incompatibility.toml')
+    def output = generatedIncompatibilityDir.map { it.file('lunararc/incompatibility.tsv').asFile }
     inputs.file(source)
     outputs.file(output)
 
@@ -604,10 +604,10 @@ tasks.register('generateBlacklist') {
         def flush = {
             if (current == null) return
             if (!current.name) {
-                throw new GradleException("gradle/blacklist.toml: [[${current.section}]] entry ending at line ${lineNumber} has no name")
+                throw new GradleException("gradle/incompatibility.toml: [[${current.section}]] entry ending at line ${lineNumber} has no name")
             }
             if (!current.reason) {
-                throw new GradleException("gradle/blacklist.toml: ${current.section} entry '${current.name}' has no reason")
+                throw new GradleException("gradle/incompatibility.toml: ${current.section} entry '${current.name}' has no reason")
             }
             rows << "${current.section}\t${current.name}\t${current.version ?: ''}\t${current.reason}"
             current = null
@@ -629,26 +629,26 @@ tasks.register('generateBlacklist') {
             def pair = (line =~ /^(name|version|reason)\s*=\s*"(.*)"$/)
             if (pair.matches()) {
                 if (current == null) {
-                    throw new GradleException("gradle/blacklist.toml:${lineNumber}: '${line}' appears before any [[plugins]] or [[mods]] header")
+                    throw new GradleException("gradle/incompatibility.toml:${lineNumber}: '${line}' appears before any [[plugins]] or [[mods]] header")
                 }
                 current[pair[0][1]] = pair[0][2]
                 return
             }
 
-            throw new GradleException("gradle/blacklist.toml:${lineNumber}: cannot parse '${line}'. Expected [[plugins]], [[mods]], or key = \"value\".")
+            throw new GradleException("gradle/incompatibility.toml:${lineNumber}: cannot parse '${line}'. Expected [[plugins]], [[mods]], or key = \"value\".")
         }
         flush()
 
         target.text = rows.isEmpty() ? '' : rows.join('\n') + '\n'
-        logger.lifecycle("Generated LunarArc blacklist with ${rows.size()} entries")
+        logger.lifecycle("Generated LunarArc incompatibility list with ${rows.size()} entries")
     }
 }
-sourceSets.main.resources.srcDir(generatedBlacklistDir)
+sourceSets.main.resources.srcDir(generatedIncompatibilityDir)
 
 processResources {
     dependsOn tasks.named('extractPaperPluginMappings')
     dependsOn tasks.named('generateLunarArcBuildInfo')
-    dependsOn tasks.named('generateBlacklist')
+    dependsOn tasks.named('generateIncompatibilityList')
     def javaRuntime = libs.versions.java.runtime.get()
     inputs.property 'version', project.version
     inputs.property 'java_runtime', javaRuntime
