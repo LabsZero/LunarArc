@@ -17,6 +17,7 @@ public class FabricLauncher {
             command.add("-Dfabric.addMods=" + selfPath.toString());
         }
 
+        command.addAll(LauncherUtils.inheritedJvmArguments("fabric.addMods"));
         command.add("-jar");
         command.add("fabric-server-launch.jar");
         command.add("--nogui");

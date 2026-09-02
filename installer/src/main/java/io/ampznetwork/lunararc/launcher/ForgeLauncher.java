@@ -35,6 +35,17 @@ public class ForgeLauncher {
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
 
+        // Both of these must precede the args file, whose last token is the main class: a -D
+        // after the main class is a game argument, not a system property. fml.modsDir was being
+        // added after it and so was never set.
+        command.add("-Dfml.modsDir=" + bridgeModsDir.toAbsolutePath());
+        List<String> inherited = LauncherUtils.inheritedJvmArguments("fml.modsDir");
+        if (!inherited.isEmpty()) {
+            System.out.println("[LunarArc] Passing JVM arguments through to the server: "
+                    + String.join(" ", inherited));
+        }
+        command.addAll(inherited);
+
         for (String line : jvmArgs) {
             line = line.trim();
             if (line.isEmpty() || line.startsWith("#")) continue;
@@ -43,7 +54,6 @@ public class ForgeLauncher {
             }
         }
 
-        command.add("-Dfml.modsDir=" + bridgeModsDir.toAbsolutePath());
         command.add("--nogui");
 
         System.out.println("[LunarArc] Booting Forge...");

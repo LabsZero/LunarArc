@@ -215,6 +215,14 @@ public class NeoForgeLauncher {
         command.add("-Dlunararc.home=" + lunararcHome);
         command.add("-Dlunararc.runtime.classes=" + runtimeClasses.toAbsolutePath());
 
+        List<String> inherited = LauncherUtils.inheritedJvmArguments(
+                "lunararc.home", "lunararc.runtime.classes");
+        if (!inherited.isEmpty()) {
+            System.out.println("[LunarArc] Passing JVM arguments through to the server: "
+                    + String.join(" ", inherited));
+        }
+        command.addAll(inherited);
+
         for (String token : tokens) {
 
             command.add(token);
