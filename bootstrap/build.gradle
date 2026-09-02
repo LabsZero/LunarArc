@@ -144,16 +144,33 @@ def createFatJar(String platform) {
         dependsOn commonJarTask, platformJarTask, 'generateVersions',
                 commonResources, platformResources, bootstrapResources
 
-        from(zipTree(commonJarTask.outputs.files.singleFile)) {
+        // transformProduction* is Architectury's bytecode transformer, and its output is still in
+        // the named (Mojang) namespace - Loom's remapJar, in the platform project, is what puts
+        // classes into the loader's namespace. Only NeoForge runs on Mojang names at runtime, so
+        // only there is the transformer output already the right thing to ship.
+        //
+        // Forge (SRG), Fabric and Quilt (intermediary) all bundle lunararc-common into their
+        // shadowJar so remapJar remaps common and platform classes in one pass. Copying the named
+        // transformer output in first defeated that entirely: duplicatesStrategy is EXCLUDE, so
+        // the first copy of a path wins and the un-remapped classes were the ones that shipped.
+        // On Fabric that surfaced as "@Mixin target net.minecraft.server.commands.EffectCommands
+        // was not found" - the Mojang name of a class the loader only knows as an intermediary
+        // one - and on Forge it would have been the same story one step later, as NoSuchMethodError
+        // against SRG member names. Take the remapped platform JAR whole on those platforms.
+        boolean commonRemappedIntoPlatformJar = platform != 'neoforge'
 
-            if (platform == 'neoforge') {
+        if (commonRemappedIntoPlatformJar) {
 
+            from(zipTree(platformJarTask.outputs.files.singleFile)) {
+                exclude 'META-INF/MANIFEST.MF'
+                exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+            }
+        } else {
+
+            from(zipTree(commonJarTask.outputs.files.singleFile)) {
                 exclude 'mixins.lunararc.common.json'
                 exclude 'mixins.lunararc.common.refmap.json'
             }
-        }
-
-        if (platform == 'neoforge') {
 
             from(project(':lunararc-common').file('src/main/resources/mixins.lunararc.common.json')) {
                 filter { String line ->
@@ -166,14 +183,12 @@ def createFatJar(String platform) {
                     return line
                 }
             }
-        }
 
-        from(zipTree(platformJarTask.outputs.files.singleFile)) {
-            include 'io/ampznetwork/lunararc/**'
-            include 'META-INF/neoforge.mods.toml'
-            include 'META-INF/mods.toml'
-            include 'fabric.mod.json'
-            include 'quilt.mod.json'
+            from(zipTree(platformJarTask.outputs.files.singleFile)) {
+                include 'io/ampznetwork/lunararc/**'
+                include 'META-INF/neoforge.mods.toml'
+                include 'META-INF/mods.toml'
+            }
         }
 
         from project(':installer').sourceSets.main.output
@@ -185,11 +200,12 @@ def createFatJar(String platform) {
         // to load it: "requires version ${fabric_loader} of mod 'Fabric Loader', but only the
         // wrong version is present: 0.19.5". The same file arrives processed from the platform jar
         // above, and which of the two won was left to the copy's duplicate handling.
+        // The mixin config and its refmap are deliberately never taken from here: NeoForge gets the
+        // filtered copy written above, and the remapped platforms must keep the copy remapJar
+        // rewrote for their namespace. Everything else in common's resources is namespace-neutral.
         from(project(':lunararc-common').sourceSets.main.output.resourcesDir) {
-            if (platform == 'neoforge') {
-                exclude 'mixins.lunararc.common.json'
-                exclude 'mixins.lunararc.common.refmap.json'
-            }
+            exclude 'mixins.lunararc.common.json'
+            exclude 'mixins.lunararc.common.refmap.json'
         }
         from platformProject.sourceSets.main.output.resourcesDir
         from sourceSets.main.output.resourcesDir

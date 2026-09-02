@@ -2,6 +2,7 @@
 plugins {
     id 'architectury-plugin'
     id 'dev.architectury.loom'
+    id 'com.gradleup.shadow'
 }
 
 architectury {
@@ -14,6 +15,12 @@ loom {
     accessWidenerPath = project(':lunararc-common').file('src/main/resources/lunararc.accesswidener')
 }
 
+// shadowCommon has always been populated with lunararc-common's transformProductionQuilt output,
+// but nothing ever consumed it: without a shadowJar feeding remapJar, Loom only remapped this
+// module's own handful of classes and lunararc-common shipped in the named (Mojang) namespace.
+// Quilt Loader runs production servers on intermediary names - see the identical Fabric failure,
+// "@Mixin target net.minecraft.server.commands.EffectCommands was not found" - so the whole of
+// common has to go through remapJar with the platform classes, exactly as lunararc-forge does.
 configurations {
     common
     shadowCommon
@@ -46,4 +53,17 @@ processResources {
         expand version: project.version, project_name: rootProject.name,
                minecraft: libs.versions.minecraft.get(), quilt_loader: libs.versions.quilt.loader.get()
     }
+}
+
+shadowJar {
+    configurations = [project.configurations.shadowCommon]
+    archiveClassifier.set('dev-shadow')
+    exclude 'fabric.mod.json'
+    exclude 'META-INF/mods.toml'
+    exclude 'META-INF/neoforge.mods.toml'
+}
+
+remapJar {
+    inputFile.set shadowJar.archiveFile
+    dependsOn shadowJar
 }
