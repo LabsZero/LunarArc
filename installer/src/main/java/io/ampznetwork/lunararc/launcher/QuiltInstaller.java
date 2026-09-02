@@ -43,9 +43,15 @@ public class QuiltInstaller {
             // Minecraft version, and spells the server download --download-server. It was being
             // called with "--loader-version <ver> --download-minecraft", neither of which it
             // accepts: it printed its usage text, downloaded nothing, and exited 0.
+            // --install-dir is not optional here. Left to itself the Quilt installer creates a
+            // "server" subdirectory and installs into that - it says so as it runs, "Installing
+            // server launcher at: <dir>\\server" - so quilt-server-launch.jar and server.jar both
+            // landed one directory below everything else that makes up the server, and the launch
+            // could not find either.
             ProcessBuilder pb = new ProcessBuilder(
                     LauncherUtils.getJavaExecutable(), "-jar", installerJar.toAbsolutePath().toString(),
-                    "install", "server", mcVersion, loaderVersion, "--download-server");
+                    "install", "server", mcVersion, loaderVersion,
+                    "--install-dir=" + workingDir.toAbsolutePath(), "--download-server");
             pb.inheritIO();
             Process process = pb.start();
             int exitCode = process.waitFor();
