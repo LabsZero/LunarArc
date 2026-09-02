@@ -461,7 +461,7 @@ public abstract class ServerGamePacketListenerImplMixin {
         int rawSlot = packet.getSlotNum();
         org.bukkit.event.inventory.InventoryType.SlotType slotType = view.getSlotType(rawSlot);
         org.bukkit.event.inventory.ClickType click = lunararc$clickType(packet.getClickType(), packet.getButtonNum());
-        org.bukkit.event.inventory.InventoryAction action = org.bukkit.event.inventory.InventoryAction.UNKNOWN;
+        org.bukkit.event.inventory.InventoryAction action = lunararc$inventoryAction(packet, view);
         int hotbarKey = packet.getClickType() == net.minecraft.world.inventory.ClickType.SWAP ? packet.getButtonNum() : -1;
         org.bukkit.event.inventory.InventoryClickEvent event;
         if (rawSlot == 0 && view.getTopInventory() instanceof org.bukkit.inventory.CraftingInventory crafting
@@ -497,6 +497,146 @@ public abstract class ServerGamePacketListenerImplMixin {
         if (!this.lunararc$resyncAfterSpecialInventoryClick) return;
         this.lunararc$resyncAfterSpecialInventoryClick = false;
         this.player.containerMenu.sendAllDataToRemote();
+    }
+
+    /**
+     * The Bukkit InventoryAction for a container click.
+     *
+     * <p>This was hardcoded to UNKNOWN. The event fired and cancellation worked, so a plugin that
+     * only reads the slot saw nothing wrong - but a GUI that switches on getAction(), which is the
+     * normal way menu libraries decide what a click meant, matched no case and silently did
+     * nothing. "The menu opens and clicking does not execute" is exactly what that looks like.</p>
+     *
+     * <p>Ported from CraftBukkit's own computation in handleContainerClick, read from Arclight's
+     * 1.21 ServerGamePacketListenerImplMixin rather than reconstructed - the PICKUP branch in
+     * particular has behaviour (oversized stacks giving a negative toPlace, result slots reporting
+     * PICKUP_ALL) that is not obvious from the enum and would not survive being guessed at.</p>
+     *
+     * <p>QUICK_CRAFT is absent on purpose: it is a multi-packet drag handled against the menu's
+     * own drag state by AbstractContainerMenuMixin, and the caller returns before reaching here.</p>
+     */
+    @org.spongepowered.asm.mixin.Unique
+    private org.bukkit.event.inventory.InventoryAction lunararc$inventoryAction(
+            ServerboundContainerClickPacket packet, org.bukkit.inventory.InventoryView view) {
+        final org.bukkit.event.inventory.InventoryAction nothing =
+                org.bukkit.event.inventory.InventoryAction.NOTHING;
+        int slotNum = packet.getSlotNum();
+        int button = packet.getButtonNum();
+        net.minecraft.world.inventory.AbstractContainerMenu menu = this.player.containerMenu;
+
+        switch (packet.getClickType()) {
+            case PICKUP -> {
+                if (button != 0 && button != 1) return org.bukkit.event.inventory.InventoryAction.UNKNOWN;
+                if (slotNum == -999) {
+                    if (menu.getCarried().isEmpty()) return nothing;
+                    return button == 0
+                            ? org.bukkit.event.inventory.InventoryAction.DROP_ALL_CURSOR
+                            : org.bukkit.event.inventory.InventoryAction.DROP_ONE_CURSOR;
+                }
+                if (slotNum < 0) return nothing;
+                net.minecraft.world.inventory.Slot slot = menu.getSlot(slotNum);
+                if (slot == null) return nothing;
+                net.minecraft.world.item.ItemStack clicked = slot.getItem();
+                net.minecraft.world.item.ItemStack cursor = menu.getCarried();
+                if (clicked.isEmpty()) {
+                    if (cursor.isEmpty()) return nothing;
+                    return button == 0
+                            ? org.bukkit.event.inventory.InventoryAction.PLACE_ALL
+                            : org.bukkit.event.inventory.InventoryAction.PLACE_ONE;
+                }
+                if (!slot.mayPickup(this.player)) return nothing;
+                if (cursor.isEmpty()) {
+                    return button == 0
+                            ? org.bukkit.event.inventory.InventoryAction.PICKUP_ALL
+                            : org.bukkit.event.inventory.InventoryAction.PICKUP_HALF;
+                }
+                if (slot.mayPlace(cursor)) {
+                    if (net.minecraft.world.item.ItemStack.isSameItemSameComponents(clicked, cursor)) {
+                        int toPlace = button == 0 ? cursor.getCount() : 1;
+                        toPlace = Math.min(toPlace, clicked.getMaxStackSize() - clicked.getCount());
+                        toPlace = Math.min(toPlace, slot.container.getMaxStackSize() - clicked.getCount());
+                        if (toPlace == 1) return org.bukkit.event.inventory.InventoryAction.PLACE_ONE;
+                        if (toPlace == cursor.getCount()) return org.bukkit.event.inventory.InventoryAction.PLACE_ALL;
+                        // Negative only with oversized stacks, where the click removes rather than adds.
+                        if (toPlace < 0) {
+                            return toPlace != -1
+                                    ? org.bukkit.event.inventory.InventoryAction.PICKUP_SOME
+                                    : org.bukkit.event.inventory.InventoryAction.PICKUP_ONE;
+                        }
+                        if (toPlace != 0) return org.bukkit.event.inventory.InventoryAction.PLACE_SOME;
+                        return nothing;
+                    }
+                    if (cursor.getCount() <= slot.getMaxStackSize()) {
+                        return org.bukkit.event.inventory.InventoryAction.SWAP_WITH_CURSOR;
+                    }
+                    return nothing;
+                }
+                if (net.minecraft.world.item.ItemStack.isSameItemSameComponents(cursor, clicked)
+                        && clicked.getCount() >= 0
+                        && clicked.getCount() + cursor.getCount() <= cursor.getMaxStackSize()) {
+                    // Result slots only, since 1.5.
+                    return org.bukkit.event.inventory.InventoryAction.PICKUP_ALL;
+                }
+                return nothing;
+            }
+            case QUICK_MOVE -> {
+                if (button != 0 && button != 1) return org.bukkit.event.inventory.InventoryAction.UNKNOWN;
+                if (slotNum < 0) return nothing;
+                net.minecraft.world.inventory.Slot slot = menu.getSlot(slotNum);
+                return slot != null && slot.mayPickup(this.player) && slot.hasItem()
+                        ? org.bukkit.event.inventory.InventoryAction.MOVE_TO_OTHER_INVENTORY
+                        : nothing;
+            }
+            case SWAP -> {
+                if (!((button >= 0 && button < 9) || button == 40)) {
+                    return org.bukkit.event.inventory.InventoryAction.UNKNOWN;
+                }
+                net.minecraft.world.inventory.Slot slot = menu.getSlot(slotNum);
+                if (slot == null || !slot.mayPickup(this.player)) return nothing;
+                net.minecraft.world.item.ItemStack hotbar = this.player.getInventory().getItem(button);
+                boolean cleanSwap = hotbar.isEmpty()
+                        || (slot.container == this.player.getInventory() && slot.mayPlace(hotbar));
+                if (slot.hasItem()) {
+                    return cleanSwap
+                            ? org.bukkit.event.inventory.InventoryAction.HOTBAR_SWAP
+                            : org.bukkit.event.inventory.InventoryAction.HOTBAR_MOVE_AND_READD;
+                }
+                return !hotbar.isEmpty() && slot.mayPlace(hotbar)
+                        ? org.bukkit.event.inventory.InventoryAction.HOTBAR_SWAP
+                        : nothing;
+            }
+            case CLONE -> {
+                if (button != 2) return org.bukkit.event.inventory.InventoryAction.UNKNOWN;
+                if (slotNum < 0) return nothing;
+                net.minecraft.world.inventory.Slot slot = menu.getSlot(slotNum);
+                return slot != null && slot.hasItem()
+                        && this.player.getAbilities().instabuild && menu.getCarried().isEmpty()
+                        ? org.bukkit.event.inventory.InventoryAction.CLONE_STACK
+                        : nothing;
+            }
+            case THROW -> {
+                // A negative slot here is the client holding nothing, not a drop.
+                if (slotNum < 0) return nothing;
+                net.minecraft.world.inventory.Slot slot = menu.getSlot(slotNum);
+                boolean droppable = slot != null && slot.hasItem() && slot.mayPickup(this.player)
+                        && !slot.getItem().isEmpty();
+                if (!droppable) return nothing;
+                if (button == 0) return org.bukkit.event.inventory.InventoryAction.DROP_ONE_SLOT;
+                if (button == 1) return org.bukkit.event.inventory.InventoryAction.DROP_ALL_SLOT;
+                return nothing;
+            }
+            case PICKUP_ALL -> {
+                if (slotNum < 0 || menu.getCarried().isEmpty()) return nothing;
+                org.bukkit.Material carried = org.bukkit.craftbukkit.util.CraftMagicNumbers
+                        .getMaterial(menu.getCarried().getItem());
+                return view.getTopInventory().contains(carried) || view.getBottomInventory().contains(carried)
+                        ? org.bukkit.event.inventory.InventoryAction.COLLECT_TO_CURSOR
+                        : nothing;
+            }
+            default -> {
+                return org.bukkit.event.inventory.InventoryAction.UNKNOWN;
+            }
+        }
     }
 
     private static org.bukkit.event.inventory.ClickType lunararc$clickType(
