@@ -298,28 +298,19 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
                 io.ampznetwork.lunararc.common.messaging.LunarArcComponentPipeline.fromAdventure(title)));
     }
 
+    // Selected by name, with no descriptor, so this covers every openMenu overload: vanilla's
+    // one-argument form, and the two-argument one NeoForge and Forge add for extended menu data.
+    // A @WrapOperation handler's signature matches the call it wraps - MenuProvider.createMenu -
+    // not the method containing it, so one handler fits both regardless of their arity. That is
+    // what a second, identical injector was working around, and it is also what the annotation
+    // processor was warning about: it validates against vanilla, where the two-argument overload
+    // does not exist. require = 0 still covers the case of an overload that does not reach
+    // createMenu at all.
     @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(
-            method = "openMenu(Lnet/minecraft/world/MenuProvider;)Ljava/util/OptionalInt;",
+            method = "openMenu",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/MenuProvider;createMenu(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/inventory/AbstractContainerMenu;"),
             require = 0)
     private net.minecraft.world.inventory.AbstractContainerMenu lunararc$inventoryOpen(
-            net.minecraft.world.MenuProvider provider, int containerId,
-            net.minecraft.world.entity.player.Inventory inventory, Player player,
-            com.llamalad7.mixinextras.injector.wrapoperation.Operation<net.minecraft.world.inventory.AbstractContainerMenu> original) {
-        net.minecraft.world.inventory.AbstractContainerMenu menu = original.call(provider, containerId, inventory, player);
-        return lunararc$fireInventoryOpen(provider, menu);
-    }
-
-    // The two-argument openMenu is added by NeoForge and Forge for extended menu data; vanilla has
-    // only the one-argument form injected above. lunararc-common compiles against vanilla, so the
-    // processor reports this target as not found - correctly, for the reference it can see - while
-    // at runtime it resolves on the loaders that add it. require = 0 is what makes that legal:
-    // apply where the overload exists, stay out of the way on Fabric and Quilt where it does not.
-    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(
-            method = "openMenu(Lnet/minecraft/world/MenuProvider;Ljava/util/function/Consumer;)Ljava/util/OptionalInt;",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/MenuProvider;createMenu(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/inventory/AbstractContainerMenu;"),
-            require = 0)
-    private net.minecraft.world.inventory.AbstractContainerMenu lunararc$inventoryOpenWithData(
             net.minecraft.world.MenuProvider provider, int containerId,
             net.minecraft.world.entity.player.Inventory inventory, Player player,
             com.llamalad7.mixinextras.injector.wrapoperation.Operation<net.minecraft.world.inventory.AbstractContainerMenu> original) {

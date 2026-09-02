@@ -471,15 +471,28 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
                 String lookupDescriptor = toSpigotDescriptor(descriptor);
                 String mapped = mappings.get(new MemberKey(currentSpigot, name, lookupDescriptor));
                 if (mapped == null) mapped = mappings.get(new MemberKey(currentSpigot, name, descriptor));
-                if (mapped == null) mapped = mappings.get(new MemberKey(currentSpigot, name, "*"));
+                // Descriptor-blind, exactly like the two fallbacks in mapMethodName, and so subject
+                // to the same failure: a name that happens to resolve on some superclass is not
+                // this call's method. Validate against the class the call site names, not the one
+                // this walk is standing on, because that is the class the JVM will resolve against.
+                if (mapped == null) {
+                    String wildcard = mappings.get(new MemberKey(currentSpigot, name, "*"));
+                    if (wildcard != null && (!method || runtimeHasMethod(spigotOwner, wildcard, descriptor))) {
+                        mapped = wildcard;
+                    }
+                }
                 if (mapped == null) {
                     Map<MemberNameKey, String> names = method ? METHOD_NAME_MAP : FIELD_NAME_MAP;
                     String unique = names.get(new MemberNameKey(currentSpigot, name));
-                    if (unique != null && !AMBIGUOUS.equals(unique)) mapped = unique;
+                    if (unique != null && !AMBIGUOUS.equals(unique)
+                            && (!method || runtimeHasMethod(spigotOwner, unique, descriptor))) {
+                        mapped = unique;
+                    }
                 }
                 if (mapped != null) return mapped;
                 if (method) {
-                    String fromInterface = resolveInterfaceBytecodeMember(current.getInterfaces(), name, descriptor);
+                    String fromInterface = resolveInterfaceBytecodeMember(
+                            spigotOwner, current.getInterfaces(), name, descriptor);
                     if (fromInterface != null) return fromInterface;
                 }
             }
@@ -488,20 +501,28 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         return name;
     }
 
-    private String resolveInterfaceBytecodeMember(Class<?>[] interfaces, String name, String descriptor) {
+    private String resolveInterfaceBytecodeMember(String spigotOwner, Class<?>[] interfaces,
+            String name, String descriptor) {
         for (Class<?> iface : interfaces) {
             String spigot = MOJANG_TO_SPIGOT_CLASS.getOrDefault(
                     iface.getName().replace('.', '/'), iface.getName().replace('.', '/'));
             String lookupDescriptor = toSpigotDescriptor(descriptor);
             String mapped = METHOD_MAP.get(new MemberKey(spigot, name, lookupDescriptor));
             if (mapped == null) mapped = METHOD_MAP.get(new MemberKey(spigot, name, descriptor));
-            if (mapped == null) mapped = METHOD_MAP.get(new MemberKey(spigot, name, "*"));
+            // Descriptor-blind from here down; validated against the call's own owner.
+            if (mapped == null) {
+                String wildcard = METHOD_MAP.get(new MemberKey(spigot, name, "*"));
+                if (wildcard != null && runtimeHasMethod(spigotOwner, wildcard, descriptor)) mapped = wildcard;
+            }
             if (mapped == null) {
                 String unique = METHOD_NAME_MAP.get(new MemberNameKey(spigot, name));
-                if (unique != null && !AMBIGUOUS.equals(unique)) mapped = unique;
+                if (unique != null && !AMBIGUOUS.equals(unique)
+                        && runtimeHasMethod(spigotOwner, unique, descriptor)) {
+                    mapped = unique;
+                }
             }
             if (mapped != null) return mapped;
-            mapped = resolveInterfaceBytecodeMember(iface.getInterfaces(), name, descriptor);
+            mapped = resolveInterfaceBytecodeMember(spigotOwner, iface.getInterfaces(), name, descriptor);
             if (mapped != null) return mapped;
         }
         return null;

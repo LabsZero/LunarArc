@@ -15,3 +15,11 @@
 # packet listener. Paper remaps this member to Mojang's `connection`.
 FIELD	net/minecraft/server/level/ServerPlayer	c	*	connection
 FIELD	net/minecraft/server/network/ServerCommonPacketListenerImpl	e	*	connection
+
+# TAB reflects PlayerConnection.sendPacket(Packet), the pre-1.17 NMS name that plugins still
+# hardcode for cross-version reflection. It is not an obfuscated name, so it is in neither
+# Mojang's mappings nor Spigot's - only this table can carry it. 1.21.1 declares the method as
+# send(Packet) on ServerCommonPacketListenerImpl, which PlayerConnection
+# (ServerGamePacketListenerImpl) inherits; the resolver walks superclasses, so keying it on the
+# owner the bytecode names is enough.
+METHOD	net/minecraft/server/network/PlayerConnection	sendPacket	*	send
