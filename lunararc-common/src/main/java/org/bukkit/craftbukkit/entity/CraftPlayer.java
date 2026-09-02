@@ -1918,6 +1918,15 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
     @Override public InventoryView getOpenInventory() {
         var menu = getHandle().containerMenu;
+        // A view a plugin opened is handed back as the same object for the life of the container,
+        // the way CraftBukkit's AbstractContainerMenu.bukkitView does. Rebuilding one from the menu
+        // instead - which is all this used to do - produced a fresh CraftInventory over the same
+        // slots, with the plugin's InventoryHolder gone. A GUI whose click handler asks
+        // "is this my inventory?" then said no, declined to cancel, and the player simply took the
+        // item out of the menu: the exact symptom of a GUI that opens and does nothing.
+        InventoryView opened = ((io.ampznetwork.lunararc.common.bridge.AbstractContainerMenuBridge) menu)
+                .lunararc$getBukkitView();
+        if (opened != null) return opened;
         org.bukkit.event.inventory.InventoryType type = inferInventoryType(menu);
         if (menu instanceof net.minecraft.world.inventory.MerchantMenu merchantMenu) {
             return new org.bukkit.craftbukkit.inventory.CraftMerchantView(
@@ -1988,6 +1997,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         if (result.getSecond() == null) return null;
         getHandle().containerMenu = menu;
         ((io.ampznetwork.lunararc.common.bridge.AbstractContainerMenuBridge) menu).lunararc$setOwner(getHandle());
+        ((io.ampznetwork.lunararc.common.bridge.AbstractContainerMenuBridge) menu).lunararc$setBukkitView(view);
         ((io.ampznetwork.lunararc.common.bridge.AbstractContainerMenuBridge) menu).lunararc$setCheckReachable(false);
         net.kyori.adventure.text.Component finalTitle = result.getFirst() != null ? result.getFirst() : adventureTitle;
         getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundOpenScreenPacket(id, menuType,
@@ -2011,6 +2021,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             if (result.getSecond() == null) return;
             getHandle().containerMenu = civ.getHandle();
             ((io.ampznetwork.lunararc.common.bridge.AbstractContainerMenuBridge) civ.getHandle()).lunararc$setOwner(getHandle());
+            ((io.ampznetwork.lunararc.common.bridge.AbstractContainerMenuBridge) civ.getHandle()).lunararc$setBukkitView(civ);
             ((io.ampznetwork.lunararc.common.bridge.ServerPlayerInventoryBridge) getHandle()).lunararc$initMenu(civ.getHandle());
         } else {
             openInventory(view.getTopInventory());
