@@ -410,11 +410,18 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
      * in no namespace. The call was {@code getChunk(int, int)}; only the name was rewritten, and
      * the JVM threw NoSuchMethodError at the call site.</p>
      *
+     * <p>Argument count alone was not enough, and the same call site proved it twice: after the
+     * count check went in, getChunk(int, int) stopped being renamed to containsAnyLiquid and
+     * started being renamed to getCollisions instead - which takes (Entity, AABB), two arguments,
+     * so the count agreed. Parameter shape is checked now: a primitive must match exactly, since
+     * remapping never turns an int into an object, while reference types only have to agree on
+     * being references, because the call site names them in Spigot's namespace and the runtime
+     * method in Mojang's. That rejects the wrong answers without inventing a mapping for the
+     * rest.</p>
+     *
      * <p>The AMBIGUOUS marking is not enough by itself: it only fires when one owner maps a single
      * name to several different results, so a name that resolves uniquely for the owner it is
-     * looked up on still slips through even when it belongs to an unrelated member. Arity is a
-     * cheap, decisive cross-check - remapping never changes how many arguments a method takes -
-     * and it costs one reflective scan per distinct owner/name/arity, cached.</p>
+     * looked up on still slips through even when it belongs to an unrelated member.</p>
      *
      * <p>When the runtime class cannot be resolved the guess is allowed through unchanged, so a
      * class LunarArc cannot see is no worse off than before.</p>
@@ -422,24 +429,59 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     private static boolean runtimeHasMethod(String spigotOwner, String mappedName, String descriptor) {
         Class<?> runtimeOwner = runtimeClassFor(spigotOwner);
         if (runtimeOwner == null) return true;
-        int arity;
+        org.objectweb.asm.Type[] arguments;
         try {
-            arity = org.objectweb.asm.Type.getArgumentTypes(descriptor).length;
+            arguments = org.objectweb.asm.Type.getArgumentTypes(descriptor);
         } catch (RuntimeException malformedDescriptor) {
             return true;
         }
-        String key = runtimeOwner.getName() + '#' + mappedName + '#' + arity;
+        StringBuilder shape = new StringBuilder();
+        for (org.objectweb.asm.Type argument : arguments) shape.append(primitiveShape(argument)).append(',');
+        String key = runtimeOwner.getName() + '#' + mappedName + '#' + shape;
         return "true".equals(boundedComputeIfAbsent(ALREADY_CORRECT_CACHE, key,
-                ignored -> Boolean.toString(declaresMethodWithArity(runtimeOwner, mappedName, arity))));
+                ignored -> Boolean.toString(declaresMatchingMethod(runtimeOwner, mappedName, arguments))));
     }
 
-    private static boolean declaresMethodWithArity(Class<?> runtimeOwner, String name, int arity) {
+    /**
+     * A parameter reduced to what can be compared across namespaces.
+     *
+     * <p>A primitive is itself, and is decisive: remapping never turns an int into an Entity. A
+     * reference type collapses to "L", because the call site names it in Spigot's namespace and
+     * the runtime method in Mojang's, and the two spellings of the same class are not equal as
+     * strings. Comparing what is comparable rejects the wrong answers without inventing a mapping
+     * for the rest.</p>
+     */
+    private static String primitiveShape(org.objectweb.asm.Type type) {
+        return switch (type.getSort()) {
+            case org.objectweb.asm.Type.OBJECT, org.objectweb.asm.Type.ARRAY -> "L";
+            default -> type.getDescriptor();
+        };
+    }
+
+    private static boolean parametersCompatible(Class<?>[] candidate, org.objectweb.asm.Type[] arguments) {
+        if (candidate.length != arguments.length) return false;
+        for (int i = 0; i < candidate.length; i++) {
+            boolean callSitePrimitive = !"L".equals(primitiveShape(arguments[i]));
+            if (callSitePrimitive != candidate[i].isPrimitive()) return false;
+            if (callSitePrimitive
+                    && !org.objectweb.asm.Type.getDescriptor(candidate[i]).equals(arguments[i].getDescriptor())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean declaresMatchingMethod(Class<?> runtimeOwner, String name,
+            org.objectweb.asm.Type[] arguments) {
         try {
             for (Class<?> current = runtimeOwner; current != null; current = current.getSuperclass()) {
                 for (java.lang.reflect.Method candidate : current.getDeclaredMethods()) {
-                    if (candidate.getName().equals(name) && candidate.getParameterCount() == arity) return true;
+                    if (candidate.getName().equals(name)
+                            && parametersCompatible(candidate.getParameterTypes(), arguments)) {
+                        return true;
+                    }
                 }
-                if (interfaceDeclaresMethodWithArity(current.getInterfaces(), name, arity)) return true;
+                if (interfaceDeclaresMatchingMethod(current.getInterfaces(), name, arguments)) return true;
             }
         } catch (Throwable ignored) {
             return true;
@@ -447,12 +489,16 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         return false;
     }
 
-    private static boolean interfaceDeclaresMethodWithArity(Class<?>[] interfaces, String name, int arity) {
+    private static boolean interfaceDeclaresMatchingMethod(Class<?>[] interfaces, String name,
+            org.objectweb.asm.Type[] arguments) {
         for (Class<?> iface : interfaces) {
             for (java.lang.reflect.Method candidate : iface.getDeclaredMethods()) {
-                if (candidate.getName().equals(name) && candidate.getParameterCount() == arity) return true;
+                if (candidate.getName().equals(name)
+                        && parametersCompatible(candidate.getParameterTypes(), arguments)) {
+                    return true;
+                }
             }
-            if (interfaceDeclaresMethodWithArity(iface.getInterfaces(), name, arity)) return true;
+            if (interfaceDeclaresMatchingMethod(iface.getInterfaces(), name, arguments)) return true;
         }
         return false;
     }
