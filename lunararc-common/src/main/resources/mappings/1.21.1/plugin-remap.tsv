@@ -23,3 +23,11 @@ FIELD	net/minecraft/server/network/ServerCommonPacketListenerImpl	e	*	connection
 # (ServerGamePacketListenerImpl) inherits; the resolver walks superclasses, so keying it on the
 # owner the bytecode names is enough.
 METHOD	net/minecraft/server/network/PlayerConnection	sendPacket	*	send
+
+# ServerPlayer.playerConnection is the pre-1.17 NMS name for what is now `connection`, and plugins
+# still reach for it by that name in cross-version reflection - it is the single most common way a
+# plugin gets at a player's packet listener. Like sendPacket above it was never obfuscated, so it
+# appears in neither Mojang's mappings nor Spigot's and only this table can carry it. Same field,
+# same type, pure rename, so the mapping is exact. Seen in this server's log as "No reflective
+# mapping found for field net.minecraft.server.level.ServerPlayer#playerConnection".
+FIELD	net/minecraft/server/level/ServerPlayer	playerConnection	*	connection
