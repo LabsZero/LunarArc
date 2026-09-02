@@ -2,6 +2,7 @@ package io.ampznetwork.lunararc.common.mixin.core.world.material;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import io.ampznetwork.lunararc.common.LunarArcDebug;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -40,16 +41,44 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * <p>Both handlers only fire against a real logic world; see LunarArcLogicWorlds for why
  * {@code instanceof ServerLevel} is the wrong test on a modded server.</p>
+ *
+ * <p>The HEAD hooks on {@code tick} and {@code spread} do nothing at all unless the fluid debug
+ * channel is on. They exist because "placed water does not flow" has four possible causes -
+ * the placement never scheduling a tick, the scheduled tick never running, vanilla refusing the
+ * spread, or this class cancelling it - and no amount of reading tells them apart. Run with
+ * {@code -Dlunararc.debug=fluid}, pour a bucket, and the trace in {@code logs/lunararc-debug.log}
+ * says which stage the fluid reached.</p>
  */
 @Mixin(FlowingFluid.class)
 public abstract class FlowingFluidMixin {
+
+    @Inject(method = "tick", at = @At("HEAD"), require = 0)
+    private void lunararc$traceTick(Level level, BlockPos pos, FluidState fluidState, CallbackInfo ci) {
+        if (!LunarArcDebug.FLUID) return;
+        LunarArcDebug.fluid("tick {} at {} amount={} source={} level={}",
+                fluidState.getType(), pos, fluidState.getAmount(), fluidState.isSource(),
+                level.getClass().getName());
+    }
+
+    @Inject(method = "spread", at = @At("HEAD"), require = 0)
+    private void lunararc$traceSpread(Level level, BlockPos pos, FluidState fluidState, CallbackInfo ci) {
+        if (!LunarArcDebug.FLUID) return;
+        LunarArcDebug.fluid("spread {} at {} source={} logicWorld={} listeners={}",
+                fluidState.getType(), pos, fluidState.isSource(),
+                io.ampznetwork.lunararc.common.mod.util.LunarArcLogicWorlds.isLogicWorld(level),
+                BlockFromToEvent.getHandlerList().getRegisteredListeners().length);
+    }
 
     @Inject(
             method = "spread",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/material/FlowingFluid;spreadTo(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/material/FluidState;)V"),
             cancellable = true)
     private void lunararc$blockFromToDown(Level level, BlockPos pos, FluidState fluidState, CallbackInfo ci) {
-        if (lunararc$flowCancelled(level, pos, Direction.DOWN)) {
+        boolean cancelled = lunararc$flowCancelled(level, pos, Direction.DOWN);
+        if (LunarArcDebug.FLUID) {
+            LunarArcDebug.fluid("spread down from {} cancelled={}", pos, cancelled);
+        }
+        if (cancelled) {
             ci.cancel();
         }
     }
@@ -78,10 +107,13 @@ public abstract class FlowingFluidMixin {
             FluidState toFluid,
             net.minecraft.world.level.material.Fluid fluid,
             Operation<Boolean> original) {
-        if (!original.call(self, reader, fromPos, fromState, direction, toPos, toState, toFluid, fluid)) {
-            return false;
+        boolean vanilla = original.call(self, reader, fromPos, fromState, direction, toPos, toState, toFluid, fluid);
+        boolean cancelled = vanilla && reader instanceof Level level && lunararc$flowCancelled(level, fromPos, direction);
+        if (LunarArcDebug.FLUID) {
+            LunarArcDebug.fluid("spread {} from {} vanillaAllows={} cancelled={}",
+                    direction, fromPos, vanilla, cancelled);
         }
-        return !(reader instanceof Level level) || !lunararc$flowCancelled(level, fromPos, direction);
+        return vanilla && !cancelled;
     }
 
     /**
@@ -91,9 +123,16 @@ public abstract class FlowingFluidMixin {
      * ticks against simulated and scratch levels that are ServerLevel subclasses, and firing a
      * Bukkit event naming a block in a world no plugin has seen is at best noise - at worst it
      * throws from inside a vanilla mechanic that is mid-tick, and the mechanic stops.</p>
+     *
+     * <p>Guarded on the handler list first, for the same reason Paper guards its own hot events:
+     * every flowing fluid in every loaded chunk arrives here several times a second, and building a
+     * CraftBlock and an event object for each one is pure waste on a server where nothing is
+     * listening. With no listener there is also no possible verdict but "not cancelled", so the
+     * check cannot change behaviour - only what it costs to reach it.</p>
      */
     @Unique
     private static boolean lunararc$flowCancelled(Level level, BlockPos source, Direction direction) {
+        if (BlockFromToEvent.getHandlerList().getRegisteredListeners().length == 0) return false;
         if (!(level instanceof ServerLevel serverLevel)
                 || !io.ampznetwork.lunararc.common.mod.util.LunarArcLogicWorlds.isLogicWorld(serverLevel)) {
             return false;

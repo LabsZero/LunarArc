@@ -29,7 +29,7 @@ import java.time.Instant;
  * <p>Off unless asked for:</p>
  *
  * <pre>
- *   -Dlunararc.debug=reflect            one channel
+ *   -Dlunararc.debug=fluid              one channel
  *   -Dlunararc.debug=reflect,classload  several
  *   -Dlunararc.debug=all                everything
  * </pre>
@@ -68,6 +68,18 @@ public final class LunarArcDebug {
     /** Entity-side decisions LunarArc overrides, such as letting a player through a portal vanilla would refuse. */
     public static final boolean ENTITY;
 
+    /**
+     * The whole life of a fluid step: the block placement that schedules the first tick, the tick
+     * itself, and every spread decision with the Bukkit verdict on it.
+     *
+     * <p>Added because "placed water does not flow" is a symptom four separate mechanisms can
+     * produce - the placement never scheduling a tick, the tick never running, the spread being
+     * refused by vanilla, or LunarArc's own BlockFromToEvent cancelling it - and reading the source
+     * cannot tell them apart. Each line says which stage was reached, so one reproduction rules out
+     * three of the four.</p>
+     */
+    public static final boolean FLUID;
+
     private static BufferedWriter writer;
     private static boolean unusable;
 
@@ -83,13 +95,15 @@ public final class LunarArcDebug {
         REMAP = all || channels.contains("remap");
         CLASSLOAD = all || channels.contains("classload");
         ENTITY = all || channels.contains("entity");
+        FLUID = all || channels.contains("fluid");
 
-        if (REFLECT || REMAP || CLASSLOAD || ENTITY) {
+        if (REFLECT || REMAP || CLASSLOAD || ENTITY || FLUID) {
             StringBuilder enabled = new StringBuilder();
             if (REFLECT) enabled.append(" reflect");
             if (REMAP) enabled.append(" remap");
             if (CLASSLOAD) enabled.append(" classload");
             if (ENTITY) enabled.append(" entity");
+            if (FLUID) enabled.append(" fluid");
             LOGGER.info("Debug channels enabled:{} - writing to {}. Verbose by design; not meant to "
                     + "be left on for a running server.", enabled, OUTPUT.toAbsolutePath());
         }
@@ -116,6 +130,11 @@ public final class LunarArcDebug {
     /** Log on the entity channel. Call behind {@code if (LunarArcDebug.ENTITY)}. */
     public static void entity(String format, Object... args) {
         write("entity", format, args);
+    }
+
+    /** Log on the fluid channel. Call behind {@code if (LunarArcDebug.FLUID)}. */
+    public static void fluid(String format, Object... args) {
+        write("fluid", format, args);
     }
 
     private static void write(String channel, String format, Object... args) {
@@ -150,7 +169,8 @@ public final class LunarArcDebug {
                     + (REFLECT ? " reflect" : "")
                     + (REMAP ? " remap" : "")
                     + (CLASSLOAD ? " classload" : "")
-                    + (ENTITY ? " entity" : "") + "\n");
+                    + (ENTITY ? " entity" : "")
+                    + (FLUID ? " fluid" : "") + "\n");
             writer.write("This file is passive tracing only; it does not change plugin behaviour.\n\n");
             writer.flush();
             Runtime.getRuntime().addShutdownHook(new Thread(LunarArcDebug::close, "LunarArc-debug-close"));

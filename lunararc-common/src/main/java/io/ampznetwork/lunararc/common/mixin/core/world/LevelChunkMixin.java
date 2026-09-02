@@ -54,7 +54,16 @@ public abstract class LevelChunkMixin implements io.ampznetwork.lunararc.common.
                     target = "Lnet/minecraft/world/level/block/state/BlockState;onPlace(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Z)V"),
             require = 0)
     private void lunararc$conditionallyRunOnPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
-        if (this.lunararc$suppressOnPlaceDepth == 0) {
+        boolean run = this.lunararc$suppressOnPlaceDepth == 0;
+        // onPlace is where LiquidBlock schedules a fluid's first tick, so suppressing it here is
+        // one of the few ways placed water can end up sitting still forever. Traced on the fluid
+        // channel for exactly that: a placement whose onPlace never ran never gets a tick, and
+        // nothing further down the chain can say so.
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.FLUID && !state.getFluidState().isEmpty()) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.fluid("onPlace {} at {} run={} (suppressDepth={})",
+                    state.getFluidState().getType(), pos, run, this.lunararc$suppressOnPlaceDepth);
+        }
+        if (run) {
             state.onPlace(level, pos, oldState, movedByPiston);
         }
     }
