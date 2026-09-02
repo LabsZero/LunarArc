@@ -22,15 +22,51 @@ public final class LunarArcNeoForge {
         LunarArcClientSideGuard.requireDedicatedServer(FMLEnvironment.dist == Dist.CLIENT);
         LunarArcServer.installPlatform("NeoForge", LunarArcNeoForge.class.getClassLoader());
         io.ampznetwork.lunararc.common.config.PluginBlacklist.screenLoadedMods(
-                net.neoforged.fml.ModList.get().getMods().stream()
-                        .collect(java.util.HashMap::new,
-                                (map, mod) -> map.put(mod.getModId(), mod.getVersion().toString()),
-                                java.util.HashMap::putAll));
+                lunararc$loadedMods());
         NeoForgeCommandHook.install();
         NeoForgeServerLifecycle.register();
         NeoForgeBlockBreakEvents.register();
         NeoForgeBlockPlaceEvents.register();
         NeoForgeEntityTeleportEvents.register();
         NeoForgeEntityJoinEvents.register();
+    }
+
+    /**
+     * Mod ID to version for every loaded mod.
+     *
+     * <p>getVersion() is called reflectively, and deliberately. It returns Maven's ArtifactVersion,
+     * and the shaded runtime relocates org.apache.maven into io.ampznetwork.lunararc.libs.maven -
+     * which rewrites the return type in our call site's descriptor, so a direct call goes looking
+     * for a method NeoForge does not have and the mod fails to construct:</p>
+     *
+     * <pre>
+     *   NoSuchMethodError: 'io.ampznetwork.lunararc.libs.maven.core.artifact.versioning
+     *   .ArtifactVersion net.neoforged.neoforgespi.language.IModInfo.getVersion()'
+     * </pre>
+     *
+     * <p>Looking the method up by name emits no descriptor for the relocator to touch. A version
+     * that cannot be read is left null, which still matches any blacklist entry that does not pin
+     * one - the screening is a warning, and losing a version is not worth failing a boot over.</p>
+     */
+    private static java.util.Map<String, String> lunararc$loadedMods() {
+        java.util.Map<String, String> mods = new java.util.HashMap<>();
+        java.lang.reflect.Method getVersion;
+        try {
+            getVersion = net.neoforged.neoforgespi.language.IModInfo.class.getMethod("getVersion");
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            getVersion = null;
+        }
+        for (net.neoforged.neoforgespi.language.IModInfo mod : net.neoforged.fml.ModList.get().getMods()) {
+            String version = null;
+            if (getVersion != null) {
+                try {
+                    Object value = getVersion.invoke(mod);
+                    if (value != null) version = value.toString();
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                }
+            }
+            mods.put(mod.getModId(), version);
+        }
+        return mods;
     }
 }
