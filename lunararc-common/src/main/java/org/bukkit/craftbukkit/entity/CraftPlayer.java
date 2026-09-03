@@ -592,12 +592,38 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     @Override
     public void setDisplayName(String name) { this.displayName = name; }
 
+    /**
+     * The legacy {@code §}-coded display name, read as a real {@link Component}.
+     *
+     * <p>This used to be {@code Component.text(getDisplayName())}, which wraps the raw string as
+     * literal text rather than parsing it - so a rank plugin that colors a player's display name
+     * the classic way, {@code setDisplayName("§6[VIP] " + name)}, produced a component whose text
+     * was literally the six characters {@code §}, {@code 6}, {@code [}, ... with no color applied
+     * at all. Every caller that builds a component from a player's display name - chat renderers
+     * most visibly - inherited that. {@link #getDisplayName()} already holds a legacy string;
+     * deserializing it through the same pipeline {@link #sendMessage(String)} uses is what
+     * {@code displayName()} promising a real Component actually requires.</p>
+     */
     @Override
-    public @NotNull Component displayName() { return Component.text(getDisplayName()); }
+    public @NotNull Component displayName() {
+        return io.ampznetwork.lunararc.common.messaging.LunarArcComponentPipeline.legacyToAdventure(getDisplayName());
+    }
 
+    /**
+     * The other half of the same bug: serializing to {@code PlainTextComponentSerializer} threw
+     * every color, bold, and hex value a plugin set through the modern Component-based API away
+     * before it ever reached {@link #getDisplayName()} - so a rank plugin that colors a display
+     * name the modern way, {@code player.displayName(Component.text("[VIP] ").color(GOLD)...)},
+     * lost the color just as completely as the legacy path did, from the other direction. Legacy
+     * serialization keeps it: the same {@code §} codes {@link #displayName()} above already knows
+     * how to read back.
+     */
     @Override
     public void displayName(@Nullable Component displayName) {
-        this.displayName = displayName == null ? null : net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(displayName);
+        this.displayName = displayName == null ? null
+                : net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.builder()
+                        .character('§').hexColors().useUnusualXRepeatedCharacterHexFormat().build()
+                        .serialize(displayName);
     }
 
     private void sendTabListPacket() {
