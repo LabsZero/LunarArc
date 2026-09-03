@@ -76,6 +76,16 @@ public final class LunarArcDynamicBukkitEnums {
         return materialByKey(key(id));
     }
 
+    /**
+     * Every block/item id this server knows a Material for, vanilla and modded alike - a
+     * consumer that only wants the modded ones filters on {@code !"minecraft".equals(id.getNamespace())}.
+     * Read-only: this map is {@link #registerMaterials() built once} and callers have no business
+     * mutating LunarArc's own view of it.
+     */
+    public static Map<ResourceLocation, Material> materialsById() {
+        return Collections.unmodifiableMap(MATERIALS_BY_ID);
+    }
+
     public static EntityType entityType(ResourceLocation id) {
         EntityType dynamic = ENTITY_TYPES.get(id);
         if (dynamic != null) return dynamic;
