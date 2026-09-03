@@ -11,25 +11,17 @@ pluginManagement {
 
 rootProject.name = 'LunarArc'
 
-// Non-Minecraft utilities & shared API surface
 include 'lunararc-api'
 
-// Core hybrid-server implementation: mixins, bridges, PaperMC stubs, remapper
-// Analogous to arclight-common (io.ampznetwork.lunararc.common.*)
 include 'lunararc-common'
 
-// Platform-specific implementations
-// Analogous to arclight-neoforge / arclight-forge / arclight-fabric
 include 'lunararc-neoforge'
 include 'lunararc-forge'
 include 'lunararc-fabric'
 include 'lunararc-quilt'
 
-// Installer — installs mod loaders automatically at runtime (analogous to installer subproject)
 include 'installer'
 
-// Internationalisation — multi-language translations (analogous to i18n-config)
 include 'i18n-config'
 
-// Bootstrap — bundles subprojects into a single server JAR
 include 'bootstrap'

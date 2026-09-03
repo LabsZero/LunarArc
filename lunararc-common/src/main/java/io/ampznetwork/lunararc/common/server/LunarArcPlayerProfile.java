@@ -29,10 +29,10 @@ public class LunarArcPlayerProfile implements PlayerProfile {
         this.name = name;
     }
 
-    // org.bukkit.profile.PlayerProfile methods
+
     @Override public @Nullable UUID getUniqueId() { return uuid; }
-    
-    // com.destroystokyo.paper.profile.PlayerProfile methods
+
+
     @Override public @Nullable String getName() { return name; }
     @Override public @Nullable String setName(@Nullable String name) { String old = this.name; this.name = name; return old; }
     @Override public @Nullable UUID getId() { return uuid; }
@@ -43,17 +43,17 @@ public class LunarArcPlayerProfile implements PlayerProfile {
     @Override public void clearProperties() { properties.clear(); }
     @Override public boolean removeProperty(@NotNull String name) { return properties.removeIf(p -> p.getName().equals(name)); }
     @Override public boolean hasProperty(@NotNull String name) { return properties.stream().anyMatch(p -> p.getName().equals(name)); }
-    
-    @Override 
-    public @NotNull PlayerTextures getTextures() { 
-        return textures != null ? textures : (textures = (PlayerTextures) java.lang.reflect.Proxy.newProxyInstance(PlayerTextures.class.getClassLoader(), new Class<?>[] { PlayerTextures.class }, (p, m, a) -> null)); 
+
+    @Override
+    public @NotNull PlayerTextures getTextures() {
+        return textures != null ? textures : (textures = new LunarArcPlayerTextures());
     }
-    
-    @Override 
-    public void setTextures(@Nullable PlayerTextures textures) { 
-        this.textures = textures; 
+
+    @Override
+    public void setTextures(@Nullable PlayerTextures textures) {
+        this.textures = textures;
     }
-    
+
     @Override
     public @NotNull CompletableFuture<PlayerProfile> update() {
         if (uuid == null) return CompletableFuture.completedFuture(this);
@@ -65,7 +65,7 @@ public class LunarArcPlayerProfile implements PlayerProfile {
                 conn.setReadTimeout(5000);
                 conn.setRequestProperty("Accept", "application/json");
                 if (conn.getResponseCode() == 200) {
-                    // Read the full response body
+
                     StringBuilder sb = new StringBuilder();
                     try (var reader = new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8)) {
                         char[] buf = new char[2048];
@@ -73,21 +73,21 @@ public class LunarArcPlayerProfile implements PlayerProfile {
                         while ((n = reader.read(buf)) != -1) sb.append(buf, 0, n);
                     }
                     String json = sb.toString();
-                    // Extract name field: "name":"..."
+
                     int nameStart = json.indexOf("\"name\":\"");
                     if (nameStart >= 0 && this.name == null) {
                         nameStart += 8;
                         int nameEnd = json.indexOf('"', nameStart);
                         if (nameEnd > nameStart) this.name = json.substring(nameStart, nameEnd);
                     }
-                    // Extract properties array and parse each textures property
+
                     int propsStart = json.indexOf("\"properties\":[");
                     if (propsStart >= 0) {
                         propsStart += 14;
                         int propsEnd = json.lastIndexOf(']');
                         if (propsEnd > propsStart) {
                             String propsJson = json.substring(propsStart, propsEnd);
-                            // Simple property extractor: find each {"name":"...","value":"...","signature":"..."}
+
                             int pos = 0;
                             while (pos < propsJson.length()) {
                                 int objStart = propsJson.indexOf('{', pos);
@@ -123,7 +123,7 @@ public class LunarArcPlayerProfile implements PlayerProfile {
         }
         return end > start ? json.substring(start, end) : null;
     }
-    
+
     @Override public boolean isComplete() { return uuid != null && name != null; }
     @Override public boolean completeFromCache() { return isComplete(); }
     @Override public boolean completeFromCache(boolean onlineMode) { return isComplete(); }

@@ -8,7 +8,14 @@ mutable field net/minecraft/server/network/ServerLoginPacketListenerImpl state L
 mutable field net/minecraft/server/network/ServerLoginPacketListenerImpl authenticatedProfile Lcom/mojang/authlib/GameProfile;
 accessible class net/minecraft/server/network/ServerLoginPacketListenerImpl$State
 
+# Paper plugin NMS compatibility - packet plugins such as TAB access the
+# listener connection field directly. Paper exposes this field in its patched NMS.
+accessible field net/minecraft/server/network/ServerCommonPacketListenerImpl connection Lnet/minecraft/network/Connection;
+
 # Connection - expose address field for real IP injection
+# TAB's NMSImplementationProvider reads Connection.channel to install its tab-list packet
+# tracker on player join; without this it dies with IllegalAccessError in PlayerJoinEvent.
+accessible field net/minecraft/network/Connection channel Lio/netty/channel/Channel;
 accessible field net/minecraft/network/Connection address Ljava/net/SocketAddress;
 mutable field net/minecraft/network/Connection address Ljava/net/SocketAddress;
 
@@ -19,3 +26,161 @@ accessible field net/minecraft/world/entity/Entity remainingFireTicks I
 mutable field net/minecraft/world/entity/Entity remainingFireTicks I
 accessible method net/minecraft/world/entity/Entity hasGlowingTag ()Z
 accessible method net/minecraft/world/entity/Entity isEyeInFluid (Lnet/minecraft/tags/TagKey;)Z
+
+# Paper/CraftBukkit 1.21.1 exposes Biome climate settings for World humidity.
+accessible field net/minecraft/world/level/biome/Biome climateSettings Lnet/minecraft/world/level/biome/Biome$ClimateSettings;
+
+# Paper/CraftBukkit 1.21.1 exposes WardenSpawnTracker warning timing state.
+accessible field net/minecraft/world/entity/monster/warden/WardenSpawnTracker cooldownTicks I
+mutable field net/minecraft/world/entity/monster/warden/WardenSpawnTracker cooldownTicks I
+accessible field net/minecraft/world/entity/monster/warden/WardenSpawnTracker ticksSinceLastWarning I
+mutable field net/minecraft/world/entity/monster/warden/WardenSpawnTracker ticksSinceLastWarning I
+accessible method net/minecraft/world/entity/monster/warden/WardenSpawnTracker increaseWarningLevel ()V
+
+# Paper/Bukkit 1.21.1 client-option access.
+# Particle visibility is captured from vanilla ClientInformation by ServerPlayerMixin;
+# Paper's patched ServerPlayer#particleStatus field does not exist on Forge/NeoForge/Fabric.
+accessible field net/minecraft/world/entity/player/Player DATA_PLAYER_MODE_CUSTOMISATION Lnet/minecraft/network/syncher/EntityDataAccessor;
+
+
+# Runtime Fix 04 - direct NMS access for mapping-sensitive Paper compatibility surfaces.
+# These replace fragile Mixin accessors/invokers and are converted to ATs on Forge/NeoForge.
+accessible field net/minecraft/world/inventory/CraftingMenu craftSlots Lnet/minecraft/world/inventory/CraftingContainer;
+accessible field net/minecraft/world/inventory/CraftingMenu resultSlots Lnet/minecraft/world/inventory/ResultContainer;
+accessible method net/minecraft/world/entity/LivingEntity getExperienceReward (Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;)I
+accessible field net/minecraft/world/level/dimension/end/EndDragonFight level Lnet/minecraft/server/level/ServerLevel;
+accessible field net/minecraft/world/level/dimension/end/EndDragonFight dragonUUID Ljava/util/UUID;
+accessible field net/minecraft/world/level/dimension/end/EndDragonFight dragonEvent Lnet/minecraft/server/level/ServerBossEvent;
+accessible field net/minecraft/world/level/dimension/end/EndDragonFight portalLocation Lnet/minecraft/core/BlockPos;
+accessible field net/minecraft/world/level/dimension/end/EndDragonFight previouslyKilled Z
+mutable field net/minecraft/world/level/dimension/end/EndDragonFight previouslyKilled Z
+accessible field net/minecraft/world/level/dimension/end/EndDragonFight respawnStage Lnet/minecraft/world/level/dimension/end/DragonRespawnAnimation;
+accessible field net/minecraft/world/level/dimension/end/EndDragonFight gateways Lit/unimi/dsi/fastutil/objects/ObjectArrayList;
+accessible field net/minecraft/world/level/dimension/end/EndDragonFight respawnCrystals Ljava/util/List;
+accessible method net/minecraft/world/level/dimension/end/EndDragonFight findExitPortal ()Lnet/minecraft/world/level/block/state/pattern/BlockPattern$BlockPatternMatch;
+accessible method net/minecraft/world/level/dimension/end/EndDragonFight spawnExitPortal (Z)V
+accessible method net/minecraft/world/level/dimension/end/EndDragonFight spawnNewGateway (Lnet/minecraft/core/BlockPos;)V
+accessible method net/minecraft/world/level/dimension/end/EndDragonFight respawnDragon (Ljava/util/List;)V
+accessible field net/minecraft/world/effect/MobEffect attributeModifiers Ljava/util/Map;
+# Compile repair 33 - package-private vanilla effect target used by a narrow Mixin.
+accessible class net/minecraft/world/effect/HungerMobEffect
+
+# Runtime Fix 09 - remove refmap-sensitive Mob accessors in favor of direct widened NMS access.
+accessible method net/minecraft/world/entity/Mob getAmbientSound ()Lnet/minecraft/sounds/SoundEvent;
+accessible method net/minecraft/world/entity/Mob isSunBurnTick ()Z
+accessible method net/minecraft/world/entity/Mob getEquipmentDropChance (Lnet/minecraft/world/entity/EquipmentSlot;)F
+accessible field net/minecraft/world/entity/Mob handDropChances [F
+accessible field net/minecraft/world/entity/Mob armorDropChances [F
+accessible field net/minecraft/world/entity/Mob bodyArmorDropChance F
+mutable field net/minecraft/world/entity/Mob bodyArmorDropChance F
+accessible field net/minecraft/world/entity/Mob persistenceRequired Z
+mutable field net/minecraft/world/entity/Mob persistenceRequired Z
+accessible field net/minecraft/world/entity/Mob lootTable Lnet/minecraft/resources/ResourceKey;
+mutable field net/minecraft/world/entity/Mob lootTable Lnet/minecraft/resources/ResourceKey;
+accessible field net/minecraft/world/entity/Mob lootTableSeed J
+mutable field net/minecraft/world/entity/Mob lootTableSeed J
+# Runtime Fix 09 - remove redundant refmap-sensitive AttributeMap accessor.
+accessible field net/minecraft/world/entity/ai/attributes/AttributeMap attributes Ljava/util/Map;
+
+# Runtime Fix 10 - retire simple server/command refmap-sensitive accessors.
+accessible field net/minecraft/server/players/PlayerList maxPlayers I
+mutable field net/minecraft/server/players/PlayerList maxPlayers I
+accessible method net/minecraft/server/players/PlayerList save (Lnet/minecraft/server/level/ServerPlayer;)V
+accessible method net/minecraft/server/players/PlayerList load (Lnet/minecraft/server/level/ServerPlayer;)Ljava/util/Optional;
+accessible field net/minecraft/server/level/ChunkMap entityMap Lit/unimi/dsi/fastutil/ints/Int2ObjectMap;
+accessible field net/minecraft/server/level/ChunkMap serverViewDistance I
+accessible field net/minecraft/server/level/ServerChunkCache spawnEnemies Z
+accessible field net/minecraft/server/level/ServerChunkCache spawnFriendlies Z
+
+# Runtime Fix 11 - retire simple entity refmap-sensitive accessors.
+accessible field net/minecraft/world/entity/animal/Chicken eggTime I
+mutable field net/minecraft/world/entity/animal/Chicken eggTime I
+accessible field net/minecraft/world/entity/animal/horse/SkeletonHorse trapTime I
+mutable field net/minecraft/world/entity/animal/horse/SkeletonHorse trapTime I
+accessible field net/minecraft/world/entity/projectile/SpectralArrow duration I
+mutable field net/minecraft/world/entity/projectile/SpectralArrow duration I
+accessible field net/minecraft/world/entity/LightningBolt life I
+mutable field net/minecraft/world/entity/LightningBolt life I
+accessible field net/minecraft/world/entity/LightningBolt flashes I
+mutable field net/minecraft/world/entity/LightningBolt flashes I
+accessible method net/minecraft/world/entity/projectile/ThrowableItemProjectile getDefaultItem ()Lnet/minecraft/world/item/Item;
+
+# Runtime Fix 12 - Arclight-style namespace hardening: direct common state, keep behavior mixins narrow.
+accessible field net/minecraft/world/entity/player/Player gameProfile Lcom/mojang/authlib/GameProfile;
+mutable field net/minecraft/world/entity/player/Player gameProfile Lcom/mojang/authlib/GameProfile;
+accessible field net/minecraft/world/entity/player/Player hurtDir F
+mutable field net/minecraft/world/entity/player/Player hurtDir F
+accessible field net/minecraft/server/MinecraftServer tickTimesNanos [J
+accessible field net/minecraft/server/MinecraftServer tickCount I
+accessible field net/minecraft/server/MinecraftServer levels Ljava/util/Map;
+accessible field net/minecraft/server/MinecraftServer progressListenerFactory Lnet/minecraft/server/level/progress/ChunkProgressListenerFactory;
+accessible field net/minecraft/server/dedicated/DedicatedServer serverLinks Lnet/minecraft/server/ServerLinks;
+mutable field net/minecraft/server/dedicated/DedicatedServer serverLinks Lnet/minecraft/server/ServerLinks;
+
+# Runtime Fix 32 - live player crafting inventory views
+accessible field net/minecraft/world/inventory/InventoryMenu craftSlots Lnet/minecraft/world/inventory/CraftingContainer;
+accessible field net/minecraft/world/inventory/InventoryMenu resultSlots Lnet/minecraft/world/inventory/ResultContainer;
+accessible field net/minecraft/world/inventory/InventoryMenu owner Lnet/minecraft/world/entity/player/Player;
+
+# Repair 44 - vanilla 1.21.1 Craft/Paper compatibility accesses.
+# These replace compile-time reliance on Paper-patched NMS visibility.
+accessible field net/minecraft/world/entity/Mob goalSelector Lnet/minecraft/world/entity/ai/goal/GoalSelector;
+accessible field net/minecraft/world/entity/Mob targetSelector Lnet/minecraft/world/entity/ai/goal/GoalSelector;
+accessible method net/minecraft/world/entity/Entity getFireImmuneTicks ()I
+accessible method net/minecraft/world/entity/Entity setRot (FF)V
+accessible method net/minecraft/world/entity/Entity setLevel (Lnet/minecraft/world/level/Level;)V
+accessible method net/minecraft/world/entity/LivingEntity completeUsingItem ()V
+accessible method net/minecraft/server/players/PlayerList updateEntireScoreboard (Lnet/minecraft/server/ServerScoreboard;Lnet/minecraft/server/level/ServerPlayer;)V
+accessible method net/minecraft/server/level/ChunkMap setServerViewDistance (I)V
+accessible class net/minecraft/server/level/ChunkMap$TrackedEntity
+accessible method net/minecraft/server/level/ChunkMap$TrackedEntity removePlayer (Lnet/minecraft/server/level/ServerPlayer;)V
+accessible method net/minecraft/server/level/ChunkMap$TrackedEntity updatePlayer (Lnet/minecraft/server/level/ServerPlayer;)V
+accessible method net/minecraft/world/entity/player/Player setShoulderEntityLeft (Lnet/minecraft/nbt/CompoundTag;)V
+accessible method net/minecraft/world/entity/player/Player setShoulderEntityRight (Lnet/minecraft/nbt/CompoundTag;)V
+accessible field net/minecraft/world/entity/player/Player enchantmentSeed I
+mutable field net/minecraft/world/entity/player/Player enchantmentSeed I
+accessible field net/minecraft/world/scores/criteria/ObjectiveCriteria CRITERIA_CACHE Ljava/util/Map;
+accessible method net/minecraft/world/entity/animal/Bee setRolling (Z)V
+accessible method net/minecraft/world/entity/animal/Bee isRolling ()Z
+accessible method net/minecraft/world/entity/animal/Bee setHasStung (Z)V
+accessible method net/minecraft/world/entity/animal/Bee setHasNectar (Z)V
+accessible method net/minecraft/advancements/Advancement decorateName (Lnet/minecraft/advancements/DisplayInfo;)Lnet/minecraft/network/chat/Component;
+accessible method net/minecraft/world/entity/ai/attributes/AttributeSupplier getAttributeInstance (Lnet/minecraft/core/Holder;)Lnet/minecraft/world/entity/ai/attributes/AttributeInstance;
+accessible method net/minecraft/world/level/dimension/end/EndDragonFight setRespawnStage (Lnet/minecraft/world/level/dimension/end/DragonRespawnAnimation;)V
+accessible method net/minecraft/world/entity/projectile/AbstractArrow setPierceLevel (B)V
+accessible field net/minecraft/world/entity/animal/Animal loveCause Ljava/util/UUID;
+mutable field net/minecraft/world/entity/animal/Animal loveCause Ljava/util/UUID;
+accessible field net/minecraft/world/entity/animal/Animal inLove I
+mutable field net/minecraft/world/entity/animal/Animal inLove I
+accessible method net/minecraft/world/entity/projectile/AbstractHurtingProjectile assignDirectionalMovement (Lnet/minecraft/world/phys/Vec3;D)V
+accessible method net/minecraft/world/entity/projectile/Arrow getPotionContents ()Lnet/minecraft/world/item/alchemy/PotionContents;
+accessible method net/minecraft/world/entity/projectile/Arrow setPotionContents (Lnet/minecraft/world/item/alchemy/PotionContents;)V
+accessible method net/minecraft/world/entity/animal/Cat setCollarColor (Lnet/minecraft/world/item/DyeColor;)V
+accessible method net/minecraft/world/entity/animal/Cat setRelaxStateOne (Z)V
+accessible method net/minecraft/world/entity/animal/Cat isRelaxStateOne ()Z
+accessible method net/minecraft/world/entity/animal/horse/Horse setVariantAndMarkings (Lnet/minecraft/world/entity/animal/horse/Variant;Lnet/minecraft/world/entity/animal/horse/Markings;)V
+accessible method net/minecraft/world/entity/npc/Villager setUnhappy ()V
+accessible method net/minecraft/world/entity/animal/Wolf setCollarColor (Lnet/minecraft/world/item/DyeColor;)V
+accessible method net/minecraft/world/entity/monster/Zombie startUnderWaterConversion (I)V
+accessible method net/minecraft/server/players/StoredUserEntry getUser ()Ljava/lang/Object;
+accessible field net/minecraft/network/chat/numbers/StyledFormat style Lnet/minecraft/network/chat/Style;
+accessible field net/minecraft/network/chat/numbers/FixedFormat value Lnet/minecraft/network/chat/Component;
+accessible class net/minecraft/world/level/biome/Biome$ClimateSettings
+accessible method net/minecraft/world/entity/item/FallingBlockEntity <init> (Lnet/minecraft/world/level/Level;DDDLnet/minecraft/world/level/block/state/BlockState;)V
+accessible method net/minecraft/world/damagesource/DamageSource <init> (Lnet/minecraft/core/Holder;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/Vec3;)V
+
+# Repair 45 - remaining vanilla 1.21.1 compile surfaces.
+accessible class net/minecraft/world/effect/MobEffect$AttributeTemplate
+accessible field net/minecraft/server/ServerAdvancementManager advancements Ljava/util/Map;
+mutable field net/minecraft/server/ServerAdvancementManager advancements Ljava/util/Map;
+accessible field net/minecraft/world/entity/Entity ENTITY_COUNTER Ljava/util/concurrent/atomic/AtomicInteger;
+accessible field net/minecraft/server/level/ServerChunkCache chunkMap Lnet/minecraft/server/level/ChunkMap;
+accessible field net/minecraft/server/level/ChunkMap visibleChunkMap Lit/unimi/dsi/fastutil/longs/Long2ObjectLinkedOpenHashMap;
+
+# Paper Adventure / AdventureCodecs — private fields/methods widened by Paper's AT
+accessible field net/minecraft/network/chat/HoverEvent$ItemStackInfo item Lnet/minecraft/core/Holder;
+accessible field net/minecraft/network/chat/HoverEvent$ItemStackInfo count I
+accessible field net/minecraft/network/chat/HoverEvent$ItemStackInfo components Lnet/minecraft/core/component/DataComponentPatch;
+accessible method net/minecraft/network/chat/contents/TranslatableContents filterAllowedArguments (Ljava/lang/Object;)Lcom/mojang/serialization/DataResult;
+# ServerBossEvent.broadcast — private, called from BossBarImplementationImpl
+accessible method net/minecraft/server/level/ServerBossEvent broadcast (Ljava/util/function/Function;)V

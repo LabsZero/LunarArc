@@ -1,5 +1,4 @@
-// Installer — detects and installs mod loaders automatically at runtime.
-// Analogous to Arclight's installer subproject.
+
 plugins {
     id 'java-library'
 }
@@ -12,7 +11,7 @@ dependencies {
 }
 
 processResources {
-    // Expand version placeholders inside lunararc-launcher.properties at build time
+
     inputs.property 'version',       project.version
     inputs.property 'project_name',  rootProject.name
     inputs.property 'minecraft',     libs.versions.minecraft.get()
@@ -21,7 +20,9 @@ processResources {
     inputs.property 'neoforge',      libs.versions.neoforge.get()
     inputs.property 'forge',         libs.versions.forge.get()
     inputs.property 'fabric_loader', libs.versions.fabric.loader.get()
+    inputs.property 'fabric_installer', libs.versions.fabric.installer.get()
     inputs.property 'quilt_loader',  libs.versions.quilt.loader.get()
+    inputs.property 'quilt_installer', libs.versions.quilt.installer.get()
     inputs.property 'paper_build',   libs.versions.paper.build.get()
     inputs.property 'data_version',  libs.versions.data.version.get()
     inputs.property 'build_name',    libs.versions.build.name.get()
@@ -36,7 +37,9 @@ processResources {
             neoforge:      libs.versions.neoforge.get(),
             forge:         libs.versions.forge.get(),
             fabric:        libs.versions.fabric.loader.get(),
+            fabricInstaller: libs.versions.fabric.installer.get(),
             quilt:         libs.versions.quilt.loader.get(),
+            quiltInstaller: libs.versions.quilt.installer.get(),
             paperBuild:    libs.versions.paper.build.get(),
             dataVersion:   libs.versions.data.version.get(),
             buildName:     libs.versions.build.name.get()

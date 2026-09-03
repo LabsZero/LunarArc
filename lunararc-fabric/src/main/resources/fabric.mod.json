@@ -13,18 +13,23 @@
   },
   "license": "GPL-3.0-only",
   "icon": "assets/lunararc/icon.png",
-  "environment": "server",
+  "environment": "*",
   "entrypoints": {
+    "preLaunch": [
+      "io.ampznetwork.lunararc.fabric.LunarArcFabricPreLaunch"
+    ],
     "main": [
       "io.ampznetwork.lunararc.fabric.LunarArcFabric"
     ]
   },
   "mixins": [
-    "mixins.lunararc.common.json"
+    "mixins.lunararc.common.json",
+    "mixins.lunararc.fabric.json"
   ],
   "depends": {
     "fabricloader": ">=${fabric_loader}",
-    "minecraft": ">=${minecraft}",
-    "java": ">=${java_runtime}"
+    "minecraft": "${minecraft}",
+    "java": ">=${java_runtime}",
+    "fabric-api": "*"
   }
 }

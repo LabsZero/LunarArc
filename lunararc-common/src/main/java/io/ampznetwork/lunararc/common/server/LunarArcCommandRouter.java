@@ -1,46 +1,49 @@
 package io.ampznetwork.lunararc.common.server;
 
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
-import org.bukkit.craftbukkit.v1_21_R1.CraftServer;
-import org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer;
+import org.bukkit.craftbukkit.CraftServer;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 
 import java.util.Locale;
 import java.util.logging.Level;
 
-/**
- * Single command-routing authority for the LunarArc Bukkit/Paper bridge.
- *
- * <p>The Minecraft client removes the first command introducer before sending a
- * ServerboundChatCommandPacket. That means WorldEdit's user-facing {@code //wand}
- * arrives as packet command {@code /wand}. We therefore remove the Bukkit event
- * introducer exactly once and never blindly strip another slash afterwards.</p>
- *
- * <p>Routing policy:</p>
- * <ol>
- *   <li>Fire PlayerCommandPreprocessEvent exactly once for player packet input.</li>
- *   <li>If Bukkit owns the resulting exact label, execute it through CommandMap.</li>
- *   <li>If Bukkit does not own it and the event did not rewrite it, let the native
- *       Minecraft/NeoForge packet handler continue unchanged.</li>
- *   <li>If a plugin rewrites the command to a non-Bukkit label, execute the rewritten
- *       text through the native Brigadier dispatcher and cancel the stale packet.</li>
- * </ol>
- */
+
 public final class LunarArcCommandRouter {
+
+    @FunctionalInterface
+    public interface PlatformCommandHook {
+        HookResult apply(CraftServer server, CommandSender sender, String commandLine);
+    }
+
+    public record HookResult(boolean cancelled, String commandLine) {
+        public static HookResult pass(String commandLine) {
+            return new HookResult(false, commandLine);
+        }
+
+        public static HookResult cancel() {
+            return new HookResult(true, "");
+        }
+    }
+
+    private static volatile PlatformCommandHook platformCommandHook = (server, sender, line) -> HookResult.pass(line);
 
     private LunarArcCommandRouter() {
     }
 
+    public static void installPlatformCommandHook(PlatformCommandHook hook) {
+        platformCommandHook = hook == null ? (server, sender, line) -> HookResult.pass(line) : hook;
+    }
+
     public enum PacketResult {
-        /** Leave the original Minecraft packet handler alone. */
+
         PASS,
-        /** The command was handled (or cancelled) and the packet must not continue. */
+
         CANCEL
     }
 
@@ -49,8 +52,7 @@ public final class LunarArcCommandRouter {
             return PacketResult.PASS;
         }
 
-        // packetCommand has already had Minecraft's command introducer removed by the
-        // client. Prefix exactly one slash to reproduce Bukkit's event contract.
+
         String originalEventMessage = "/" + packetCommand;
         PlayerCommandPreprocessEvent event = new PlayerCommandPreprocessEvent(player, originalEventMessage);
         server.getPluginManager().callEvent(event);
@@ -75,49 +77,46 @@ public final class LunarArcCommandRouter {
         Command command = commandMap.getCommand(label);
 
         if (command != null) {
-            // Exact Bukkit ownership. Do not bounce through CraftServer again: doing so
-            // creates another normalisation/routing decision and was the source of several
-            // duplicate-slash and plugin-command regressions.
+
+
             commandMap.dispatch(player, routedLine);
             return PacketResult.CANCEL;
         }
 
         if (modified) {
-            // The packet still contains the old command. Execute the plugin's rewritten
-            // command once, using the same central programmatic router, then cancel it.
+
+
             dispatch(server, player, routedLine);
             return PacketResult.CANCEL;
         }
 
-        // Native/mod command: Minecraft remains authoritative and handles its own
-        // Brigadier context, permissions, command result and feedback.
+
         return PacketResult.PASS;
     }
 
-    /**
-     * Programmatic Bukkit Server#dispatchCommand routing.
-     *
-     * <p>Bukkit normally supplies a command line without a leading slash. Some plugins
-     * still pass one. A slash is stripped only if it is an external introducer; if the
-     * slash-bearing token is itself a registered Bukkit label (WorldEdit), it is kept.</p>
-     */
+
     public static boolean dispatch(Server server, CommandSender sender, String commandLine) {
         if (server == null || sender == null || commandLine == null) return false;
 
         String line = commandLine.trim();
         if (line.isEmpty()) return false;
 
+        if (server instanceof CraftServer craftServer) {
+            HookResult hookResult = platformCommandHook.apply(craftServer, sender, line);
+            if (hookResult == null || hookResult.cancelled()) return false;
+            line = hookResult.commandLine() == null ? "" : hookResult.commandLine().trim();
+            if (line.isEmpty()) return false;
+        }
+
         CommandMap map = server.getCommandMap();
 
-        // First honour the exact supplied label. This is what preserves WorldEdit labels
-        // such as "/wand" after //wand has crossed the client protocol boundary.
+
         String exactLabel = labelOf(line);
         if (map.getCommand(exactLabel) != null) {
             return map.dispatch(sender, line);
         }
 
-        // If no exact slash-bearing command exists, accept one conventional external
-        // command introducer from programmatic callers.
+
         if (line.startsWith("/")) {
             line = line.substring(1).trim();
             if (line.isEmpty()) return false;
@@ -131,14 +130,33 @@ public final class LunarArcCommandRouter {
         return dispatchNative(server, sender, line);
     }
 
+    /**
+     * Run a line no Bukkit command claimed, the way Minecraft itself runs it.
+     *
+     * <p>This used to call {@code getDispatcher().execute(line, source)} - brigadier's own entry
+     * point, which is not the one Minecraft uses. Since 1.20.2 a command goes through
+     * {@link net.minecraft.commands.Commands#performPrefixedCommand}, which parses into a
+     * {@code ContextChain} and runs it on an ExecutionContext: that is what gives /execute its
+     * chaining and fan-out, what bounds /function recursion, and what produces the "Unknown
+     * command" message with the caret under the offending character. Brigadier's execute skips all
+     * of it and reports a failure as a bare exception message.</p>
+     *
+     * <p>CraftBukkit reaches the same method by a different road - every vanilla command is in its
+     * command map as a VanillaCommandWrapper, whose execute calls performPrefixedCommand. LunarArc
+     * has no such wrapper yet, so this fallback stands in for it, and it should call what the
+     * wrapper calls.</p>
+     *
+     * <p>The return value still says whether the label was a command at all, because callers use
+     * it to decide whether anything handled the line; the reporting of a bad one is left to
+     * Minecraft, which does it better than a rethrown parse error.</p>
+     */
     public static boolean dispatchNative(Server server, CommandSender sender, String line) {
         if (!(server instanceof CraftServer craftServer)) return false;
         try {
-            CommandSourceStack source = source(craftServer, sender);
-            return craftServer.getHandle().getCommands().getDispatcher().execute(line, source) > 0;
-        } catch (CommandSyntaxException syntax) {
-            sender.sendMessage(syntax.getRawMessage().getString());
-            return false;
+            net.minecraft.commands.Commands commands = craftServer.getServer().getCommands();
+            boolean known = commands.getDispatcher().getRoot().getChild(rawLabelOf(line)) != null;
+            commands.performPrefixedCommand(source(craftServer, sender), line);
+            return known;
         } catch (Throwable error) {
             server.getLogger().log(Level.SEVERE, "Error dispatching command: " + line, error);
             return false;
@@ -149,16 +167,29 @@ public final class LunarArcCommandRouter {
         if (sender instanceof CraftPlayer player) {
             return player.getHandle().createCommandSourceStack();
         }
-        return server.getHandle().createCommandSourceStack();
+        return server.getServer().createCommandSourceStack();
     }
 
-    /** Remove exactly the slash required by PlayerCommandPreprocessEvent's contract. */
+
     static String removeEventIntroducer(String eventMessage) {
         String line = eventMessage.trim();
         if (line.startsWith("/")) {
             line = line.substring(1);
         }
         return line.trim();
+    }
+
+    /**
+     * The label exactly as typed. Brigadier's command tree is case-sensitive, so the lower-cased
+     * label {@link #labelOf} produces - right for the Bukkit command map, which is not - would miss
+     * every node when asked of the dispatcher.
+     */
+    static String rawLabelOf(String line) {
+        String trimmed = line == null ? "" : line.trim();
+        if (trimmed.startsWith("/")) trimmed = trimmed.substring(1).trim();
+        if (trimmed.isEmpty()) return "";
+        int space = trimmed.indexOf(' ');
+        return space >= 0 ? trimmed.substring(0, space) : trimmed;
     }
 
     static String labelOf(String line) {

@@ -9,16 +9,20 @@ public final class LunarArcVersionInfo {
     private static final Properties PROPERTIES = new Properties();
 
     static {
-        try (InputStream in = LunarArcVersionInfo.class.getClassLoader()
-                .getResourceAsStream("lunararc-launcher.properties")) {
+        loadProperties("lunararc-launcher.properties");
+        loadProperties("lunararc-build.properties");
+    }
+
+    private LunarArcVersionInfo() {
+    }
+
+    private static void loadProperties(String resource) {
+        try (InputStream in = LunarArcVersionInfo.class.getClassLoader().getResourceAsStream(resource)) {
             if (in != null) {
                 PROPERTIES.load(in);
             }
         } catch (IOException ignored) {
         }
-    }
-
-    private LunarArcVersionInfo() {
     }
 
     public static String projectName() {
@@ -29,17 +33,13 @@ public final class LunarArcVersionInfo {
         return "git-Paper-" + paperBuild() + " (MC: " + minecraftVersion() + ")";
     }
 
-    /** LunarArc implementation version, kept separate from Paper's compatibility version. */
+
     public static String lunarArcVersion() {
-        return property("version", "0.0.1-SNAPSHOT");
+        return property("version", "unknown");
     }
 
     public static String minecraftVersion() {
         return property("minecraft", "unknown");
-    }
-
-    public static String craftBukkitPackage() {
-        return property("craftBukkitPackage", "v1_21_R1");
     }
 
     public static String paperApiVersion() {
@@ -53,6 +53,53 @@ public final class LunarArcVersionInfo {
         } catch (NumberFormatException ignored) {
             return 0;
         }
+    }
+
+    public static String buildChannel() {
+        String explicit = PROPERTIES.getProperty("buildChannel");
+        if (explicit != null && !explicit.isBlank()) {
+            return explicit.trim().toLowerCase(java.util.Locale.ROOT);
+        }
+        String version = lunarArcVersion().toLowerCase(java.util.Locale.ROOT);
+        String base = version.split("\\+", 2)[0];
+        if (base.matches(".*-preview(?:[.-].*)?$")) return "preview";
+        if (base.matches(".*-(?:pre|prerelease|pre-release|alpha|beta|rc|snapshot)(?:[.-].*)?$")) return "prerelease";
+        return "release";
+    }
+
+    public static boolean isPreviewBuild() {
+        return "preview".equals(buildChannel());
+    }
+
+    public static boolean isPreReleaseBuild() {
+        return "prerelease".equals(buildChannel()) || "pre-release".equals(buildChannel());
+    }
+
+    public static String gitHash() {
+        return property("gitHash", "unknown");
+    }
+
+    public static String gitBranch() {
+        return property("gitBranch", "unknown");
+    }
+
+    /**
+     * One line identifying exactly which LunarArc this is, for logs and crash reports.
+     *
+     * <p>A report that says only "LunarArc" cannot be matched to a commit, and most bug reports
+     * arrive from someone who cannot be asked follow-up questions. Version, build number, branch
+     * and commit together make one answerable.</p>
+     */
+    public static String brandingLine() {
+        return "LunarArc " + lunarArcVersion()
+                + " (build " + buildNumber()
+                + ", branch " + gitBranch()
+                + ", commit " + gitHash()
+                + ") for Minecraft " + minecraftVersion();
+    }
+
+    public static String buildNumber() {
+        return property("buildNumber", "local");
     }
 
     public static OptionalInt dataVersion() {

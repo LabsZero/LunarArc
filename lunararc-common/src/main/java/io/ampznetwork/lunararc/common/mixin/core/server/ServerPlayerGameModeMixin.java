@@ -1,6 +1,5 @@
 package io.ampznetwork.lunararc.common.mixin.core.server;
 
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerPlayerGameMode;
 import net.minecraft.world.InteractionHand;
@@ -13,6 +12,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ServerPlayerGameMode.class)
@@ -26,19 +26,19 @@ public abstract class ServerPlayerGameModeMixin {
     private void lunararc$onUseItemOn(ServerPlayer player, Level level, net.minecraft.world.item.ItemStack stack, InteractionHand hand,
             BlockHitResult hitResult, CallbackInfoReturnable<InteractionResult> cir) {
         io.ampznetwork.lunararc.common.server.LunarArcContext.setCurrentPlayer(player);
-        
-        org.bukkit.event.player.PlayerInteractEvent event = org.bukkit.craftbukkit.v1_21_R1.event.CraftEventFactory.callPlayerInteractEvent(
-            player, 
-            org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK, 
-            hitResult.getBlockPos(), 
-            hitResult.getDirection(), 
-            stack
+
+        org.bukkit.event.player.PlayerInteractEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
+            player,
+            org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK,
+            hitResult.getBlockPos(),
+            hitResult.getDirection(),
+            stack,
+            hand == InteractionHand.OFF_HAND ? org.bukkit.inventory.EquipmentSlot.OFF_HAND : org.bukkit.inventory.EquipmentSlot.HAND
         );
 
         if (event != null && event.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
-            // Paper exposes block-use and item-use as separate results. A denied
-            // clicked-block result must not suppress a bucket/mod item action; only
-            // an explicit item-use denial cancels the whole NMS interaction.
+
+
             cir.setReturnValue(InteractionResult.FAIL);
         }
     }
@@ -47,19 +47,19 @@ public abstract class ServerPlayerGameModeMixin {
     private void lunararc$onUseItem(ServerPlayer player, Level level, net.minecraft.world.item.ItemStack stack, InteractionHand hand,
             CallbackInfoReturnable<InteractionResult> cir) {
         io.ampznetwork.lunararc.common.server.LunarArcContext.setCurrentPlayer(player);
-        
-        org.bukkit.event.player.PlayerInteractEvent event = org.bukkit.craftbukkit.v1_21_R1.event.CraftEventFactory.callPlayerInteractEvent(
-            player, 
-            org.bukkit.event.block.Action.RIGHT_CLICK_AIR, 
-            null, 
-            null, 
-            stack
+
+        org.bukkit.event.player.PlayerInteractEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
+            player,
+            org.bukkit.event.block.Action.RIGHT_CLICK_AIR,
+            null,
+            null,
+            stack,
+            hand == InteractionHand.OFF_HAND ? org.bukkit.inventory.EquipmentSlot.OFF_HAND : org.bukkit.inventory.EquipmentSlot.HAND
         );
 
         if (event != null && event.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
-            // Paper exposes block-use and item-use as separate results. A denied
-            // clicked-block result must not suppress a bucket/mod item action; only
-            // an explicit item-use denial cancels the whole NMS interaction.
+
+
             cir.setReturnValue(InteractionResult.FAIL);
         }
     }
@@ -70,14 +70,57 @@ public abstract class ServerPlayerGameModeMixin {
         io.ampznetwork.lunararc.common.server.LunarArcContext.clear();
     }
 
+    @Inject(method = "handleBlockBreakAction", at = @At("HEAD"), cancellable = true)
+    private void lunararc$onBlockBreakAction(net.minecraft.core.BlockPos pos,
+            net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action action,
+            net.minecraft.core.Direction direction, int worldHeight, int sequence,
+            CallbackInfo ci) {
+
+
+        if (action != net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK) {
+            return;
+        }
+        io.ampznetwork.lunararc.common.server.LunarArcContext.setCurrentPlayer(this.player);
+        try {
+            org.bukkit.event.player.PlayerInteractEvent event =
+                    org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
+                            this.player,
+                            org.bukkit.event.block.Action.LEFT_CLICK_BLOCK,
+                            pos,
+                            direction,
+                            this.player.getMainHandItem(),
+                            org.bukkit.inventory.EquipmentSlot.HAND);
+            if (event != null && (event.isCancelled()
+                    || event.useInteractedBlock() == org.bukkit.event.Event.Result.DENY
+                    || event.useItemInHand() == org.bukkit.event.Event.Result.DENY)) {
+                this.player.connection.send(new net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(
+                        this.player.serverLevel(), pos));
+                ci.cancel();
+            }
+        } finally {
+            io.ampznetwork.lunararc.common.server.LunarArcContext.clear();
+        }
+    }
+
     @Inject(method = "destroyBlock", at = @At("HEAD"), cancellable = true)
     private void lunararc$onDestroyBlock(net.minecraft.core.BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
-        org.bukkit.event.block.BlockBreakEvent event = org.bukkit.craftbukkit.v1_21_R1.event.CraftEventFactory.callBlockBreakEvent(player.serverLevel(), pos, player);
-        if (event.isCancelled()) {
-            // Force block update to client to fix ghost blocks
+        org.bukkit.event.block.BlockBreakEvent event =
+                io.ampznetwork.lunararc.common.mod.util.LunarArcBlockBreakCapture.matching(player, pos);
+        if (event == null) {
+            event = org.bukkit.craftbukkit.event.CraftEventFactory.callBlockBreakEvent(player.serverLevel(), pos, player);
+            io.ampznetwork.lunararc.common.mod.util.LunarArcBlockBreakCapture.capture(player, pos, event);
+        }
+        boolean loaderOwnsCancellation = ((io.ampznetwork.lunararc.common.bridge.MinecraftServerBridge) (Object) player.server)
+                .lunararc$loaderHandlesBlockBreakEvent();
+        if (event.isCancelled() && !loaderOwnsCancellation) {
             player.connection.send(new net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(player.serverLevel(), pos));
             cir.setReturnValue(false);
         }
+    }
+
+    @Inject(method = "destroyBlock", at = @At("RETURN"))
+    private void lunararc$clearBlockBreakCapture(net.minecraft.core.BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
+        io.ampznetwork.lunararc.common.mod.util.LunarArcBlockBreakCapture.clear();
     }
 
     @Inject(method = "useItem", at = @At("RETURN"))

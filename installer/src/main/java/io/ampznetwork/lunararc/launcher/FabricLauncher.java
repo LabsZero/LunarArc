@@ -13,12 +13,11 @@ public class FabricLauncher {
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
 
-        // Fabric Loader reads fabric.addMods as a path-separator-delimited list
-        // of extra mod JARs, avoiding the need to place anything in mods/.
         if (selfPath != null) {
             command.add("-Dfabric.addMods=" + selfPath.toString());
         }
 
+        command.addAll(LauncherUtils.serverJvmArguments("fabric.addMods"));
         command.add("-jar");
         command.add("fabric-server-launch.jar");
         command.add("--nogui");

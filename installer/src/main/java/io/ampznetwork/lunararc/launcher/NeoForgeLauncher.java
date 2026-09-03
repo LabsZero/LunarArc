@@ -22,7 +22,6 @@ public class NeoForgeLauncher {
             return;
         }
 
-        // Find args file
         Path argsFile = findArgsFile(libDir);
         if (argsFile == null) {
             System.err.println("[LunarArc] Error: Could not find NeoForge args file.");
@@ -36,7 +35,6 @@ public class NeoForgeLauncher {
         }
     }
 
-
     private static void removeLegacyBridgeCopy() {
         try {
             Path oldBridge = Paths.get("mods", "lunararc-bridge.jar");
@@ -48,25 +46,34 @@ public class NeoForgeLauncher {
         }
     }
 
+    /**
+     * NeoForge's args file, looked for under NeoForge's own path first.
+     *
+     * <p>This used to take the first {@code *_args.txt} anywhere under {@code libraries}, which is
+     * shared with every other loader installed into the same server directory. A directory that has
+     * run both NeoForge and Forge holds one of each, and which was found came down to directory
+     * order - so this could boot NeoForge with Forge's arguments. It has not been observed happening
+     * that way round, which is luck rather than design.</p>
+     */
     private static Path findArgsFile(Path libDir) throws Exception {
-        String preferred = System.getProperty("os.name", "").toLowerCase().contains("win")
-                ? "win_args.txt" : "unix_args.txt";
-        try (var stream = Files.walk(libDir)) {
-            Path found = stream.filter(p -> p.getFileName().toString().equals(preferred))
-                    .findFirst().orElse(null);
-            if (found != null) return found;
-        }
-        // Fallback to any *_args.txt
-        try (var stream = Files.walk(libDir)) {
-            return stream.filter(p -> p.getFileName().toString().endsWith("_args.txt"))
-                    .findFirst().orElse(null);
-        }
+        return LauncherUtils.findArgsFile(libDir, "net/neoforged/neoforge");
     }
 
     private static void sameJvmLaunch(Path selfPath, Path argsFile) throws Exception {
         System.out.println("[LunarArc] Launching NeoForge in-process...");
 
-        // Flatten all lines into one token list so index-based look-ahead works across lines.
+        // On this path the game runs in the JVM that is already running, so the heap it gets is
+        // the one this process was started with and nothing can raise it afterwards. The child
+        // process path picks a size when the operator gave none; here the only thing left to do
+        // is say so before a modded server spends an hour discovering it the hard way.
+        long maxHeap = Runtime.getRuntime().maxMemory();
+        if (maxHeap != Long.MAX_VALUE && maxHeap < 2L * 1024 * 1024 * 1024) {
+            System.out.println("[LunarArc] Warning: this JVM's maximum heap is "
+                    + (maxHeap / (1024 * 1024)) + "M, which a modded server will exhaust. The heap"
+                    + " cannot be changed once the JVM is running - restart LunarArc as"
+                    + " java -Xmx6G -jar <jar>.");
+        }
+
         List<String> tokens = new ArrayList<>();
         for (String raw : Files.readAllLines(argsFile)) {
             for (String tok : raw.trim().split("\\s+")) {
@@ -92,14 +99,14 @@ public class NeoForgeLauncher {
                 }
             } else if (token.equals("-p") || token.equals("--module-path")
                     || token.equals("-cp") || token.equals("-classpath") || token.equals("--classpath")) {
-                // Two-part flag: consume the next token as the path list.
+
                 if (i < tokens.size()) addPathEntriesToClassLoader(tokens.get(i++));
             } else if (token.startsWith("--module-path=")) {
                 addPathEntriesToClassLoader(token.substring("--module-path=".length()));
             } else if (token.startsWith("--classpath=") || token.startsWith("-classpath=")) {
                 addPathEntriesToClassLoader(token.substring(token.indexOf('=') + 1));
             } else if (token.equals("--add-opens") || token.equals("--add-exports")) {
-                // Apply via Instrumentation.redefineModule so they take effect in-process.
+
                 if (i < tokens.size()) applyModuleDirective(token, tokens.get(i++));
             } else if (token.startsWith("--add-opens=")) {
                 applyModuleDirective("--add-opens", token.substring("--add-opens=".length()));
@@ -107,9 +114,9 @@ public class NeoForgeLauncher {
                 applyModuleDirective("--add-exports", token.substring("--add-exports=".length()));
             } else if (token.startsWith("-X") || token.startsWith("-ea") || token.startsWith("-da")
                     || token.startsWith("--add-") || token.startsWith("-javaagent")) {
-                // Other JVM-only args that cannot be applied post-startup — skip.
+
             } else if (token.contains(File.separator) && (token.endsWith(".jar") || token.endsWith(".zip"))) {
-                // Bare JAR path (uncommon but possible in some args files).
+
                 addJarToClassLoader(Paths.get(token));
             } else if (token.matches("[a-zA-Z][\\w.]+\\.[A-Z][\\w]*") && mainClass == null) {
                 mainClass = token;
@@ -118,7 +125,6 @@ public class NeoForgeLauncher {
             }
         }
 
-        // Always inject the LunarArc JAR itself so FML's ServiceLoader sees LunarArcModLocator.
         if (selfPath != null && Files.exists(selfPath)) {
             LunarArcAgent.instrumentation.appendToSystemClassLoaderSearch(new JarFile(selfPath.toFile()));
         }
@@ -147,10 +153,6 @@ public class NeoForgeLauncher {
         }
     }
 
-    /**
-     * Returns true if FML internal classes are available on the system classloader,
-     * meaning LunarArcModLocator.scanMods() should be able to self-register via reflection.
-     */
     private static boolean fmlClassesAvailable() {
         try {
             Class.forName("cpw.mods.jarhandling.SecureJar", false, ClassLoader.getSystemClassLoader());
@@ -162,9 +164,7 @@ public class NeoForgeLauncher {
     }
 
     private static void applyModuleDirective(String directive, String spec) {
-        // spec = "moduleName/packageName=target" — target is ignored because the JARs
-        // are loaded into the unnamed module (not as named modules), so we open/export
-        // to the unnamed module unconditionally.
+
         try {
             int slash = spec.indexOf('/');
             if (slash < 0) return;
@@ -224,26 +224,21 @@ public class NeoForgeLauncher {
         Path runtimeClasses = Paths.get(System.getProperty("lunararc.runtime.classes", lunararcHome.resolve("runtime/classes").toString()));
         command.add("-Dlunararc.home=" + lunararcHome);
         command.add("-Dlunararc.runtime.classes=" + runtimeClasses.toAbsolutePath());
-        // Do not attach the LunarArc fat JAR as a javaagent in the child process.
-        // The child uses NeoForge's normal mod classloader via the staged runtime JAR below.
-        // Supplying the same classes as both a javaagent/system-classloader entry and a mod
-        // gives Mixin two class identities for LunarArc classes and can abort during prepare().
+
+        List<String> inherited = LauncherUtils.serverJvmArguments(
+                "lunararc.home", "lunararc.runtime.classes");
+        if (!inherited.isEmpty()) {
+            System.out.println("[LunarArc] Passing JVM arguments through to the server: "
+                    + String.join(" ", inherited));
+        }
+        command.addAll(inherited);
+
         for (String token : tokens) {
-            // Keep NeoForge's generated module/class path exactly as installed.
-            // LunarArc is supplied separately through the prepared runtime below.
+
             command.add(token);
         }
         command.add("--nogui");
 
-        // Production FML does not reliably discover MOD_CLASSES entries. The previous
-        // child-process path therefore launched a perfectly healthy NeoForge server, but
-        // LunarArc itself never appeared in FML's mod list. Without the LunarArc mod the
-        // common MinecraftServerMixin is never applied, so CraftServer is never created
-        // and the Bukkit/Paper plugin lifecycle never starts.
-        //
-        // Stage the already-prepared internal core JAR as a transient hidden mod for the
-        // lifetime of the child process. This uses NeoForge's normal production discovery
-        // path while keeping the user's actual mod JARs untouched.
         Path stagedRuntimeMod = stageRuntimeMod(lunararcHome, selfPath);
         if (stagedRuntimeMod != null) {
             System.out.println("[LunarArc] Staged internal runtime for NeoForge discovery: " + stagedRuntimeMod);
@@ -253,9 +248,7 @@ public class NeoForgeLauncher {
 
         System.out.println("[LunarArc] Booting NeoForge Core...");
         ProcessBuilder pb = new ProcessBuilder(command);
-        // Production child launches must expose LunarArc exactly once. MOD_CLASSES is a
-        // development/userdev mechanism and is intentionally not set here; the staged JAR
-        // is the sole LunarArc runtime source for FML and Mixin.
+
         pb.environment().remove("MOD_CLASSES");
         pb.inheritIO();
         Process process = pb.start();

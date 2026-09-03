@@ -2,9 +2,6 @@ package io.ampznetwork.lunararc.launcher;
 
 import io.ampznetwork.lunararc.i18n.TranslationManager;
 
-/**
- * Utility for ANSI colors and rich console formatting.
- */
 public class ConsoleUI {
     public static final String RESET = "\u001B[0m";
     public static final String BOLD = "\u001B[1m";

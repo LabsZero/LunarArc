@@ -1,36 +1,52 @@
 package org.spigotmc;
 
-/**
- * Spigot WatchdogThread stub for plugin compatibility (WorldEdit SpigotWatchdog).
- * WorldEdit's SpigotWatchdog reflectively reads {@code instance} and {@code lastTick}.
- */
+
 public class WatchdogThread extends Thread {
 
-    public static WatchdogThread instance;
-    public volatile long lastTick = 0L;
+    public static volatile WatchdogThread instance;
+    public volatile long lastTick = System.currentTimeMillis();
+    public volatile boolean stopping;
+    private final int timeoutTime;
+    private final boolean restart;
 
-    private WatchdogThread() {
+    private WatchdogThread(int timeoutTime, boolean restart) {
         super("Spigot Watchdog Thread");
+        this.timeoutTime = timeoutTime;
+        this.restart = restart;
         setDaemon(true);
     }
 
-    public static void doStart(int timeoutTime, boolean restart) {
-        if (instance == null) {
-            instance = new WatchdogThread();
-            instance.start();
-        }
+    public static synchronized void doStart(int timeoutTime, boolean restart) {
+        if (instance != null && instance.isAlive()) return;
+        instance = new WatchdogThread(timeoutTime, restart);
+        instance.start();
     }
 
     public static void tick() {
-        if (instance != null) {
-            instance.lastTick = System.currentTimeMillis();
-        }
+        WatchdogThread current = instance;
+        if (current != null) current.lastTick = System.currentTimeMillis();
     }
 
-    public static void hasStarted(boolean started) {}
+    public static synchronized void doStop() {
+        WatchdogThread current = instance;
+        if (current != null) {
+            current.stopping = true;
+            current.interrupt();
+        }
+        instance = null;
+    }
+
+    public static void hasStarted(boolean started) {
+        if (started) tick();
+    }
+
+    public int getTimeoutTime() { return timeoutTime; }
+    public boolean isRestart() { return restart; }
 
     @Override
     public void run() {
-        // No-op watchdog — LunarArc does not need Spigot's watchdog
+        while (!stopping) {
+            try { Thread.sleep(1000L); } catch (InterruptedException ignored) {}
+        }
     }
 }

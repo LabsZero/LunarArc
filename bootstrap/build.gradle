@@ -1,6 +1,4 @@
-// Bootstrap — assembles all subprojects into one per-platform server JAR.
-// Analogous to Arclight's bootstrap subproject.
-// PaperMC is used as the Bukkit API implementation instead of Spigot.
+
 plugins {
     id 'com.gradleup.shadow'
 }
@@ -9,18 +7,16 @@ dependencies {
     implementation project(':installer')
     implementation project(':lunararc-common')
     implementation project(':lunararc-api')
-    implementation project(':lunararc-neoforge')
-    implementation project(':lunararc-forge')
-    implementation project(':lunararc-fabric')
-    implementation project(':lunararc-quilt')
     implementation project(':i18n-config')
 
-    // PaperMC bridge (hybrid Bukkit implementation — replaces Spigot)
     implementation libs.paper.api
     implementation libs.bungeecord.chat.api
 
-    // Bundled utilities
     implementation libs.sqlite.jdbc
+    // Real Paper/Spigot bundle a MySQL driver by default since it's such a common plugin
+    // dependency (economy/data plugins especially). This was declared in the version catalog
+    // but never actually applied anywhere — genuinely unused until now.
+    implementation libs.mysql.connector.j
     implementation libs.gson
     implementation libs.snakeyaml
     implementation libs.adventure.api
@@ -28,14 +24,11 @@ dependencies {
     implementation libs.adventure.text.serializer.gson
     implementation libs.adventure.text.serializer.legacy
     implementation libs.adventure.text.serializer.plain
-    // Adventure JSON serializer 4.17.0 requires OptionState at runtime.
+
     implementation 'net.kyori:option:1.0.0'
     implementation libs.json.simple
     implementation libs.commons.lang
 
-    // Paper's modern PluginLoader / MavenLibraryResolver runtime. Keep these on
-    // bootstrap runtimeClasspath so META-INF/libraries extraction can expose them
-    // before paper-plugin.yml loaders (for example VeinMiner) are instantiated.
     implementation 'org.apache.maven.resolver:maven-resolver-api:1.9.18'
     implementation 'org.apache.maven.resolver:maven-resolver-util:1.9.18'
     implementation 'org.apache.maven.resolver:maven-resolver-impl:1.9.18'
@@ -44,20 +37,32 @@ dependencies {
     implementation 'org.apache.maven.resolver:maven-resolver-transport-http:1.9.18'
     implementation 'org.apache.maven.resolver:maven-resolver-transport-file:1.9.18'
     implementation 'org.apache.maven:maven-resolver-provider:3.9.6'
+    implementation 'org.apache.maven:maven-model-builder:3.9.6'
+    implementation 'org.apache.maven:maven-model:3.9.6'
+    implementation 'org.apache.maven:maven-artifact:3.9.6'
+    implementation 'org.apache.maven:maven-builder-support:3.9.6'
+    implementation 'org.apache.maven:maven-repository-metadata:3.9.6'
+    implementation 'org.codehaus.plexus:plexus-utils:3.5.1'
+    implementation 'org.codehaus.plexus:plexus-interpolation:1.26'
+    implementation 'javax.inject:javax.inject:1'
+    implementation 'org.eclipse.sisu:org.eclipse.sisu.inject:0.9.0.M2'
+    implementation 'commons-logging:commons-logging:1.2'
 }
 
-// ── Generate version properties at build time ─────────────────────────────────
-def versionsFile = file('src/main/resources/lunararc-launcher.properties')
+def generatedVersionsDir = layout.buildDirectory.dir('generated/versions')
+def versionsFile = generatedVersionsDir.map { it.file('lunararc-launcher.properties').asFile }
+sourceSets.main.resources.srcDir(generatedVersionsDir)
 
 tasks.register('generateVersions') {
     outputs.file versionsFile
     doLast {
-        versionsFile.parentFile.mkdirs()
+        def versionsTarget = versionsFile.get()
+        versionsTarget.parentFile.mkdirs()
         def props = new Properties()
         props['projectName']     = rootProject.name
-        props['version']         = libs.versions.project.version.get()
+        props['version']         = project.version.toString()
+        props['buildNumber']     = rootProject.ext.lunarArcBuildNumber
         props['minecraft']       = libs.versions.minecraft.get()
-        props['craftBukkitPackage'] = libs.versions.craftbukkit.package.get()
         props['neoforge']        = libs.versions.neoforge.get()
         props['forge']           = libs.versions.forge.get()
         props['fabric']          = libs.versions.fabric.loader.get()
@@ -70,115 +75,17 @@ tasks.register('generateVersions') {
         props['buildName']       = libs.versions.build.name.get()
         props['javaVersion']     = libs.versions.java.runtime.get()
         props['buildDate']       = new java.text.SimpleDateFormat('dd-MM-yyyy HH:mm').format(new Date())
-        versionsFile.text = ''
-        props.store(versionsFile.newWriter(), null)
+        // Recorded so a log or a crash report identifies the exact source it was built from. A
+        // report that says only "LunarArc" cannot be matched to a commit, which is most of what a
+        // bug report from a stranger needs to be actionable.
+        props['gitHash']         = rootProject.ext.gitHash
+        props['gitBranch']       = rootProject.ext.gitBranch
+        versionsTarget.text = ''
+        props.store(versionsTarget.newWriter(), null)
     }
 }
 
 processResources.dependsOn 'generateVersions'
-
-// Guard the breadth-first Paper compatibility model. Paper 1.20.5+ exposes CraftBukkit
-// under the unversioned org.bukkit.craftbukkit package. LunarArc separately keeps the
-// versioned package from libs.versions.toml as a legacy Spigot compatibility alias.
-// Fail early if the patched Paper runtime no longer exposes a plausible implementation surface.
-tasks.register('verifyPaperRuntimeSurface') {
-    dependsOn rootProject.tasks.named('setupPaperServer')
-    inputs.file(rootProject.ext.paperServerJar)
-    inputs.property('minecraftVersion', libs.versions.minecraft.get())
-    inputs.property('paperBuild', libs.versions.paper.build.get())
-    doLast {
-        File paperJar = rootProject.ext.paperServerJar
-        if (!paperJar.isFile()) {
-            throw new GradleException("Paper server JAR is missing: ${paperJar}")
-        }
-
-        int craftClasses = 0
-        int paperClasses = 0
-        int spigotClasses = 0
-        int legacyPaperClasses = 0
-        new java.util.jar.JarFile(paperJar).withCloseable { jar ->
-            def entries = jar.entries()
-            while (entries.hasMoreElements()) {
-                def entry = entries.nextElement()
-                if (entry.directory || !entry.name.endsWith('.class')) continue
-                if (entry.name.startsWith('org/bukkit/craftbukkit/')) craftClasses++
-                else if (entry.name.startsWith('io/papermc/paper/')) paperClasses++
-                else if (entry.name.startsWith('org/spigotmc/')) spigotClasses++
-                else if (entry.name.startsWith('co/aikar/')) legacyPaperClasses++
-            }
-        }
-
-        if (craftClasses < 250) {
-            throw new GradleException(
-                "Paper runtime exposed only ${craftClasses} CraftBukkit classes; " +
-                "refusing to assemble an incomplete hybrid compatibility surface."
-            )
-        }
-        logger.lifecycle(
-            "Paper runtime surface: ${craftClasses} CraftBukkit, ${paperClasses} Paper, " +
-            "${spigotClasses} Spigot, ${legacyPaperClasses} legacy Paper implementation classes " +
-            "from Paper ${libs.versions.paper.build.get()} / MC ${libs.versions.minecraft.get()}."
-        )
-    }
-}
-
-
-def generatedPaperRuntimeSurfaceDir = layout.buildDirectory.dir('generated/paperRuntimeSurface')
-
-tasks.register('generatePaperRuntimeSurfaceMetadata') {
-    dependsOn tasks.named('verifyPaperRuntimeSurface')
-    def outputFile = generatedPaperRuntimeSurfaceDir.map {
-        it.file('META-INF/lunararc/paper-runtime.properties').asFile
-    }
-    outputs.file(outputFile)
-    inputs.file(rootProject.ext.paperServerJar)
-    inputs.property('minecraftVersion', libs.versions.minecraft.get())
-    inputs.property('paperBuild', libs.versions.paper.build.get())
-
-    doLast {
-        File paperJar = rootProject.ext.paperServerJar
-        File target = outputFile.get()
-        target.parentFile.mkdirs()
-
-        int craftClasses = 0
-        int paperClasses = 0
-        int spigotClasses = 0
-        int legacyPaperClasses = 0
-        new java.util.jar.JarFile(paperJar).withCloseable { jar ->
-            def entries = jar.entries()
-            while (entries.hasMoreElements()) {
-                def entry = entries.nextElement()
-                if (entry.directory || !entry.name.endsWith('.class')) continue
-                if (entry.name.startsWith('org/bukkit/craftbukkit/')) craftClasses++
-                else if (entry.name.startsWith('io/papermc/paper/')) paperClasses++
-                else if (entry.name.startsWith('org/spigotmc/')) spigotClasses++
-                else if (entry.name.startsWith('com/destroystokyo/paper/')) legacyPaperClasses++
-                else if (entry.name.startsWith('co/aikar/')) legacyPaperClasses++
-            }
-        }
-
-        def digest = java.security.MessageDigest.getInstance('SHA-256')
-        paperJar.withInputStream { input ->
-            byte[] buffer = new byte[64 * 1024]
-            int read
-            while ((read = input.read(buffer)) >= 0) {
-                if (read > 0) digest.update(buffer, 0, read)
-            }
-        }
-        String sha256 = digest.digest().collect { String.format('%02x', it) }.join('')
-
-        def props = new Properties()
-        props['minecraft'] = libs.versions.minecraft.get()
-        props['paperBuild'] = libs.versions.paper.build.get()
-        props['paperRuntimeJar'] = paperJar.name
-        props['paperRuntimeSha256'] = sha256
-        props['craftBukkitClasses'] = craftClasses.toString()
-        props['paperClasses'] = paperClasses.toString()
-        props['spigotClasses'] = spigotClasses.toString()
-        props['legacyPaperClasses'] = legacyPaperClasses.toString()
-        target.withWriter('UTF-8') { writer -> props.store(writer, 'Generated by LunarArc') }
-    }
-}
 
 jar {
     manifest {
@@ -191,27 +98,29 @@ jar {
     }
 }
 
-// ── Per-platform shadow JAR factory ───────────────────────────────────────────
 def createFatJar(String platform) {
-    // Obtain the ShadowJar task type from the auto-registered 'shadowJar' task.
-    // This avoids both compile-time import resolution failures (ScriptClassLoader
-    // does not include plugin classes) and Groovy property-chain misparse of
-    // fully-qualified class literals without an import.
+
     def ShadowJar = tasks.named('shadowJar').type
     tasks.register("${platform}Jar", ShadowJar) {
-        def cleanVersion = project.version.toString().replace('-SNAPSHOT', '')
+
+        configurations = []
+        if (platform == 'forge') dependsOn rootProject.tasks.named('verifyNoRuntimeProxies')
+        def cleanVersion = project.version.toString()
         archiveBaseName.set("${rootProject.name.toLowerCase(Locale.ROOT).replaceAll('[^a-z0-9._-]+', '-')}-${platform}")
         archiveVersion.set(cleanVersion)
         archiveClassifier.set('')
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-        // Relocate shaded libraries to avoid classpath conflicts with the mod loader.
-        // ASM and Log4j are NOT relocated — they are provided by the mod loader / Minecraft at runtime.
-        // Gson IS bundled (needed before any mod loader is active) and relocated to avoid
-        // conflicts with Minecraft's own com.google.gson copy once the mod loader starts.
         relocate 'com.google.gson',         'io.ampznetwork.lunararc.libs.gson'
 
-        // ── Determine which platform JARs to include ───────────────────────
+        relocate 'org.apache.maven',         'io.ampznetwork.lunararc.libs.maven.core'
+        relocate 'org.codehaus.plexus',      'io.ampznetwork.lunararc.libs.maven.plexus'
+        relocate 'org.eclipse.sisu',         'io.ampznetwork.lunararc.libs.maven.sisu'
+        relocate 'javax.inject',             'io.ampznetwork.lunararc.libs.maven.inject'
+        relocate 'org.apache.http',          'io.ampznetwork.lunararc.libs.maven.http'
+        relocate 'org.apache.commons.codec', 'io.ampznetwork.lunararc.libs.maven.codec'
+        relocate 'org.apache.commons.logging','io.ampznetwork.lunararc.libs.maven.logging'
+
         def platformProjectMap = [
             neoforge: ':lunararc-neoforge',
             forge:    ':lunararc-forge',
@@ -230,61 +139,89 @@ def createFatJar(String platform) {
             : "transformProduction${platform.capitalize()}"
         def commonJarTask = project(':lunararc-common').tasks.findByName(commonTaskName)
 
-        dependsOn commonJarTask, platformJarTask, 'generateVersions', tasks.named('verifyPaperRuntimeSurface'), tasks.named('generatePaperRuntimeSurfaceMetadata')
+        // The mod metadata files are templates - fabric.mod.json and quilt.mod.json carry
+        // ${version}, ${minecraft} and friends - and only processResources expands them. Depending
+        // on the processResources tasks, and copying from their output below rather than from the
+        // source directories, is what makes the shipped jar carry real values.
+        def commonResources = project(':lunararc-common').tasks.named('processResources')
+        def platformResources = platformProject.tasks.named('processResources')
+        def bootstrapResources = tasks.named('processResources')
+        dependsOn commonJarTask, platformJarTask, 'generateVersions',
+                commonResources, platformResources, bootstrapResources
 
-        // Common hybrid-server classes (mixins, bridges, Paper stubs)
-        from(zipTree(commonJarTask.outputs.files.singleFile)) {
-            include 'io/ampznetwork/lunararc/**'
-            include 'io/papermc/paper/**'
-            include 'org/bukkit/**'
-            include 'META-INF/mixins.*.json'
+        // transformProduction* is Architectury's bytecode transformer, and its output is still in
+        // the named (Mojang) namespace - Loom's remapJar, in the platform project, is what puts
+        // classes into the loader's namespace. Only NeoForge runs on Mojang names at runtime, so
+        // only there is the transformer output already the right thing to ship.
+        //
+        // Forge (SRG), Fabric and Quilt (intermediary) all bundle lunararc-common into their
+        // shadowJar so remapJar remaps common and platform classes in one pass. Copying the named
+        // transformer output in first defeated that entirely: duplicatesStrategy is EXCLUDE, so
+        // the first copy of a path wins and the un-remapped classes were the ones that shipped.
+        // On Fabric that surfaced as "@Mixin target net.minecraft.server.commands.EffectCommands
+        // was not found" - the Mojang name of a class the loader only knows as an intermediary
+        // one - and on Forge it would have been the same story one step later, as NoSuchMethodError
+        // against SRG member names. Take the remapped platform JAR whole on those platforms.
+        boolean commonRemappedIntoPlatformJar = platform != 'neoforge'
+
+        if (commonRemappedIntoPlatformJar) {
+
+            from(zipTree(platformJarTask.outputs.files.singleFile)) {
+                exclude 'META-INF/MANIFEST.MF'
+                exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+            }
+        } else {
+
+            from(zipTree(commonJarTask.outputs.files.singleFile)) {
+                exclude 'mixins.lunararc.common.json'
+                exclude 'mixins.lunararc.common.refmap.json'
+            }
+
+            from(project(':lunararc-common').file('src/main/resources/mixins.lunararc.common.json')) {
+                filter { String line ->
+                    if (line.contains('\"refmap\"')) return null
+                    if (line.contains('core.entity.SlimeAttackGoalMixin')) return null
+                    if (line.contains('core.entity.SlimeFloatGoalMixin')) return null
+                    if (line.contains('core.entity.SlimeRandomDirectionGoalMixin')) return null
+                    if (line.contains('core.entity.SlimeKeepOnJumpingGoalMixin')) return null
+                    if (line.contains('core.effect.HungerMobEffectMixin')) return null
+                    return line
+                }
+            }
+
+            from(zipTree(platformJarTask.outputs.files.singleFile)) {
+                include 'io/ampznetwork/lunararc/**'
+                include 'META-INF/neoforge.mods.toml'
+                include 'META-INF/mods.toml'
+            }
         }
 
-        // Fill the complete unversioned Paper/CraftBukkit/Spigot implementation surface from the
-        // exact Paper build selected in libs.versions.toml. LunarArc's hybrid-aware
-        // implementations are added above and therefore win duplicate resolution; all
-        // remaining implementation classes are inherited from Paper so plugins can link
-        // against the normal server class surface instead of failing class-by-class.
-        // NMS-touching upstream implementations can then be adapted only where the hybrid
-        // runtime differs from Paper's patched vanilla server.
-        from({ zipTree(rootProject.ext.paperServerJar) }) {
-            include 'org/bukkit/craftbukkit/**'
-            include 'io/papermc/paper/**'
-            include 'com/destroystokyo/paper/**'
-            include 'org/spigotmc/**'
-            include 'co/aikar/**'
-            exclude 'META-INF/**'
-        }
-
-        // Platform-specific classes and mod metadata
-        from(zipTree(platformJarTask.outputs.files.singleFile)) {
-            include 'io/ampznetwork/lunararc/**'
-            include 'META-INF/neoforge.mods.toml'
-            include 'META-INF/mods.toml'
-            include 'fabric.mod.json'
-            include 'quilt.mod.json'
-        }
-
-        // Source-set outputs
         from project(':installer').sourceSets.main.output
         from project(':lunararc-api').sourceSets.main.output
         from project(':i18n-config').sourceSets.main.output
-        from project(':lunararc-common').sourceSets.main.resources
-        from platformProject.sourceSets.main.resources
-        from sourceSets.main.resources
-        from(layout.buildDirectory.dir('generated/paperRuntimeSurface'))
+        // These take the processed resource output, not src/main/resources. Reading the source
+        // directory shipped fabric.mod.json and quilt.mod.json with their ${...} placeholders
+        // intact, so Fabric read the mod's version as the literal string "${version}" and refused
+        // to load it: "requires version ${fabric_loader} of mod 'Fabric Loader', but only the
+        // wrong version is present: 0.19.5". The same file arrives processed from the platform jar
+        // above, and which of the two won was left to the copy's duplicate handling.
+        // The mixin config and its refmap are deliberately never taken from here: NeoForge gets the
+        // filtered copy written above, and the remapped platforms must keep the copy remapJar
+        // rewrote for their namespace. Everything else in common's resources is namespace-neutral.
+        from(project(':lunararc-common').sourceSets.main.output.resourcesDir) {
+            exclude 'mixins.lunararc.common.json'
+            exclude 'mixins.lunararc.common.refmap.json'
+        }
+        from platformProject.sourceSets.main.output.resourcesDir
+        from sourceSets.main.output.resourcesDir
 
-        // ── Runtime dependency filtering ───────────────────────────────────
         project.configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.each { artifact ->
             def id = artifact.moduleVersion.id
 
-            // Skip internal subprojects (already merged above)
             if (id.group == 'io.ampznetwork.lunararc') return
 
-            // Provided by the mod loader or JVM — exclude to avoid split packages
             def providedByPlatform = id.group.startsWith('org.apache.commons') ||
-                (id.group.startsWith('org.apache.maven') && !(id.group == 'org.apache.maven.resolver' || (id.group == 'org.apache.maven' && id.name == 'maven-resolver-provider'))) ||
-                id.group.startsWith('org.codehaus.plexus') ||
+                (id.group.startsWith('org.apache.maven') && !(id.group == 'org.apache.maven.resolver' || id.group == 'org.apache.maven')) ||
                 id.group.startsWith('org.apache.logging') ||
                 id.group.startsWith('org.slf4j') ||
                 id.group.startsWith('com.google.guava') ||
@@ -298,30 +235,16 @@ def createFatJar(String platform) {
                 id.group.startsWith('net.minecraft')
             if (providedByPlatform) return
 
-            // Cross-loader pollution guard
             if (platform == 'neoforge' && (id.group == 'net.fabricmc' || id.group == 'org.quiltmc')) return
             if (platform == 'fabric'   && (id.group == 'net.neoforged' || id.group == 'org.quiltmc')) return
             if (platform == 'quilt'    && (id.group == 'net.neoforged' || id.group == 'net.fabricmc')) return
             if (platform == 'forge'    && (id.group == 'net.neoforged' || id.group == 'net.fabricmc' || id.group == 'org.quiltmc')) return
 
-            // Flatten Paper API and core bridge libs into JAR root
-            // Adventure 4.17's JSON serializer has a hard runtime dependency on
-            // net.kyori:option (OptionState).  It is part of LunarArc's own Adventure
-            // stack, not a plugin-private implementation detail, so it must be flattened
-            // into the staged runtime JAR alongside Adventure itself.  Excluding it makes
-            // GsonComponentSerializer fail during class initialization and permanently
-            // poisons LunarArcComponentPipeline with NoClassDefFoundError.
             boolean lunarArcKyori = id.group.startsWith('net.kyori') &&
                 (id.name.startsWith('adventure-') || id.name.startsWith('examination-') || id.name == 'option')
 
-            // Other non-Adventure Kyori libraries remain plugin implementation details.
-            // Do not bundle those into LunarArc or they can create split packages with plugins.
             if (id.group.startsWith('net.kyori') && !lunarArcKyori) return
 
-            // Commons Lang 2.x contains the legacy package org.apache.commons.lang.enum.
-            // Java's module system rejects that package name when its classes are flattened
-            // into a named/automatic module. Keep the dependency as a nested JAR instead;
-            // PluginClassLoader exposes it to Bukkit/Paper plugins at runtime.
             if (id.group == 'commons-lang' && id.name == 'commons-lang') {
                 from(artifact.file) {
                     into 'META-INF/lunararc-libs'
@@ -331,18 +254,24 @@ def createFatJar(String platform) {
             }
 
             boolean flatten = (id.group == 'io.papermc.paper' && id.name == 'paper-api') ||
-                // Paper PluginLoader/MavenLibraryResolver is instantiated from the
-                // LunarArc mod classloader in the NeoForge child JVM. Nested jars are
-                // merely extracted by the parent launcher and are not on that module
-                // path, so resolver/provider classes must live in the runtime JAR.
+
                 id.group == 'org.apache.maven.resolver' ||
-                (id.group == 'org.apache.maven' && id.name == 'maven-resolver-provider') ||
+                id.group == 'org.apache.maven' ||
+                id.group == 'org.codehaus.plexus' ||
+                id.group == 'javax.inject' ||
+                id.group == 'org.eclipse.sisu' ||
+                id.group == 'org.apache.httpcomponents' ||
+                id.group == 'commons-codec' ||
+                id.group == 'commons-logging' ||
                 lunarArcKyori ||
                 id.group.contains('net.md-5') ||
                 id.group == 'com.google.code.gson' ||
                 (id.group == 'com.googlecode.json-simple' && id.name == 'json-simple') ||
                 (id.group == 'org.yaml' && id.name == 'snakeyaml') ||
-                (id.group == 'org.xerial' && id.name == 'sqlite-jdbc')
+                (id.group == 'org.xerial' && id.name == 'sqlite-jdbc') ||
+                (id.group == 'com.mysql' && id.name == 'mysql-connector-j') ||
+                id.group == 'org.spongepowered' ||
+                id.group == 'io.leangen.geantyref'
 
             if (flatten) {
                 from(zipTree(artifact.file)) {
@@ -353,12 +282,15 @@ def createFatJar(String platform) {
                     exclude 'org/bukkit/plugin/SimplePluginManager.class'
                 }
             } else {
-                // Everything else goes into META-INF/libraries/ for the launcher to load
+
                 from(artifact.file) {
                     into "META-INF/libraries/${id.group.replace('.', '/')}/${id.name}/${id.version}"
                 }
             }
         }
+
+        exclude 'io/ampznetwork/lunararc/common/server/LunarArcPluginLibraryRuntime.class'
+        exclude 'io/ampznetwork/lunararc/common/server/LunarArcPluginLibraryRuntime$*.class'
 
         exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
         mergeServiceFiles()
@@ -375,50 +307,143 @@ def createFatJar(String platform) {
         }
     }
 
-    // Compare the assembled hybrid JAR against the exact Paper runtime class set.
-    // This is an exact-name audit, not a minimum-count heuristic: if any inherited
-    // CraftBukkit/Paper/Spigot implementation class disappears during shading, fail
-    // the build and print the missing names.
-    tasks.register("verify${platform.capitalize()}PaperSurface") {
+    tasks.register("verify${platform.capitalize()}HybridShape") {
+        dependsOn rootProject.tasks.named('verifyNoRuntimeProxies')
         dependsOn tasks.named("${platform}Jar")
-        inputs.file(rootProject.ext.paperServerJar)
         inputs.file(tasks.named("${platform}Jar").flatMap { it.archiveFile })
         doLast {
-            File paperJar = rootProject.ext.paperServerJar
             File hybridJar = tasks.named("${platform}Jar").get().archiveFile.get().asFile
-            def prefixes = [
-                'org/bukkit/craftbukkit/',
-                'io/papermc/paper/',
-                'com/destroystokyo/paper/',
-                'org/spigotmc/',
-                'co/aikar/'
-            ]
-
-            Set<String> expected = new LinkedHashSet<>()
-            new java.util.jar.JarFile(paperJar).withCloseable { jar ->
+            List<String> forbiddenNms = new ArrayList<>()
+            List<String> forbiddenPaperServer = new ArrayList<>()
+            Set<String> entries = new HashSet<>()
+            new java.util.jar.JarFile(hybridJar).withCloseable { jar ->
                 jar.entries().each { entry ->
-                    if (!entry.directory && entry.name.endsWith('.class') && prefixes.any { entry.name.startsWith(it) }) {
-                        expected.add(entry.name)
+                    if (entry.directory) return
+                    entries.add(entry.name)
+                    if (!entry.name.endsWith('.class')) return
+                    if (entry.name.startsWith('net/minecraft/')) forbiddenNms.add(entry.name)
+
+                    boolean paperServerOnly =
+                        entry.name.startsWith('io/papermc/paper/chunk/system/') ||
+                        entry.name.startsWith('io/papermc/paper/threadedregions/RegionizedServer') ||
+                        entry.name.startsWith('io/papermc/paper/threadedregions/scheduler/FallbackRegionScheduler') ||
+                        entry.name.startsWith('io/papermc/paper/threadedregions/scheduler/FoliaAsyncScheduler') ||
+                        entry.name.startsWith('io/papermc/paper/threadedregions/scheduler/FoliaEntityScheduler') ||
+                        entry.name.startsWith('io/papermc/paper/threadedregions/scheduler/FoliaGlobalRegionScheduler')
+                    if (paperServerOnly) {
+                        forbiddenPaperServer.add(entry.name)
                     }
                 }
             }
+            if (!forbiddenNms.isEmpty()) {
+                throw new GradleException("${platform} hybrid JAR contains ${forbiddenNms.size()} net.minecraft classes. Minecraft must stay loader-owned.")
+            }
+            if (!forbiddenPaperServer.isEmpty()) {
+                throw new GradleException("${platform} hybrid JAR contains copied Paper server implementation classes. Paper is an API/merge reference, not a second server runtime.")
+            }
 
-            Set<String> actual = new HashSet<>()
-            new java.util.jar.JarFile(hybridJar).withCloseable { jar ->
-                jar.entries().each { entry ->
-                    if (!entry.directory && entry.name.endsWith('.class')) actual.add(entry.name)
+            Set<String> expectedCraftSurface = new HashSet<>()
+            File paperReference = rootProject.ext.paperServerJar
+            if (!paperReference.isFile()) {
+                throw new GradleException("Paper 1.21.1 compile/reference JAR is missing during ${platform} surface verification")
+            }
+            new java.util.jar.JarFile(paperReference).withCloseable { paperJar ->
+                paperJar.entries().each { entry ->
+                    if (entry.directory || !entry.name.endsWith('.class')) return
+                    if (!(entry.name.startsWith('org/bukkit/craftbukkit/') || entry.name.startsWith('org/spigotmc/'))) return
+
+                    int dollar = entry.name.indexOf('$')
+                    if (dollar >= 0) {
+                        String ownerEntry = entry.name.substring(0, dollar) + '.class'
+                        String ownerSource = ownerEntry.substring(0, ownerEntry.length() - '.class'.length()) + '.java'
+                        File lunarArcOwner = rootProject.file("lunararc-common/src/main/java/${ownerSource}")
+                        if (lunarArcOwner.isFile()) return
+                    }
+
+                    expectedCraftSurface.add(entry.name)
                 }
             }
-
-            List<String> missing = expected.findAll { !actual.contains(it) }.sort()
-            if (!missing.isEmpty()) {
-                String sample = missing.take(50).join('\n  - ')
+            List<String> missingCraftSurface = expectedCraftSurface.findAll { !entries.contains(it) }.sort()
+            if (!missingCraftSurface.isEmpty()) {
                 throw new GradleException(
-                    "${platform} hybrid JAR is missing ${missing.size()} Paper runtime classes.\n" +
-                    "  - ${sample}" + (missing.size() > 50 ? "\n  ... and ${missing.size() - 50} more" : '')
+                    "${platform} hybrid JAR is missing ${missingCraftSurface.size()} exact Paper 1.21.1 CraftBukkit/Spigot implementation classes. " +
+                    "First missing entries: ${missingCraftSurface.take(25)}"
                 )
             }
-            logger.lifecycle("${platform} Paper class-surface audit passed: ${expected.size()} inherited implementation classes present.")
+            logger.lifecycle(
+                "${platform} exact Paper 1.21.1 CraftBukkit/Spigot class surface: ${expectedCraftSurface.size()} / ${expectedCraftSurface.size()} present"
+            )
+
+            List<String> requiredPluginLibraryRuntime = [
+                'org/eclipse/aether/artifact/Artifact.class',
+                'org/eclipse/aether/artifact/DefaultArtifact.class',
+                'org/eclipse/aether/graph/Dependency.class',
+                'org/eclipse/aether/repository/RemoteRepository.class',
+                'org/eclipse/aether/RepositorySystem.class',
+                'io/ampznetwork/lunararc/libs/maven/core/repository/internal/MavenRepositorySystemUtils.class',
+                'io/ampznetwork/lunararc/libs/maven/inject/Inject.class',
+                'io/ampznetwork/lunararc/libs/maven/http/client/HttpClient.class'
+            ]
+            List<String> missingPluginLibraryRuntime = requiredPluginLibraryRuntime.findAll { !entries.contains(it) }
+            if (!missingPluginLibraryRuntime.isEmpty()) {
+                throw new GradleException("${platform} hybrid JAR is missing direct Paper plugin library runtime classes: ${missingPluginLibraryRuntime}")
+            }
+            if (entries.any { it.startsWith('META-INF/lunararc/plugin-runtime-libs/') }) {
+                throw new GradleException("${platform} hybrid JAR still contains the retired nested Paper PluginLoader runtime")
+            }
+            if (entries.contains('io/ampznetwork/lunararc/common/server/LunarArcPluginLibraryRuntime.class')) {
+                throw new GradleException("${platform} hybrid JAR still contains the retired LunarArcPluginLibraryRuntime class")
+            }
+
+            List<String> requiredLunarArcRuntimeResources = [
+                'io/ampznetwork/lunararc/i18n/TranslationManager.class',
+                'locale/en_gb.json'
+            ]
+            List<String> missingLunarArcRuntimeResources = requiredLunarArcRuntimeResources.findAll { !entries.contains(it) }
+            if (!missingLunarArcRuntimeResources.isEmpty()) {
+                throw new GradleException("${platform} hybrid JAR is missing LunarArc runtime resources: ${missingLunarArcRuntimeResources}")
+            }
+
+            // Two checks against faults that are invisible until the server is running.
+            //
+            // A loader whose metadata does not name mixins.lunararc.common.json applies none of the
+            // common layer, so the server boots normally and simply has no Bukkit in it and loads no
+            // plugins. That was true of Forge, and nothing in the build noticed.
+            //
+            // And metadata copied from src/main/resources rather than the processResources output
+            // still holds its ${...} placeholders, which Fabric reports as a version conflict
+            // against a version string that is a literal placeholder.
+            String metadataEntry = [
+                neoforge: 'META-INF/neoforge.mods.toml',
+                forge:    'META-INF/mods.toml',
+                fabric:   'fabric.mod.json',
+                quilt:    'quilt.mod.json'
+            ][platform]
+
+            if (!entries.contains(metadataEntry)) {
+                throw new GradleException("${platform} hybrid JAR is missing its loader metadata ${metadataEntry}")
+            }
+            if (!entries.contains('mixins.lunararc.common.json')) {
+                throw new GradleException("${platform} hybrid JAR is missing mixins.lunararc.common.json")
+            }
+
+            String metadata = new java.util.jar.JarFile(hybridJar).withCloseable { jar ->
+                jar.getInputStream(jar.getEntry(metadataEntry)).getText('UTF-8')
+            }
+            if (!metadata.contains('mixins.lunararc.common.json')) {
+                throw new GradleException(
+                    "${platform} loader metadata (${metadataEntry}) does not declare mixins.lunararc.common.json. " +
+                    "Without it the common mixins never apply: the server starts, and has no Bukkit layer and no plugins.")
+            }
+            def placeholder = metadata =~ /\$\{[A-Za-z_][A-Za-z0-9_]*\}/
+            if (placeholder) {
+                throw new GradleException(
+                    "${platform} loader metadata (${metadataEntry}) still contains unexpanded placeholders " +
+                    "(${placeholder[0]}). The jar packaged the template from src/main/resources instead of the " +
+                    "processResources output.")
+            }
+
+            logger.lifecycle("${platform} hybrid ownership/runtime audit passed: loader-owned Minecraft, no copied Paper server runtime, direct Paper library resolver and locale resources packaged, ${metadataEntry} declares the common mixin config with no unexpanded placeholders.")
         }
     }
 }

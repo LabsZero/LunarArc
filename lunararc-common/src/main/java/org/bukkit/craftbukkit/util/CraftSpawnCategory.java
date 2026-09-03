@@ -1,0 +1,89 @@
+package org.bukkit.craftbukkit.util;
+
+import net.minecraft.world.entity.MobCategory;
+import org.bukkit.entity.SpawnCategory;
+
+/** Loader-neutral Minecraft 1.21.1 spawn-category conversion. */
+public final class CraftSpawnCategory {
+    private CraftSpawnCategory() {}
+
+    public static SpawnCategory toBukkit(MobCategory category) {
+        if (category == null) throw new IllegalArgumentException("MobCategory cannot be null");
+        return switch (category) {
+            case MONSTER -> SpawnCategory.MONSTER;
+            case CREATURE -> SpawnCategory.ANIMAL;
+            case AMBIENT -> SpawnCategory.AMBIENT;
+            case AXOLOTLS -> SpawnCategory.AXOLOTL;
+            case WATER_CREATURE -> SpawnCategory.WATER_ANIMAL;
+            case WATER_AMBIENT -> SpawnCategory.WATER_AMBIENT;
+            case UNDERGROUND_WATER_CREATURE -> SpawnCategory.WATER_UNDERGROUND_CREATURE;
+            case MISC -> SpawnCategory.MISC;
+        };
+    }
+
+    public static MobCategory toNms(SpawnCategory category) {
+        if (category == null) throw new IllegalArgumentException("SpawnCategory cannot be null");
+        return switch (category) {
+            case MONSTER -> MobCategory.MONSTER;
+            case ANIMAL -> MobCategory.CREATURE;
+            case AMBIENT -> MobCategory.AMBIENT;
+            case AXOLOTL -> MobCategory.AXOLOTLS;
+            case WATER_ANIMAL -> MobCategory.WATER_CREATURE;
+            case WATER_AMBIENT -> MobCategory.WATER_AMBIENT;
+            case WATER_UNDERGROUND_CREATURE -> MobCategory.UNDERGROUND_WATER_CREATURE;
+            case MISC -> MobCategory.MISC;
+        };
+    }
+
+    /**
+     * CraftBukkit's spelling of {@link #toNms}, plus the spawn-config helpers beside it.
+     *
+     * <p>The config names and the default tick interval are what CraftBukkit's own
+     * spawn-limit handling reads out of bukkit.yml, and plugins that reproduce or override
+     * that behaviour call them by these names.</p>
+     */
+    public static MobCategory toNMS(SpawnCategory spawnCategory) {
+        return toNms(spawnCategory);
+    }
+
+    public static boolean isValidForLimits(SpawnCategory spawnCategory) {
+        return spawnCategory != null && spawnCategory.ordinal() < SpawnCategory.MISC.ordinal();
+    }
+
+    public static String getConfigNameSpawnLimit(SpawnCategory spawnCategory) {
+        return switch (spawnCategory) {
+            case MONSTER -> "spawn-limits.monsters";
+            case ANIMAL -> "spawn-limits.animals";
+            case WATER_ANIMAL -> "spawn-limits.water-animals";
+            case WATER_AMBIENT -> "spawn-limits.water-ambient";
+            case WATER_UNDERGROUND_CREATURE -> "spawn-limits.water-underground-creature";
+            case AMBIENT -> "spawn-limits.ambient";
+            case AXOLOTL -> "spawn-limits.axolotls";
+            default -> throw new UnsupportedOperationException(
+                    "Unknown Config value " + spawnCategory + " for spawn-limits");
+        };
+    }
+
+    public static String getConfigNameTicksPerSpawn(SpawnCategory spawnCategory) {
+        return switch (spawnCategory) {
+            case MONSTER -> "ticks-per.monster-spawns";
+            case ANIMAL -> "ticks-per.animal-spawns";
+            case WATER_ANIMAL -> "ticks-per.water-spawns";
+            case WATER_AMBIENT -> "ticks-per.water-ambient-spawns";
+            case WATER_UNDERGROUND_CREATURE -> "ticks-per.water-underground-creature-spawns";
+            case AMBIENT -> "ticks-per.ambient-spawns";
+            case AXOLOTL -> "ticks-per.axolotl-spawns";
+            default -> throw new UnsupportedOperationException(
+                    "Unknown Config value " + spawnCategory + " for ticks-per");
+        };
+    }
+
+    public static long getDefaultTicksPerSpawn(SpawnCategory spawnCategory) {
+        return switch (spawnCategory) {
+            case MONSTER, AXOLOTL, AMBIENT, WATER_UNDERGROUND_CREATURE, WATER_AMBIENT, WATER_ANIMAL -> 1;
+            case ANIMAL -> 400;
+            default -> throw new UnsupportedOperationException(
+                    "Unknown Config value " + spawnCategory + " for ticks-per");
+        };
+    }
+}

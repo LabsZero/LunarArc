@@ -5,24 +5,22 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
-import io.ampznetwork.lunararc.common.bridge.EntityBridge;
+import io.ampznetwork.lunararc.common.bridge.CommandSourceStackBridge;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.server.level.ServerPlayer;
-import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * Thin Brigadier facade over Bukkit's authoritative CommandMap.
- * Command ownership, aliases, permissions and execution stay in Bukkit.
- */
+
 public final class BukkitCommandWrapper {
+    private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc");
     private final CommandMap commandMap;
     private final String label;
 
@@ -45,7 +43,19 @@ public final class BukkitCommandWrapper {
 
     private boolean canUse(CommandSourceStack source, String commandLabel) {
         Command command = commandMap.getCommand(commandLabel);
-        return command != null && command.testPermissionSilent(sender(source));
+        if (command == null) return false;
+        try {
+            return command.testPermissionSilent(sender(source));
+        } catch (Throwable ex) {
+            // This runs for every command node each time the tree is sent to a player, on the
+            // join path. CraftBukkit calls testPermissionSilent unguarded, but it can afford to:
+            // there a plugin's commands cannot outlive the plugin the way they can here. Letting a
+            // misbehaving or half-unloaded plugin throw takes the server down on player join,
+            // which is a far worse failure than hiding one command from one player.
+            LOGGER.warn("Permission check for command '{}' threw; hiding it from this sender.",
+                    commandLabel, ex);
+            return false;
+        }
     }
 
     private int execute(CommandContext<CommandSourceStack> context, boolean hasArguments) {
@@ -55,8 +65,7 @@ public final class BukkitCommandWrapper {
             if (!args.isBlank()) line += " " + args;
         }
 
-        // This Brigadier node exists only because Bukkit already owns this exact label.
-        // Execute directly through the authoritative CommandMap so routing cannot recurse.
+
         return commandMap.dispatch(sender(context.getSource()), line) ? 1 : 0;
     }
 
@@ -76,8 +85,8 @@ public final class BukkitCommandWrapper {
                     ? new String[0]
                     : argumentText.split(" ", -1);
             completions = command == null ? List.of() : command.tabComplete(sender, label, args);
-        } catch (Throwable ignored) {
-            completions = List.of();
+        } catch (org.bukkit.command.CommandException exception) {
+            throw exception;
         }
 
         int lastSpace = input.lastIndexOf(' ');
@@ -86,6 +95,10 @@ public final class BukkitCommandWrapper {
                 : builder;
 
         String remaining = target.getRemainingLowerCase();
+        // A TabCompleter returning null is Bukkit's documented way of saying "no suggestions of
+        // my own"; CraftBukkit treats it as an empty list. DecentHolograms' /dh returns null and
+        // took the whole ServerboundCommandSuggestionPacket down with an NPE here.
+        if (completions == null) return target.buildFuture();
         for (String completion : completions) {
             if (completion != null && completion.toLowerCase(java.util.Locale.ROOT).startsWith(remaining)) {
                 target.suggest(completion);
@@ -95,24 +108,13 @@ public final class BukkitCommandWrapper {
     }
 
     private static CommandSender sender(CommandSourceStack source) {
-        if (source.getEntity() instanceof ServerPlayer player) {
-            Object bukkit = ((EntityBridge) player).lunararc$getBukkitEntity();
-            if (bukkit instanceof CommandSender commandSender) {
-                return commandSender;
-            }
-        }
-
-        Server server = LunarArcPlatform.getServer();
-        if (server == null) {
-            throw new IllegalStateException("Bukkit server is not initialized");
-        }
-        return server.getConsoleSender();
+        return ((CommandSourceStackBridge) (Object) source).lunararc$getBukkitSender();
     }
 
     private static String normalize(String value) {
         if (value == null) return "";
-        // Preserve a slash that is part of the actual Bukkit label (not the
-        // client's command introducer). This is required for WorldEdit // commands.
+
+
         return value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }

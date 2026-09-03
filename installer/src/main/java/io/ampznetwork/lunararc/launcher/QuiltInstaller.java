@@ -37,17 +37,38 @@ public class QuiltInstaller {
                 Downloader.download(installerUrl, installerJar);
             }
 
-            System.out.println("Running Quilt installer for version " + mcVersion + "...");
+            System.out.println("Running Quilt installer for version " + mcVersion
+                    + " (Loader: " + loaderVersion + ")...");
+            // The Quilt installer takes the loader version as a positional argument after the
+            // Minecraft version, and spells the server download --download-server. It was being
+            // called with "--loader-version <ver> --download-minecraft", neither of which it
+            // accepts: it printed its usage text, downloaded nothing, and exited 0.
+            // --install-dir is not optional here. Left to itself the Quilt installer creates a
+            // "server" subdirectory and installs into that - it says so as it runs, "Installing
+            // server launcher at: <dir>\\server" - so quilt-server-launch.jar and server.jar both
+            // landed one directory below everything else that makes up the server, and the launch
+            // could not find either.
             ProcessBuilder pb = new ProcessBuilder(
-                    LauncherUtils.getJavaExecutable(), "-jar", installerJar.toAbsolutePath().toString(), "install",
-                    "server",
-                    mcVersion, "--loader-version", loaderVersion, "--download-minecraft");
+                    LauncherUtils.getJavaExecutable(), "-jar", installerJar.toAbsolutePath().toString(),
+                    "install", "server", mcVersion, loaderVersion,
+                    "--install-dir=" + workingDir.toAbsolutePath(), "--download-server");
             pb.inheritIO();
             Process process = pb.start();
             int exitCode = process.waitFor();
 
             if (exitCode != 0) {
                 System.err.println("Quilt installer failed with exit code: " + exitCode);
+                return;
+            }
+
+            // Exit code 0 is not evidence the install happened. The installer answers a command
+            // line it does not understand by printing usage and exiting successfully, which is how
+            // a wrong argument list turned into "Unable to access jarfile quilt-server-launch.jar"
+            // several steps later, naming a file rather than the reason it was never made.
+            if (!Files.exists(quiltServerJar)) {
+                System.err.println("Quilt installer reported success but did not produce "
+                        + quiltServerJar.getFileName() + ". The output above is from the installer;"
+                        + " if it printed its usage text then the arguments it was given are wrong.");
                 return;
             }
 

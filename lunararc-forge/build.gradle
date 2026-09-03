@@ -1,7 +1,8 @@
-// Forge (legacy) platform integration — analogous to arclight-forge.
+
 plugins {
     id 'architectury-plugin'
     id 'dev.architectury.loom'
+    id 'com.gradleup.shadow'
 }
 
 architectury {
@@ -13,7 +14,25 @@ loom {
     silentMojangMappingsLicense()
     accessWidenerPath = project(':lunararc-common').file('src/main/resources/lunararc.accesswidener')
     forge {
-        mixinConfigs = ['mixins.lunararc.common.json']
+        useCustomMixin = false
+        convertAccessWideners = true
+        extraAccessWideners.add loom.accessWidenerPath.get().asFile.name
+        mixinConfigs = ['mixins.lunararc.common.json', 'mixins.lunararc.forge.json']
+    }
+}
+
+configurations {
+    common {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentForge.extendsFrom common
+
+    shadowBundle {
+        canBeResolved = true
+        canBeConsumed = false
     }
 }
 
@@ -24,9 +43,67 @@ dependencies {
         parchment("org.parchmentmc.data:parchment-${libs.versions.minecraft.get()}:${libs.versions.parchment.get()}@zip")
     }
     forge "net.minecraftforge:forge:${libs.versions.minecraft.get()}-${libs.versions.forge.get()}"
-    implementation project(':lunararc-common')
+    common(project(path: ':lunararc-common', configuration: 'namedElements')) { transitive = false }
+    shadowBundle(project(path: ':lunararc-common', configuration: 'transformProductionForge')) { transitive = false }
+
     implementation project(':lunararc-api')
+    shadowBundle project(':lunararc-api')
     implementation libs.paper.api
 }
 
-remapJar.enabled = false
+def forgePayloadPatchedMappings = layout.buildDirectory.file("generated/mappings/forge-${libs.versions.minecraft.get()}.tiny")
+def forgePayloadSourceMappings = providers.provider {
+    loom.mappingConfiguration.tinyMappingsWithSrg.toFile()
+}
+
+def prepareForgePayloadMappings = tasks.register('prepareForgePayloadMappings') {
+    inputs.file(forgePayloadSourceMappings)
+    outputs.file(forgePayloadPatchedMappings)
+
+    doLast {
+        def original = "\ta\tm_294761_\twrite\tmethod_52296\twrite"
+        def replacement = "\ta\tm_295630_\twrite\tmethod_52296\twrite"
+        def source = forgePayloadSourceMappings.get().getText('UTF-8')
+        def firstMatch = source.indexOf(original)
+
+        if (firstMatch < 0 || source.indexOf(original, firstMatch + original.length()) >= 0) {
+            throw new GradleException("Expected exactly one Forge ${libs.versions.minecraft.get()} CustomQueryPayload mapping to patch")
+        }
+
+        def target = forgePayloadPatchedMappings.get().asFile
+        target.parentFile.mkdirs()
+        target.setText(source.replace(original, replacement), 'UTF-8')
+    }
+}
+
+processResources {
+    def ver = project.version.toString()
+    inputs.property 'version', ver
+    filesMatching('META-INF/mods.toml') {
+        expand version: ver
+    }
+}
+
+shadowJar {
+    configurations = [project.configurations.shadowBundle]
+    archiveClassifier.set('dev-shadow')
+    manifest {
+        attributes 'MixinConfigs': 'mixins.lunararc.common.json,mixins.lunararc.forge.json'
+    }
+    exclude 'fabric.mod.json'
+    exclude 'quilt.mod.json'
+}
+
+remapJar {
+    inputFile.set shadowJar.archiveFile
+    dependsOn shadowJar
+    dependsOn prepareForgePayloadMappings
+
+    if (!delegate.hasProperty('customMappings')) {
+        throw new GradleException(
+            'LunarArc Forge requires an Architectury Loom version with RemapJarTask.customMappings; ' +
+            'use the pinned 1.14.473 for Minecraft 1.21.1. Loom 1.9.x is too old for this build.'
+        )
+    }
+    customMappings.from(forgePayloadPatchedMappings)
+}

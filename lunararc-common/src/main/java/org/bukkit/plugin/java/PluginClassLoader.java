@@ -1,9 +1,11 @@
 package org.bukkit.plugin.java;
 
 import org.bukkit.plugin.PluginDescriptionFile;
-import io.ampznetwork.lunararc.common.LunarArcPlatform;
+import io.ampznetwork.lunararc.common.mod.server.LunarArcServer;
 import io.ampznetwork.lunararc.common.mod.LunarArcRemapper;
+import io.ampznetwork.lunararc.common.mod.PluginMappingNamespace;
 import io.ampznetwork.lunararc.common.server.LunarArcPluginLoader;
+import io.ampznetwork.lunararc.common.server.LunarArcPluginFixManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,13 +26,8 @@ import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Paper/Bukkit plugin classloader for the hybrid runtime. Platform/API classes
- * stay parent-owned; plugin classes are child-first and remapped/cached when
- * legacy Spigot NMS names are detected. Dependency visibility follows declared
- * plugin relationships, including Paper join-classpath rules.
- */
-public final class PluginClassLoader extends URLClassLoader {
+public final class PluginClassLoader extends URLClassLoader
+        implements io.papermc.paper.plugin.provider.classloader.ConfiguredPluginClassLoader {
 
     private final Map<String, Class<?>> classes = new ConcurrentHashMap<>();
     private final PluginDescriptionFile description;
@@ -39,13 +36,18 @@ public final class PluginClassLoader extends URLClassLoader {
     private final LunarArcPluginLoader pluginLoader;
     private final ClassLoader libraryLoader;
     private final ClassLoader paperLibraryLoader;
-    private final Set<String> noJoinClasspathDependencies;
+    private final Set<String> joinedPaperDependencies;
     private JavaPlugin plugin;
+    private final PluginMappingNamespace mappingNamespace;
     private final boolean remapNms;
+    private final boolean paperPlugin;
     private final LunarArcRemapper remapper;
     private final Path transformedCacheRoot;
+    private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
 
-    private static final Map<String, PluginClassLoader> loaders = new ConcurrentHashMap<>();
+    public io.papermc.paper.plugin.provider.entrypoint.DependencyContext dependencyContext;
+    private volatile io.papermc.paper.plugin.provider.classloader.PluginClassLoaderGroup group;
+
     private static volatile ClassLoader compatibilityLibraryLoader;
 
     static {
@@ -56,26 +58,42 @@ public final class PluginClassLoader extends URLClassLoader {
             File dataFolder, File file) throws MalformedURLException {
         super(new URL[]{file.toURI().toURL()}, parent);
         this.description = description;
+        // Before any of this plugin's classes load: some plugins need a system property in place
+        // ahead of their own class initialization, and the transformed-class cache means a
+        // per-class hook cannot be relied on to run.
+        io.ampznetwork.lunararc.common.server.LunarArcPluginFixManager
+                .applyPluginProperties(description == null ? null : description.getName());
         this.dataFolder = dataFolder;
         this.file = file;
         this.pluginLoader = loader;
-        this.remapNms = shouldRemapNms(file);
+        this.mappingNamespace = PluginMappingNamespace.detect(file);
+        this.remapNms = this.mappingNamespace.requiresNmsRemap();
+        this.paperPlugin = isPaperPlugin(file);
         this.remapper = new LunarArcRemapper(this.remapNms);
-        this.transformedCacheRoot = createTransformedCacheRoot(file, this.remapNms);
-        this.libraryLoader = createLibraryLoader(description);
-        this.paperLibraryLoader = io.ampznetwork.lunararc.common.server.LunarArcPaperPluginSupport
-                .createLibraryLoader(file, description, dataFolder, parent);
-        this.noJoinClasspathDependencies = io.ampznetwork.lunararc.common.server.LunarArcPaperPluginSupport
-                .noJoinClasspathDependencies(file);
-        loaders.put(normalize(description.getName()), this);
-        for (String provided : description.getProvides()) {
-            loaders.putIfAbsent(normalize(provided), this);
-        }
+        this.transformedCacheRoot = createTransformedCacheRoot(file, this.mappingNamespace);
+        this.libraryLoader = wrapPluginLibraryLoader(
+                io.ampznetwork.lunararc.common.server.LunarArcLegacyLibraryResolver.create(description, parent),
+                "bukkit-libraries");
+        this.paperLibraryLoader = wrapPluginLibraryLoader(
+                io.ampznetwork.lunararc.common.server.LunarArcPaperPluginSupport
+                        .createLibraryLoader(file, description, dataFolder, parent),
+                "paper-libraries");
+        this.joinedPaperDependencies = this.paperPlugin
+                ? io.ampznetwork.lunararc.common.server.LunarArcPaperPluginSupport.joinedDependencies(file)
+                : java.util.Set.of();
+        this.pluginLoader.getClassSpace().register(this, description, this.paperPlugin);
+        // Real Paper registers the classic (Spigot) plugin classloader into a group right here in
+        // the constructor, before the plugin's main class is ever loaded. Without it every classic
+        // plugin stayed outside PaperClassLoaderStorage entirely until enable time, when
+        // PaperPluginInstanceManager's registerUnsafePlugin() fallback caught it and warned
+        // ("Enabled plugin with unregistered ConfiguredPluginClassLoader ..."); until that point
+        // its classes were invisible to the global group, so cross-plugin lookups during onLoad()
+        // could not see them. The group's library predicate only dereferences dependencyContext
+        // at class-resolution time, which is always after the provider has assigned it.
+        this.group = io.papermc.paper.plugin.provider.classloader.PaperClassLoaderStorage.instance()
+                .registerSpigotGroup(this);
     }
 
-    // Invoked by the JVM when resolving references inside already-loaded plugin classes.
-    // URLClassLoader.loadClass() tries parent first, then calls findClass(), so this
-    // path already handles most mod-class references automatically via the parent.
     @Override
     protected Class<?> findClass(String name) throws ClassNotFoundException {
         return findClass(name, true);
@@ -87,7 +105,18 @@ public final class PluginClassLoader extends URLClassLoader {
             Class<?> loaded = findLoadedClass(name);
             if (loaded == null) {
                 if (isPlatformClass(name)) {
-                    loaded = loadPlatformClass(name);
+                    try {
+                        loaded = loadPlatformClassWithBackstop(name);
+                    } catch (ClassNotFoundException notOnServer) {
+                        // "Platform" is a prefix guess, not a guarantee the server has the class.
+                        // javax.* in particular is mostly JDK but not entirely: plugins shade
+                        // javax.inject and javax.annotation routinely. Dead-ending here meant a
+                        // plugin's own bundled copy was never consulted - floodgate failed to load
+                        // with NoClassDefFoundError: javax/inject/Provider even though its jar
+                        // contains that class. Classes the server must own are still refused.
+                        if (isServerOwnedClass(name)) throw notOnServer;
+                        loaded = findClass(name, true);
+                    }
                 } else {
                     try {
                         loaded = findClass(name, true);
@@ -102,16 +131,14 @@ public final class PluginClassLoader extends URLClassLoader {
     }
 
     public Class<?> findClass(String name, boolean checkGlobal) throws ClassNotFoundException {
-        // 1. Cache hit
+
         Class<?> result = classes.get(name);
         if (result != null) return result;
 
-        // 2. Paper / Bukkit API → parent (= mod class loader on modded platforms)
         if (isPlatformClass(name)) {
-            try { return loadPlatformClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return loadPlatformClassWithBackstop(name); } catch (ClassNotFoundException ignored) {}
         }
 
-        // 3. Plugin's own JAR (with bytecode remapping)
         String path = name.replace('.', '/').concat(".class");
         URL url = findResource(path);
         if (url != null) {
@@ -134,77 +161,67 @@ public final class PluginClassLoader extends URLClassLoader {
             }
         }
 
-        // 4. Only declared dependencies share classes with this plugin.
         if (checkGlobal) {
-            for (String dependency : visibleDependencies()) {
-                PluginClassLoader other = loaders.get(normalize(dependency));
-                if (other == null || other == this) continue;
-                try {
-                    return other.findClass(name, false);
-                } catch (ClassNotFoundException ignored) {
-                }
+            try {
+                return lunararc$traceSource(name, "another plugin (dependency class space)",
+                        this.pluginLoader.getClassSpace().findDependencyClass(
+                                this, name, visibleDependencies(), !this.paperPlugin));
+            } catch (ClassNotFoundException ignored) {
             }
         }
 
-        // 5. Legacy Bukkit's JavaPluginLoader exposes classes from other loaded
-        //    plugins through a global lookup as a compatibility fallback. This matters
-        //    for long-standing integrations such as LuckPerms <-> Vault, where a
-        //    plugin-owned child/JarInJar classloader can request Vault API classes
-        //    without a direct dependency edge being visible to that nested loader.
-        //    Keep declared dependencies first, then fall back to the global plugin
-        //    class space (Paper may warn about undeclared access, but it is resolvable).
-        if (checkGlobal) {
-            for (PluginClassLoader other : new java.util.LinkedHashSet<>(loaders.values())) {
-                if (other == null || other == this) continue;
-                try {
-                    return other.findClass(name, false);
-                } catch (ClassNotFoundException ignored) {
-                }
-            }
-        }
-
-        // 6. Modern paper-plugin.yml PluginLoader libraries. The loader is run in
-        //    an isolated temporary classloader, matching Paper's contract that loader
-        //    statics do not leak into the final plugin classloader.
         if (paperLibraryLoader != null) {
-            try { return paperLibraryLoader.loadClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return lunararc$traceSource(name, "paper library loader", paperLibraryLoader.loadClass(name)); }
+            catch (ClassNotFoundException ignored) {}
         }
 
-        // 5. Paper/Bukkit plugin.yml libraries. Paper resolves these from Maven
-        //    Central and exposes them only to the requesting plugin.
         if (libraryLoader != null) {
-            try { return libraryLoader.loadClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return lunararc$traceSource(name, "plugin library loader", libraryLoader.loadClass(name)); }
+            catch (ClassNotFoundException ignored) {}
         }
 
-        // 6. LunarArc compatibility libraries. These are kept as nested JARs instead
-        //    of being flattened into the NeoForge module (Commons Lang 2 contains the
-        //    legacy package org.apache.commons.lang.enum, which Java 9+ modules reject).
         ClassLoader compatibilityLoader = compatibilityLibraryLoader();
         if (compatibilityLoader != null) {
-            try { return compatibilityLoader.loadClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return lunararc$traceSource(name, "compatibility library loader", compatibilityLoader.loadClass(name)); }
+            catch (ClassNotFoundException ignored) {}
         }
 
-        // 7. Mod class loader — lets plugins call into mod APIs.
-        //    This is the key step that unifies the plugin and mod class spaces,
-        //    following the same principle as arclight-common's PluginClassLoader.
-        ClassLoader modCL = LunarArcPlatform.getModClassLoader();
+        ClassLoader modCL = LunarArcServer.modClassLoader();
         if (modCL != null && modCL != getParent()) {
-            try { return modCL.loadClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return lunararc$traceSource(name, "mod class loader", modCL.loadClass(name)); }
+            catch (ClassNotFoundException ignored) {}
         }
 
-        // 6. Parent as last resort (covers system classes and anything the mod
-        //    loader's parent knows about that we haven't already tried).
-        try { return getParent().loadClass(name); } catch (ClassNotFoundException ignored) {}
+        try { return lunararc$traceSource(name, "parent", getParent().loadClass(name)); }
+        catch (ClassNotFoundException ignored) {}
 
         throw new ClassNotFoundException(name);
     }
 
+    /**
+     * Record which of the six sources answered for a class name, on the classload channel.
+     *
+     * <p>This chain asks the plugin jar, then other plugins, then three library loaders, then the
+     * mod loader, then the parent - and on a hybrid server more than one of them can hold the same
+     * library. When two classes of one library come back from two different loaders the result is
+     * a VerifyError that names neither loader and reads like a compiler bug: Essentials shut down
+     * with "Type com/google/gson/JsonArray is not assignable to com/google/gson/JsonElement",
+     * which is only possible if those two classes came from different places. The stack trace
+     * cannot show that. This can: run with -Dlunararc.debug=classload and every resolution says
+     * which source answered and which loader ended up defining the class.</p>
+     */
+    private static Class<?> lunararc$traceSource(String name, String source, Class<?> resolved) {
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.CLASSLOAD && resolved != null) {
+            ClassLoader definer = resolved.getClassLoader();
+            io.ampznetwork.lunararc.common.LunarArcDebug.classload("{}: answered by {}, defined by {}",
+                    name, source, definer == null ? "the bootstrap loader" : definer.getClass().getName()
+                            + "@" + Integer.toHexString(System.identityHashCode(definer)));
+        }
+        return resolved;
+    }
 
     private byte[] loadOrCreateTransformedClass(String resourcePath, String className, byte[] original) throws IOException {
-        // Do not mirror class names directly onto the host filesystem. Windows is
-        // case-insensitive, while JVM class names are case-sensitive; obfuscated plugins
-        // such as LiteBans legitimately contain classes whose names differ only by case.
-        // Hash the exact resource path so eB.class and eb.class can never collide.
+
         Path cached = transformedCacheRoot.resolve("classes")
                 .resolve(cacheKey(resourcePath) + ".class").normalize();
         if (!cached.startsWith(transformedCacheRoot)) {
@@ -218,7 +235,32 @@ public final class PluginClassLoader extends URLClassLoader {
             }
         }
 
-        byte[] transformed = remapper.transform(original, className.replace('.', '/'));
+        LunarArcRemapper activeRemapper = this.remapper;
+        if (!this.remapNms && hasLegacyCraftBukkitReference(original)) {
+
+            activeRemapper = new LunarArcRemapper(true);
+        }
+        // Paper's own plugin rewriter runs first, on the bytecode exactly as the plugin author
+        // compiled it. CraftBukkit reaches it through Bukkit.getUnsafe().processClass(); LunarArc
+        // calls the same code directly because the remapper this loader picks depends on the
+        // plugin's mapping namespace, which UnsafeValues has no way to know. Choosing
+        // activeRemapper from `original` above is deliberate: Commodore strips the legacy
+        // versioned CraftBukkit prefix, so the detection has to happen before it runs.
+        // Only the classic path gets it, exactly as real Paper does. A paper-plugin.yml plugin is
+        // written against current Mojang-mapped Paper API and carries no plugin.yml api-version,
+        // so Commodore would read it as pre-flattening and apply the whole legacy reroute set to
+        // code that is already correct. Paper routes those plugins through
+        // ClassloaderBytecodeModifier instead, which is a no-op here for the same reason.
+        byte[] staged = this.paperPlugin
+                ? original
+                : org.bukkit.craftbukkit.util.CraftMagicNumbers
+                        .applyPaperPluginRewrites(this.description, resourcePath, original);
+        byte[] transformed = activeRemapper.transform(staged, className.replace('.', '/'));
+        // Real technique from MohistMC/Youer's PluginFixManager — patches known-problematic
+        // third-party plugin classes (currently: WorldEdit/FAWE version-detection checks) that
+        // would otherwise fail on a hybrid server. Applied after remapping, on the final
+        // bytecode that actually gets cached and loaded.
+        transformed = LunarArcPluginFixManager.injectPluginFix(className, transformed);
         Files.createDirectories(cached.getParent());
         Path temp = cached.resolveSibling(cached.getFileName() + ".tmp");
         Files.write(temp, transformed);
@@ -230,6 +272,17 @@ public final class PluginClassLoader extends URLClassLoader {
         return transformed;
     }
 
+    static boolean hasLegacyCraftBukkitReference(byte[] bytecode) {
+        byte[] marker = "org/bukkit/craftbukkit/v".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        outer:
+        for (int i = 0; i <= bytecode.length - marker.length; i++) {
+            for (int j = 0; j < marker.length; j++) {
+                if (bytecode[i + j] != marker[j]) continue outer;
+            }
+            return true;
+        }
+        return false;
+    }
 
     private static String cacheKey(String value) {
         try {
@@ -240,7 +293,7 @@ public final class PluginClassLoader extends URLClassLoader {
         }
     }
 
-    private static Path createTransformedCacheRoot(File pluginFile, boolean remapNms) {
+    private static Path createTransformedCacheRoot(File pluginFile, PluginMappingNamespace mappingNamespace) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             try (InputStream input = Files.newInputStream(pluginFile.toPath())) {
@@ -250,15 +303,21 @@ public final class PluginClassLoader extends URLClassLoader {
                     if (read > 0) digest.update(buffer, 0, read);
                 }
             }
-            digest.update((byte) (remapNms ? 1 : 0));
+            digest.update(mappingNamespace.name().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             digest.update(io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.minecraftVersion()
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            // Bump when LunarArc's built-in plugin compatibility transformations change.
-            digest.update("compat-transform-v3".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            // Cache transformed classes against the remapping data as well as the
-            // plugin JAR. Otherwise fixing/refreshing mappings can leave stale bytecode
-            // (for example TAB still referencing ServerPlayer.c after it was mapped to
-            // connection) until the user manually deletes LunarArc's cache.
+
+            digest.update("compat-transform-v15-remap-validation".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+            // The token above has to be bumped by hand whenever the transform changes, and it was
+            // missed once already: a remapper fix shipped, every plugin kept loading the bad
+            // bytecode cached under the old key, and the fix looked like it had not worked.
+            // Folding the LunarArc version in makes that failure impossible - any build that
+            // changes the transformer also changes the key. Restarts on an unchanged build still
+            // hit the cache, which is what it is for.
+            digest.update(io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.lunarArcVersion()
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
             ClassLoader owner = PluginClassLoader.class.getClassLoader();
             String mappingBase = "mappings/" + io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.minecraftVersion() + "/";
             for (String resource : new String[]{"paper-reobf.tiny", "plugin-remap.tsv"}) {
@@ -285,27 +344,121 @@ public final class PluginClassLoader extends URLClassLoader {
         }
     }
 
+    /**
+     * Resolve a class the server owns, asking for the name exactly as requested before considering
+     * a mapped alternative.
+     *
+     * <p>The order matters, and getting it backwards is not a missed optimisation but a wrong
+     * answer. By the time a plugin class is linking, its bytecode has already been through
+     * {@link LunarArcRemapper}: every class reference in it is a Mojang name. Mapping again here
+     * treats that Mojang name as though it were still Spigot, and the two namespaces are not a
+     * subset of one another - they collide. {@code net/minecraft/core/Registry} is the sharp
+     * example: Spigot calls Mojang's {@code Registry} {@code IRegistry}, and reuses the name
+     * {@code Registry} for Mojang's {@code IdMap}. So a second mapping pass turned a resolved,
+     * correct {@code Registry} reference into {@code IdMap}, this loader handed back a class whose
+     * name did not match the one asked for, and the JVM rejected it with
+     * {@code NoClassDefFoundError: net/minecraft/core/Registry} - which is exactly how WorldEdit
+     * died in {@code PaperweightAdapter.initializeRegistries}. Every NMS class whose name Spigot
+     * left alone survived the double pass untouched, which is why only the colliding handful ever
+     * showed.</p>
+     *
+     * <p>Reflection does not need the mapping to happen here. {@code Class.forName} and
+     * {@code ClassLoader.loadClass} calls in plugin bytecode are rewritten to
+     * {@link io.ampznetwork.lunararc.common.mod.LunarArcReflectionBridge}, which maps the string
+     * name itself and falls back to the unmapped one. What is left for this method is the legacy
+     * versioned CraftBukkit package, whose names genuinely do not exist on a 1.21.1 server, so
+     * trying the requested name first costs one failed lookup and never picks the wrong class.</p>
+     */
     private Class<?> loadPlatformClass(String name) throws ClassNotFoundException {
-        if (name.startsWith("org.bukkit.craftbukkit.") || (this.remapNms && name.startsWith("net.minecraft."))) {
-            String mapped = remapper.map(name.replace('.', '/')).replace('/', '.');
-            if (!mapped.equals(name)) {
-                try {
-                    return getParent().loadClass(mapped);
-                } catch (ClassNotFoundException ignored) {
-                    // Fall back to the original name below.
+        try {
+            Class<?> found = getParent().loadClass(name);
+            if (io.ampznetwork.lunararc.common.LunarArcDebug.CLASSLOAD) {
+                io.ampznetwork.lunararc.common.LunarArcDebug.classload("{}: parent resolved as requested", name);
+            }
+            return found;
+        } catch (ClassNotFoundException notUnderRequestedName) {
+            if (name.startsWith("org.bukkit.craftbukkit.") || (this.remapNms && name.startsWith("net.minecraft."))) {
+                String mapped = remapper.map(name.replace('.', '/')).replace('/', '.');
+                if (!mapped.equals(name)) {
+                    try {
+                        Class<?> found = getParent().loadClass(mapped);
+                        if (io.ampznetwork.lunararc.common.LunarArcDebug.CLASSLOAD) {
+                            io.ampznetwork.lunararc.common.LunarArcDebug.classload(
+                                    "{}: absent under that name, parent resolved mapped name {}", name, mapped);
+                        }
+                        return found;
+                    } catch (ClassNotFoundException ignored) {
+                    }
                 }
             }
+            if (io.ampznetwork.lunararc.common.LunarArcDebug.CLASSLOAD) {
+                io.ampznetwork.lunararc.common.LunarArcDebug.classload("{}: not on the parent under any name", name);
+            }
+            throw notUnderRequestedName;
         }
-        return getParent().loadClass(name);
     }
 
-    private static ClassLoader createLibraryLoader(PluginDescriptionFile description) {
+    /**
+     * {@link #loadPlatformClass} plus the mod class loader as a last resort.
+     */
+    private Class<?> loadPlatformClassWithBackstop(String name) throws ClassNotFoundException {
         try {
-            if (description.getLibraries().isEmpty()) return null;
-            return new LibraryLoader(java.util.logging.Logger.getLogger(description.getName())).createLoader(description);
-        } catch (Throwable error) {
-            throw new IllegalStateException("Could not resolve libraries for " + description.getName(), error);
+            return loadPlatformClass(name);
+        } catch (ClassNotFoundException notOnParent) {
+            // The parent is whichever loader built this plugin's provider, normally the mod's own
+            // loader, which sees Minecraft. That is an assumption about how the active loader
+            // arranged its class space rather than something LunarArc controls, and findClass
+            // already keeps modClassLoader() as a backstop for the non-platform path. Platform
+            // classes deserve the same backstop: an NMS class reachable from the mod but not from
+            // this plugin's parent should resolve rather than surface as a link error in the
+            // middle of a plugin's method.
+            ClassLoader modClassLoader = LunarArcServer.modClassLoader();
+            if (modClassLoader != null && modClassLoader != getParent()) {
+                try {
+                    return modClassLoader.loadClass(name);
+                } catch (ClassNotFoundException ignored) {
+                }
+            }
+            throw notOnParent;
         }
+    }
+
+    /**
+     * Classes the server must own outright, where a plugin's bundled copy would be wrong rather
+     * than merely redundant: the JVM's own packages, the Bukkit/Paper API the server implements,
+     * Minecraft itself, and Adventure, which passes objects across the plugin boundary and breaks
+     * if two copies exist. MohistMC/Youer draws the same line, refusing org.bukkit and
+     * net.minecraft in findClass so they can only ever come from the server.
+     */
+    private static boolean isServerOwnedClass(String name) {
+        return name.startsWith("java.")
+                || name.startsWith("jdk.")
+                || name.startsWith("sun.")
+                || name.startsWith("org.bukkit.")
+                || name.startsWith("net.minecraft.")
+                || name.startsWith("io.papermc.paper.")
+                || name.startsWith("com.destroystokyo.paper.")
+                || name.startsWith("net.kyori.");
+    }
+
+    private ClassLoader wrapPluginLibraryLoader(ClassLoader raw, String cacheName) {
+        if (raw == null) return raw;
+        if (!(raw instanceof URLClassLoader urls)) {
+            java.util.logging.Logger.getLogger(description.getName()).fine(
+                    "Wrapping non-URL Paper library loader " + raw.getClass().getName()
+                            + " with LunarArc's concrete plugin mapping compatibility transformer");
+            return new TransformingDelegatePluginLibraryClassLoader(
+                    raw, this.remapper, this.transformedCacheRoot.resolve(cacheName));
+        }
+
+        URL[] libraryUrls = urls.getURLs();
+        ClassLoader libraryParent = urls.getParent();
+        try { urls.close(); } catch (IOException ignored) {}
+        return new TransformingPluginLibraryClassLoader(
+                libraryUrls,
+                libraryParent,
+                this.remapper,
+                this.transformedCacheRoot.resolve(cacheName));
     }
 
     private static ClassLoader compatibilityLibraryLoader() {
@@ -346,49 +499,69 @@ public final class PluginClassLoader extends URLClassLoader {
         }
     }
 
-    /**
-     * Matches Paper's 1.20.5+ mapping namespace behavior:
-     * legacy plugin.yml plugins are Spigot-mapped unless their manifest says
-     * otherwise; paper-plugin.yml plugins are Mojang-mapped by default.
-     */
-    private static boolean shouldRemapNms(File file) {
-        try (java.util.jar.JarFile jar = new java.util.jar.JarFile(file)) {
-            // A versioned CraftBukkit reference is conclusive evidence that this is
-            // legacy Spigot-mapped bytecode, even if a repackager left a misleading
-            // Mojang namespace manifest behind. TAB and DecentHolograms 1.21_R1 are
-            // examples: without this check ServerPlayer.c reaches the Mojang runtime.
-            String legacyNeedle = "org/bukkit/craftbukkit/"
-                    + io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.craftBukkitPackage() + "/";
-            var entries = jar.entries();
-            while (entries.hasMoreElements()) {
-                java.util.jar.JarEntry entry = entries.nextElement();
-                if (entry.isDirectory() || !entry.getName().endsWith(".class")) continue;
-                // Version-specific adapter packages (TAB, DecentHolograms, etc.)
-                // are compiled against legacy CraftBukkit/Spigot NMS names even
-                // when the class itself doesn't reference a CraftBukkit type.
-                if (entry.getName().contains("/" + io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.craftBukkitPackage() + "/")) {
-                    return true;
-                }
-                try (InputStream in = jar.getInputStream(entry)) {
-                    byte[] bytes = in.readAllBytes();
-                    if (new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1).contains(legacyNeedle)) {
-                        return true;
-                    }
-                }
-            }
+    public Class<?> findClassFromOwnSpace(String name) throws ClassNotFoundException {
+        synchronized (getClassLoadingLock(name)) {
+            Class<?> loaded = findLoadedClass(name);
+            if (loaded != null && loaded.getClassLoader() == this) return loaded;
 
-            java.util.jar.Manifest manifest = jar.getManifest();
-            if (manifest != null) {
-                String namespace = manifest.getMainAttributes().getValue("paperweight-mappings-namespace");
-                if (namespace != null) {
-                    if ("mojang".equalsIgnoreCase(namespace)) return false;
-                    if ("spigot".equalsIgnoreCase(namespace)) return true;
+            String path = name.replace('.', '/').concat(".class");
+            URL own = super.findResource(path);
+            if (own != null) {
+                try (InputStream is = own.openStream()) {
+                    byte[] original = is.readAllBytes();
+                    byte[] bytecode = loadOrCreateTransformedClass(path, name, original);
+                    String pkg = name.contains(".") ? name.substring(0, name.lastIndexOf('.')) : null;
+                    if (pkg != null && getDefinedPackage(pkg) == null) {
+                        definePackage(pkg, null, null, null, null, null, null, null);
+                    }
+                    CodeSource cs = new CodeSource(file.toURI().toURL(), (Certificate[]) null);
+                    ProtectionDomain pd = new ProtectionDomain(cs, null, this, null);
+                    Class<?> result = defineClass(name, bytecode, 0, bytecode.length, pd);
+                    classes.put(name, result);
+                    return result;
+                } catch (IOException error) {
+                    throw new ClassNotFoundException(name, error);
                 }
             }
-            return jar.getJarEntry("paper-plugin.yml") == null;
-        } catch (IOException ignored) {
-            return true;
+            if (paperLibraryLoader instanceof TransformingPluginLibraryClassLoader libraries) {
+                try { return libraries.findOwnClass(name); } catch (ClassNotFoundException ignored) {}
+            }
+            if (libraryLoader instanceof TransformingPluginLibraryClassLoader libraries) {
+                try { return libraries.findOwnClass(name); } catch (ClassNotFoundException ignored) {}
+            }
+            throw new ClassNotFoundException(name);
         }
+    }
+
+    public URL findResourceFromOwnSpace(String name) {
+        URL resource = super.findResource(name);
+        if (resource == null && paperLibraryLoader instanceof TransformingPluginLibraryClassLoader libraries) {
+            resource = libraries.findOwnResource(name);
+        }
+        if (resource == null && libraryLoader instanceof TransformingPluginLibraryClassLoader libraries) {
+            resource = libraries.findOwnResource(name);
+        }
+        return resource;
+    }
+
+    public java.util.List<URL> findResourcesFromOwnSpace(String name) throws IOException {
+        java.util.LinkedHashSet<URL> resources = new java.util.LinkedHashSet<>();
+        addResources(resources, super.findResources(name));
+        if (paperLibraryLoader instanceof TransformingPluginLibraryClassLoader libraries) {
+            addResources(resources, libraries.findOwnResources(name));
+        }
+        if (libraryLoader instanceof TransformingPluginLibraryClassLoader libraries) {
+            addResources(resources, libraries.findOwnResources(name));
+        }
+        return java.util.List.copyOf(resources);
+    }
+
+    public PluginMappingNamespace getMappingNamespace() {
+        return this.mappingNamespace;
+    }
+
+    public boolean isNmsRemappingEnabled() {
+        return this.remapNms;
     }
 
     private static boolean isPlatformClass(String name) {
@@ -410,12 +583,8 @@ public final class PluginClassLoader extends URLClassLoader {
         URL url = findResource(name);
         if (url == null) url = getParent().getResource(name);
         if (url == null) {
-            for (String dependency : visibleDependencies()) {
-                PluginClassLoader other = loaders.get(normalize(dependency));
-                if (other == null || other == this) continue;
-                url = other.findResource(name);
-                if (url != null) break;
-            }
+            url = this.pluginLoader.getClassSpace().findDependencyResource(
+                    this, name, visibleDependencies(), !this.paperPlugin);
         }
         if (url == null && paperLibraryLoader != null) url = paperLibraryLoader.getResource(name);
         if (url == null && libraryLoader != null) url = libraryLoader.getResource(name);
@@ -426,60 +595,147 @@ public final class PluginClassLoader extends URLClassLoader {
         return url;
     }
 
+    @Override
+    public java.util.Enumeration<URL> getResources(String name) throws IOException {
+        java.util.LinkedHashSet<URL> resources = new java.util.LinkedHashSet<>();
+        addResources(resources, super.findResources(name));
+        addResources(resources, getParent().getResources(name));
+        this.pluginLoader.getClassSpace().addDependencyResources(
+                resources, this, name, visibleDependencies(), !this.paperPlugin);
+        if (paperLibraryLoader != null) addResources(resources, paperLibraryLoader.getResources(name));
+        if (libraryLoader != null) addResources(resources, libraryLoader.getResources(name));
+        ClassLoader compatibility = compatibilityLibraryLoader();
+        if (compatibility != null) addResources(resources, compatibility.getResources(name));
+        return java.util.Collections.enumeration(resources);
+    }
+
+    private static void addResources(java.util.Set<URL> target, java.util.Enumeration<URL> source) {
+        while (source.hasMoreElements()) target.add(source.nextElement());
+    }
 
     private Set<String> visibleDependencies() {
+        if (this.paperPlugin) {
+            return this.joinedPaperDependencies;
+        }
         Set<String> dependencies = new LinkedHashSet<>();
-        for (String dependency : description.getDepend()) {
-            if (!noJoinClasspathDependencies.contains(normalize(dependency))) dependencies.add(dependency);
-        }
-        for (String dependency : description.getSoftDepend()) {
-            if (!noJoinClasspathDependencies.contains(normalize(dependency))) dependencies.add(dependency);
-        }
+        dependencies.addAll(description.getDepend());
+        dependencies.addAll(description.getSoftDepend());
         return dependencies;
+    }
+
+    private static boolean isPaperPlugin(File pluginFile) {
+        try (java.util.jar.JarFile jar = new java.util.jar.JarFile(pluginFile)) {
+            return jar.getJarEntry("paper-plugin.yml") != null;
+        } catch (IOException error) {
+            throw new IllegalStateException("Could not inspect plugin descriptor for " + pluginFile.getName(), error);
+        }
     }
 
     private static String normalize(String name) {
         return name.replace(' ', '_').toLowerCase(java.util.Locale.ROOT);
     }
 
-    JavaPlugin getPluginInstance() {
+    public JavaPlugin getPluginInstance() {
         return plugin;
+    }
+
+    @Override
+    public io.papermc.paper.plugin.configuration.PluginMeta getConfiguration() {
+        return this.description;
+    }
+
+    @Override
+    public Class<?> loadClass(String name, boolean resolve, boolean checkGlobal, boolean checkLibraries)
+            throws ClassNotFoundException {
+        synchronized (getClassLoadingLock(name)) {
+            Class<?> found = findClass(name, checkGlobal);
+            if (resolve) resolveClass(found);
+            return found;
+        }
+    }
+
+    @Override
+    public void init(JavaPlugin plugin) {
+        initialize(plugin);
+    }
+
+    @Override
+    public JavaPlugin getPlugin() {
+        return this.plugin;
+    }
+
+    @Override
+    public io.papermc.paper.plugin.provider.classloader.PluginClassLoaderGroup getGroup() {
+        return this.group;
+    }
+
+    public void setGroup(io.papermc.paper.plugin.provider.classloader.PluginClassLoaderGroup group) {
+        this.group = group;
     }
 
     LunarArcPluginLoader getPluginLoaderInstance() {
         return pluginLoader;
     }
 
+    public JavaPlugin createPluginMain() throws ReflectiveOperationException {
+        Class<?> mainClass = findClass(description.getMain(), false);
+        Class<? extends JavaPlugin> pluginClass = mainClass.asSubclass(JavaPlugin.class);
+        java.lang.reflect.Constructor<? extends JavaPlugin> constructor = pluginClass.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        return constructor.newInstance();
+    }
+
     public synchronized void initialize(JavaPlugin plugin) {
         if (this.plugin != null) throw new IllegalStateException("Plugin already initialized!");
 
         this.plugin = plugin;
+        // Real Paper's PluginDescriptionFile implements PluginMeta directly, so classic
+        // (plugin.yml) plugins get the same object for both parameters. Wrapping it in
+        // LunarArcPluginMeta here instead broke every `getPluginMeta() instanceof
+        // PluginDescriptionFile` check in the codebase (e.g. PaperPluginInstanceManager's
+        // enablePlugin(), which uses that check to decide whether to register plugin.yml
+        // "commands:" into the CommandMap) - meaning no classic plugin ever got its declared
+        // commands registered, so getCommand() always returned null for them (crashed Vault).
         plugin.init(
                 pluginLoader.getServerInstance(),
                 description,
                 dataFolder,
                 file,
                 this,
-                new io.ampznetwork.lunararc.common.server.LunarArcPluginMeta(description),
+                description,
                 io.ampznetwork.lunararc.common.server.LunarArcLogger.getLogger(description.getName())
         );
     }
 
+    public static void shutdownSharedLoaders() {
+        synchronized (PluginClassLoader.class) {
+            ClassLoader current = compatibilityLibraryLoader;
+            compatibilityLibraryLoader = null;
+            if (current instanceof java.io.Closeable closeable) {
+                try { closeable.close(); } catch (IOException ignored) {}
+            }
+        }
+    }
+
     @Override
     public void close() throws IOException {
+        if (!closed.compareAndSet(false, true)) return;
         IOException failure = null;
         try {
             super.close();
         } catch (IOException error) {
             failure = error;
         } finally {
-            loaders.entrySet().removeIf(entry -> entry.getValue() == this);
+
+            this.pluginLoader.getClassSpace().unregister(this);
             if (paperLibraryLoader instanceof java.io.Closeable closeable) {
                 try { closeable.close(); } catch (IOException error) { if (failure == null) failure = error; }
             }
             if (libraryLoader instanceof java.io.Closeable closeable) {
                 try { closeable.close(); } catch (IOException error) { if (failure == null) failure = error; }
             }
+            classes.clear();
+            plugin = null;
         }
         if (failure != null) throw failure;
     }

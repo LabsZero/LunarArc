@@ -1,6 +1,5 @@
 package io.ampznetwork.lunararc.common.server;
 
-import io.ampznetwork.lunararc.common.LunarArcPaths;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.java.PluginClassLoader;
@@ -9,30 +8,89 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 /**
- * Runtime support for the modern paper-plugin.yml loader/bootstrapper model.
+ * Paper-plugin metadata helpers.
  *
- * The implementation deliberately talks to the Paper API by reflection. This
- * keeps LunarArc isolated from Paper server implementation classes while still
- * honoring the public PluginLoader, ClassPathLibrary and PluginBootstrap
- * contracts exposed to plugins.
+ * The old implementation manufactured PluginClasspathBuilder, LibraryStore,
+ * BootstrapContext and PluginProviderContext instances with dynamic proxies.
+ * Those runtime facades are intentionally gone. Paper bootstrap contexts are
+ * now concrete; custom classpath loaders are implemented separately.
  */
 public final class LunarArcPaperPluginSupport {
-    private LunarArcPaperPluginSupport() {}
+    private LunarArcPaperPluginSupport() {
+    }
+
+
+    public record ServerDependency(String name, String load, boolean required, boolean joinClasspath) { }
+
+    public static java.util.List<ServerDependency> bootstrapDependencies(File pluginFile) {
+        return dependencies(pluginFile, "bootstrap");
+    }
+
+    public static java.util.List<ServerDependency> serverDependencies(File pluginFile) {
+        return dependencies(pluginFile, "server");
+    }
+
+    private static java.util.List<ServerDependency> dependencies(File pluginFile, String phase) {
+        Map<String, Object> config = readPaperConfig(pluginFile);
+        Object dependenciesValue = config.get("dependencies");
+        if (!(dependenciesValue instanceof Map<?, ?> dependencies)) return java.util.List.of();
+        Object phaseValue = dependencies.get(phase);
+        if (!(phaseValue instanceof Map<?, ?> phaseDependencies)) return java.util.List.of();
+        java.util.ArrayList<ServerDependency> result = new java.util.ArrayList<>();
+        for (Map.Entry<?, ?> entry : phaseDependencies.entrySet()) {
+            String name = String.valueOf(entry.getKey()).trim();
+            if (name.isEmpty()) continue;
+            String load = "OMIT";
+            boolean required = true;
+            boolean joinClasspath = true;
+            if (entry.getValue() instanceof Map<?, ?> dependency) {
+                Object value = dependency.get("load");
+                if (value != null) load = String.valueOf(value).trim().toUpperCase(java.util.Locale.ROOT);
+                if (!load.equals("BEFORE") && !load.equals("AFTER") && !load.equals("OMIT")) {
+                    throw new IllegalArgumentException("Invalid Paper dependency load order '" + load
+                            + "' for " + name + " in " + pluginFile.getName());
+                }
+                value = dependency.get("required");
+                if (value != null) required = Boolean.parseBoolean(String.valueOf(value));
+                value = dependency.get("join-classpath");
+                if (value != null) joinClasspath = Boolean.parseBoolean(String.valueOf(value));
+            }
+            result.add(new ServerDependency(name, load, required, joinClasspath));
+        }
+        return java.util.List.copyOf(result);
+    }
+
+    public static java.util.Set<String> joinedDependencies(File pluginFile) {
+        java.util.LinkedHashSet<String> result = new java.util.LinkedHashSet<>();
+        for (ServerDependency dependency : bootstrapDependencies(pluginFile)) {
+            if (dependency.joinClasspath()) result.add(dependency.name());
+        }
+        for (ServerDependency dependency : serverDependencies(pluginFile)) {
+            if (dependency.joinClasspath()) result.add(dependency.name());
+        }
+        return java.util.Collections.unmodifiableSet(result);
+    }
+
+    public static java.util.Set<String> joinedServerDependencies(File pluginFile) {
+        java.util.LinkedHashSet<String> result = new java.util.LinkedHashSet<>();
+        for (ServerDependency dependency : serverDependencies(pluginFile)) {
+            if (dependency.joinClasspath()) result.add(dependency.name());
+        }
+        return java.util.Collections.unmodifiableSet(result);
+    }
+
+    public static boolean isPaperPlugin(File pluginFile) {
+        try (JarFile jar = new JarFile(pluginFile)) {
+            return jar.getJarEntry("paper-plugin.yml") != null;
+        } catch (IOException error) {
+            throw new IllegalStateException("Could not inspect plugin descriptor for " + pluginFile.getName(), error);
+        }
+    }
 
     public static java.util.Set<String> noJoinClasspathDependencies(File pluginFile) {
         Map<String, Object> config = readPaperConfig(pluginFile);
@@ -51,157 +109,114 @@ public final class LunarArcPaperPluginSupport {
         return java.util.Collections.unmodifiableSet(result);
     }
 
+    /**
+     * Resolves Paper's custom PluginLoader libraries into a real classloader.
+     * The loader class itself is intentionally created in a temporary classloader,
+     * matching Paper's documented isolation semantics.
+     */
     public static ClassLoader createLibraryLoader(File pluginFile, PluginDescriptionFile description,
                                                    File dataFolder, ClassLoader parent) {
         Map<String, Object> config = readPaperConfig(pluginFile);
         String loaderName = string(config.get("loader"));
         if (loaderName == null) return null;
 
-        URLClassLoader loaderClassLoader = null;
-        try {
-            loaderClassLoader = new URLClassLoader(new URL[]{pluginFile.toURI().toURL()}, parent);
-            Class<?> pluginLoaderInterface = Class.forName(
-                    "io.papermc.paper.plugin.loader.PluginLoader", true, parent);
-            Class<?> builderInterface = Class.forName(
-                    "io.papermc.paper.plugin.loader.PluginClasspathBuilder", true, parent);
-            Class<?> libraryStoreInterface = Class.forName(
-                    "io.papermc.paper.plugin.loader.library.LibraryStore", true, parent);
+        LunarArcPluginMeta meta = new LunarArcPluginMeta(description);
+        LunarArcPluginProviderContext context = new LunarArcPluginProviderContext(
+                meta, dataFolder.toPath(), pluginFile.toPath());
+        LunarArcPluginClasspathBuilder builder = new LunarArcPluginClasspathBuilder(context);
 
-            Class<?> loaderClass = Class.forName(loaderName, true, loaderClassLoader);
-            Object loader = loaderClass.getDeclaredConstructor().newInstance();
-            if (!pluginLoaderInterface.isInstance(loader)) {
-                throw new IllegalStateException(loaderName + " does not implement Paper PluginLoader");
+        // Run the Paper PluginLoader directly against LunarArc's loader-owned Paper
+        // runtime. Resolver API classes are part of that same runtime; there is no
+        // secondary LunarArc runtime JAR/classloader. The temporary loader owns only
+        // the plugin's PluginLoader implementation class.
+        ClassLoader platformRuntime = parent;
+        try (java.net.URLClassLoader loaderClassLoader = new java.net.URLClassLoader(
+                new java.net.URL[]{pluginFile.toURI().toURL()}, platformRuntime)) {
+            Thread thread = Thread.currentThread();
+            ClassLoader previous = thread.getContextClassLoader();
+            try {
+                thread.setContextClassLoader(loaderClassLoader);
+                Class<?> raw = loaderClassLoader.loadClass(loaderName);
+                Class<? extends io.papermc.paper.plugin.loader.PluginLoader> loaderType =
+                        raw.asSubclass(io.papermc.paper.plugin.loader.PluginLoader.class);
+                java.lang.reflect.Constructor<? extends io.papermc.paper.plugin.loader.PluginLoader> constructor =
+                        loaderType.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                io.papermc.paper.plugin.loader.PluginLoader pluginLoader = constructor.newInstance();
+                pluginLoader.classloader(builder);
+            } finally {
+                thread.setContextClassLoader(previous);
             }
-
-            List<Object> classPathLibraries = new ArrayList<>();
-            Object context = createProviderContext(parent, description, dataFolder, pluginFile);
-            Object builder = Proxy.newProxyInstance(parent, new Class<?>[]{builderInterface}, (proxy, method, args) -> {
-                return switch (method.getName()) {
-                    case "addLibrary" -> {
-                        if (args != null && args.length == 1 && args[0] != null) classPathLibraries.add(args[0]);
-                        yield proxy;
-                    }
-                    case "getContext" -> context;
-                    case "toString" -> "LunarArcPluginClasspathBuilder[" + description.getName() + "]";
-                    default -> primitiveDefault(method.getReturnType());
-                };
-            });
-
-            Method classloader = pluginLoaderInterface.getMethod("classloader", builderInterface);
-            classloader.invoke(loader, builder);
-
-            List<Path> resolved = new ArrayList<>();
-            Object libraryStore = Proxy.newProxyInstance(parent, new Class<?>[]{libraryStoreInterface}, (proxy, method, args) -> {
-                if ("addLibrary".equals(method.getName()) && args != null && args.length == 1 && args[0] instanceof Path path) {
-                    resolved.add(path);
-                    return null;
-                }
-                return primitiveDefault(method.getReturnType());
-            });
-
-            for (Object library : classPathLibraries) {
-                Method register = library.getClass().getMethod("register", libraryStoreInterface);
-                register.invoke(library, libraryStore);
-            }
-
-            if (resolved.isEmpty()) {
-                loaderClassLoader.close();
-                return null;
-            }
-
-            Path pluginLibraryRoot = LunarArcPaths.pluginLibraries().resolve(safeName(description.getName()));
-            Files.createDirectories(pluginLibraryRoot);
-            LinkedHashMap<Path, URL> urls = new LinkedHashMap<>();
-            for (Path source : resolved) {
-                if (source == null || !Files.isRegularFile(source)) continue;
-                Path cached = cacheLibrary(source, pluginLibraryRoot);
-                urls.putIfAbsent(cached, cached.toUri().toURL());
-            }
-
-            loaderClassLoader.close();
-            if (urls.isEmpty()) return null;
-            return new URLClassLoader(urls.values().toArray(URL[]::new), parent);
-        } catch (Throwable error) {
-            if (loaderClassLoader != null) {
-                try { loaderClassLoader.close(); } catch (IOException ignored) {}
-            }
-            throw new IllegalStateException("Could not prepare Paper PluginLoader for "
-                    + description.getName() + ": " + rootMessage(error), unwrap(error));
+            java.util.List<java.nio.file.Path> libraries = builder.resolve();
+            if (libraries.isEmpty()) return null;
+            java.net.URL[] urls = libraries.stream().map(path -> {
+                try { return path.toUri().toURL(); }
+                catch (java.net.MalformedURLException exception) { throw new IllegalArgumentException(exception); }
+            }).toArray(java.net.URL[]::new);
+            return new java.net.URLClassLoader(urls, platformRuntime);
+        } catch (io.papermc.paper.plugin.loader.library.LibraryLoadingException exception) {
+            throw new IllegalStateException("Could not resolve Paper plugin libraries for "
+                    + description.getName(), exception);
+        } catch (ReflectiveOperationException | IOException exception) {
+            throw new IllegalStateException("Could not run Paper PluginLoader " + loaderName
+                    + " for " + description.getName(), exception);
         }
     }
 
-    public static JavaPlugin createBootstrappedPlugin(PluginClassLoader pluginLoader, File pluginFile,
-                                                        PluginDescriptionFile description, File dataFolder) {
+    public record BootstrapHandle(
+            io.papermc.paper.plugin.bootstrap.PluginBootstrap bootstrapper,
+            LunarArcBootstrapContext context) { }
+
+    /** Execute the Paper bootstrap phase without creating the JavaPlugin yet. */
+    public static BootstrapHandle bootstrap(PluginClassLoader pluginLoader, File pluginFile,
+                                            PluginDescriptionFile description, File dataFolder) {
         Map<String, Object> config = readPaperConfig(pluginFile);
         String bootstrapperName = string(config.get("bootstrapper"));
         if (bootstrapperName == null) return null;
 
+        LunarArcPluginMeta meta = new LunarArcPluginMeta(description);
+        LunarArcBootstrapContext context = new LunarArcBootstrapContext(
+                meta, dataFolder.toPath(), pluginFile.toPath());
+        boolean success = false;
         try {
-            ClassLoader apiLoader = LunarArcPaperPluginSupport.class.getClassLoader();
-            Class<?> bootstrapInterface = Class.forName(
-                    "io.papermc.paper.plugin.bootstrap.PluginBootstrap", true, apiLoader);
-            Class<?> bootstrapContextInterface = Class.forName(
-                    "io.papermc.paper.plugin.bootstrap.BootstrapContext", true, apiLoader);
-            Class<?> providerContextInterface = Class.forName(
-                    "io.papermc.paper.plugin.bootstrap.PluginProviderContext", true, apiLoader);
-
-            Class<?> bootstrapClass = pluginLoader.findClass(bootstrapperName, false);
-            Object bootstrapper = bootstrapClass.getDeclaredConstructor().newInstance();
-            if (!bootstrapInterface.isInstance(bootstrapper)) {
-                throw new IllegalStateException(bootstrapperName + " does not implement Paper PluginBootstrap");
+            Class<?> raw = pluginLoader.findClass(bootstrapperName, false);
+            Class<? extends io.papermc.paper.plugin.bootstrap.PluginBootstrap> bootstrapType =
+                    raw.asSubclass(io.papermc.paper.plugin.bootstrap.PluginBootstrap.class);
+            java.lang.reflect.Constructor<? extends io.papermc.paper.plugin.bootstrap.PluginBootstrap> constructor =
+                    bootstrapType.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            io.papermc.paper.plugin.bootstrap.PluginBootstrap bootstrap = constructor.newInstance();
+            try {
+                bootstrap.bootstrap(context);
+            } finally {
+                context.closeRegistration();
             }
-
-            Object context = createBootstrapContext(apiLoader, bootstrapContextInterface,
-                    description, dataFolder, pluginFile);
-            bootstrapInterface.getMethod("bootstrap", bootstrapContextInterface).invoke(bootstrapper, context);
-
-            Method createPlugin = bootstrapInterface.getMethod("createPlugin", providerContextInterface);
-            Object plugin = createPlugin.invoke(bootstrapper, context);
-            if (!(plugin instanceof JavaPlugin javaPlugin)) {
-                throw new IllegalStateException("Paper bootstrapper did not create a JavaPlugin instance");
-            }
-            return javaPlugin;
-        } catch (Throwable error) {
-            throw new IllegalStateException("Could not bootstrap Paper plugin " + description.getName()
-                    + ": " + rootMessage(error), unwrap(error));
+            success = true;
+            return new BootstrapHandle(bootstrap, context);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Could not create Paper bootstrapper " + bootstrapperName
+                    + " for " + description.getName(), exception);
+        } finally {
+            if (!success) LunarArcLifecycleEventRunner.unregisterAllOwner(context);
         }
     }
 
-    private static Object createBootstrapContext(ClassLoader loader, Class<?> bootstrapContextInterface,
-                                                 PluginDescriptionFile description, File dataFolder, File pluginFile)
-            throws ClassNotFoundException {
-        Object provider = createProviderContext(loader, description, dataFolder, pluginFile);
-        Object lifecycle = LunarArcLifecycleEventManager.create();
-        return Proxy.newProxyInstance(loader, new Class<?>[]{bootstrapContextInterface}, (proxy, method, args) -> {
-            if ("getLifecycleManager".equals(method.getName())) return lifecycle;
-            if ("getPluginMeta".equals(method.getName())) return new LunarArcPluginMeta(description);
-            try {
-                Method providerMethod = provider.getClass().getMethod(method.getName(), method.getParameterTypes());
-                return providerMethod.invoke(provider, args);
-            } catch (ReflectiveOperationException ignored) {
-                return providerContextValue(method.getName(), description, dataFolder, pluginFile);
-            }
-        });
+    /** Create the JavaPlugin from an already-completed Paper bootstrap phase. */
+    public static JavaPlugin createPlugin(io.papermc.paper.plugin.bootstrap.PluginBootstrap bootstrap,
+                                          LunarArcBootstrapContext context,
+                                          PluginDescriptionFile description) {
+        JavaPlugin plugin = bootstrap.createPlugin(context);
+        if (plugin == null) {
+            throw new IllegalStateException("Paper bootstrapper returned null for " + description.getName());
+        }
+        return plugin;
     }
 
-    private static Object createProviderContext(ClassLoader loader, PluginDescriptionFile description,
-                                                File dataFolder, File pluginFile) throws ClassNotFoundException {
-        Class<?> providerContextInterface = Class.forName(
-                "io.papermc.paper.plugin.bootstrap.PluginProviderContext", true, loader);
-        return Proxy.newProxyInstance(loader, new Class<?>[]{providerContextInterface}, (proxy, method, args) ->
-                providerContextValue(method.getName(), description, dataFolder, pluginFile));
-    }
-
-    private static Object providerContextValue(String method, PluginDescriptionFile description,
-                                               File dataFolder, File pluginFile) {
-        return switch (method) {
-            case "getConfiguration", "getPluginMeta" -> new LunarArcPluginMeta(description);
-            case "getDataDirectory" -> dataFolder.toPath();
-            case "getPluginSource" -> pluginFile.toPath();
-            case "getLogger" -> net.kyori.adventure.text.logger.slf4j.ComponentLogger.logger(description.getName());
-            case "toString" -> "LunarArcPluginProviderContext[" + description.getName() + "]";
-            default -> null;
-        };
+    /** Compatibility helper for direct/single-plugin loads. */
+    public static JavaPlugin createBootstrappedPlugin(PluginClassLoader pluginLoader, File pluginFile,
+                                                       PluginDescriptionFile description, File dataFolder) {
+        BootstrapHandle handle = bootstrap(pluginLoader, pluginFile, description, dataFolder);
+        return handle == null ? null : createPlugin(handle.bootstrapper(), handle.context(), description);
     }
 
     @SuppressWarnings("unchecked")
@@ -218,72 +233,13 @@ public final class LunarArcPaperPluginSupport {
         }
     }
 
-    private static Path cacheLibrary(Path source, Path root) throws IOException {
-        String fileName = source.getFileName() == null ? "library.jar" : source.getFileName().toString();
-        String prefix = sha256(source).substring(0, 16);
-        Path destination = root.resolve(prefix + "-" + fileName);
-        if (Files.isRegularFile(destination) && Files.size(destination) == Files.size(source)) return destination;
-        Path temp = destination.resolveSibling(destination.getFileName() + ".tmp");
-        Files.copy(source, temp, StandardCopyOption.REPLACE_EXISTING);
-        try {
-            Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
-            Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING);
-        }
-        return destination;
-    }
-
-    private static String sha256(Path path) throws IOException {
-        try {
-            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
-            try (InputStream in = Files.newInputStream(path)) {
-                byte[] buffer = new byte[128 * 1024];
-                int read;
-                while ((read = in.read(buffer)) >= 0) if (read > 0) digest.update(buffer, 0, read);
-            }
-            return java.util.HexFormat.of().formatHex(digest.digest());
-        } catch (java.security.NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(impossible);
-        }
-    }
-
-    private static Object primitiveDefault(Class<?> type) {
-        if (type == void.class || !type.isPrimitive()) return null;
-        if (type == boolean.class) return false;
-        if (type == char.class) return '\0';
-        if (type == byte.class) return (byte) 0;
-        if (type == short.class) return (short) 0;
-        if (type == int.class) return 0;
-        if (type == long.class) return 0L;
-        if (type == float.class) return 0F;
-        if (type == double.class) return 0D;
-        return null;
-    }
-
     private static String normalizePluginName(String value) {
         return value.replace(' ', '_').toLowerCase(java.util.Locale.ROOT);
-    }
-
-    private static String safeName(String value) {
-        return value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
     private static String string(Object value) {
         if (value == null) return null;
         String text = String.valueOf(value).trim();
         return text.isEmpty() ? null : text;
-    }
-
-    private static Throwable unwrap(Throwable error) {
-        Throwable current = error;
-        while ((current instanceof java.lang.reflect.InvocationTargetException
-                || current instanceof java.util.concurrent.CompletionException)
-                && current.getCause() != null) current = current.getCause();
-        return current;
-    }
-
-    private static String rootMessage(Throwable error) {
-        Throwable root = unwrap(error);
-        return root.getMessage() == null ? root.getClass().getSimpleName() : root.getMessage();
     }
 }

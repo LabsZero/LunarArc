@@ -5,11 +5,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.defaults.VersionCommand;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * Keeps Paper's stock version command behavior and only appends LunarArc
- * implementation branding for the bare /version command. Bukkit/Paper version
- * APIs remain untouched for plugin compatibility.
- */
+
 public final class LunarArcVersionCommand extends VersionCommand {
     public LunarArcVersionCommand(String name) {
         super(name);

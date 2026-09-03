@@ -23,6 +23,7 @@ public class LunarArcPluginLoader implements PluginLoader {
     private final Yaml yaml = new Yaml();
     private final Pattern[] fileFilters = new Pattern[] { Pattern.compile("\\.jar$") };
     private static final Logger logger = LoggerFactory.getLogger("LunarArc");
+    private final LunarArcPluginClassSpace classSpace = new LunarArcPluginClassSpace();
 
     public LunarArcPluginLoader(Server server) {
         this.server = server;
@@ -32,72 +33,49 @@ public class LunarArcPluginLoader implements PluginLoader {
         return server;
     }
 
+    public LunarArcPluginClassSpace getClassSpace() {
+        return classSpace;
+    }
+
     @Override
     public Plugin loadPlugin(File file) throws InvalidPluginException, UnknownDependencyException {
-        if (!file.exists()) {
-            throw new InvalidPluginException(new java.io.FileNotFoundException(file.getPath()));
-        }
+        return loadPlugin(LunarArcPluginProvider.discover(this, file));
+    }
 
-        PluginDescriptionFile description;
+    /** Load a provider already discovered and dependency-sorted by the plugin manager. */
+    public Plugin loadPlugin(LunarArcPluginProvider provider) throws InvalidPluginException, UnknownDependencyException {
+        java.util.Objects.requireNonNull(provider, "provider");
+        File file = provider.source();
+        PluginDescriptionFile description = provider.description();
         try {
-            description = getPluginDescription(file);
-            io.ampznetwork.lunararc.common.config.PluginBlacklist.BlacklistEntry blacklist =
-                    io.ampznetwork.lunararc.common.config.PluginBlacklist.check(
-                            description.getName(), description.getVersion());
-            if (blacklist != null) {
-                throw new InvalidPluginException("Plugin " + description.getFullName()
-                        + " is incompatible with LunarArc: " + blacklist.reason);
-            }
-        } catch (InvalidDescriptionException e) {
-            logger.error("[LunarArc] Error reading plugin description from " + file.getName(), e);
-            throw new InvalidPluginException(e);
-        }
+            JavaPlugin plugin = provider.create();
 
-        File dataFolder = new File(file.getParentFile(), description.getName());
-        if (!dataFolder.exists()) {
-            dataFolder.mkdirs();
-        }
-
-        try {
-            org.bukkit.plugin.java.PluginClassLoader loader = new org.bukkit.plugin.java.PluginClassLoader(this, getClass().getClassLoader(),
-                    description, dataFolder, file);
-            JavaPlugin plugin = LunarArcPaperPluginSupport.createBootstrappedPlugin(
-                    loader, file, description, dataFolder);
-            if (plugin == null) {
-                Class<?> mainClass = loader.findClass(description.getMain(), false);
-                Class<? extends JavaPlugin> pluginClass = mainClass.asSubclass(JavaPlugin.class);
-                java.lang.reflect.Constructor<? extends JavaPlugin> constructor = pluginClass.getDeclaredConstructor();
-                constructor.setAccessible(true);
-                plugin = constructor.newInstance();
-            }
-
-            // Use Bukkit/Paper's own plugin.yml command parser instead of recreating
-            // PluginCommand metadata and ownership manually.
-            try {
-                java.util.List<org.bukkit.command.Command> commands =
-                        org.bukkit.command.PluginCommandYamlParser.parse(plugin);
-                if (!commands.isEmpty()) {
-                    server.getCommandMap().registerAll(description.getName(), commands);
+            if (!provider.paperPlugin()) {
+                try {
+                    java.util.List<org.bukkit.command.Command> commands =
+                            org.bukkit.command.PluginCommandYamlParser.parse(plugin);
+                    if (!commands.isEmpty()) {
+                        server.getCommandMap().registerAll(description.getName(), commands);
+                    }
+                } catch (Throwable ex) {
+                    throw new InvalidPluginException("Failed to register commands for " + description.getName(), ex);
                 }
-            } catch (Throwable ex) {
-                server.getLogger().log(java.util.logging.Level.SEVERE,
-                        "Failed to register commands for " + description.getName(), ex);
-                throw new InvalidPluginException(ex);
             }
 
+            provider.commit();
             return plugin;
         } catch (Throwable e) {
+            try { cleanupFailedPlugin(provider.plugin()); } catch (Throwable cleanupError) { e.addSuppressed(cleanupError); }
+            try { provider.close(); } catch (java.io.IOException closeError) { e.addSuppressed(closeError); }
             Throwable cause = e;
             if (e instanceof java.lang.reflect.InvocationTargetException ite && ite.getCause() != null) {
                 cause = ite.getCause();
             }
             if (cause instanceof UnsupportedClassVersionError versionError) {
                 String message = friendlyJavaVersionMessage(file.getName(), versionError);
-                server.getLogger().severe(message);
                 throw new InvalidPluginException(message, versionError);
             }
-            server.getLogger().log(java.util.logging.Level.SEVERE,
-                    "Failed to load plugin " + file.getName() + ": " + cause.getMessage(), cause);
+            if (cause instanceof InvalidPluginException invalid) throw invalid;
             throw new InvalidPluginException(cause);
         }
     }
@@ -127,12 +105,12 @@ public class LunarArcPluginLoader implements PluginLoader {
     @Override
     public PluginDescriptionFile getPluginDescription(File file) throws InvalidDescriptionException {
         try (JarFile jar = new JarFile(file)) {
-            JarEntry entry = jar.getJarEntry("plugin.yml");
-            boolean isPaper = false;
-            if (entry == null) {
-                entry = jar.getJarEntry("paper-plugin.yml");
-                isPaper = true;
-            }
+            // Paper's provider model gives paper-plugin.yml its own loading path.
+            // When a jar intentionally ships both descriptors, prefer the Paper
+            // descriptor instead of silently downgrading it to the legacy loader.
+            JarEntry entry = jar.getJarEntry("paper-plugin.yml");
+            boolean isPaper = entry != null;
+            if (entry == null) entry = jar.getJarEntry("plugin.yml");
 
             if (entry == null) {
                 throw new InvalidDescriptionException("Jar does not contain plugin.yml or paper-plugin.yml");
@@ -142,12 +120,12 @@ public class LunarArcPluginLoader implements PluginLoader {
                 if (!isPaper) {
                     return new PluginDescriptionFile(stream);
                 } else {
-                    // Manual parsing for paper-plugin.yml to bridge to PluginDescriptionFile
+
                     Map<String, Object> map = yaml.load(stream);
                     String name = map.getOrDefault("name", "").toString();
                     String version = map.getOrDefault("version", "").toString();
                     String main = map.getOrDefault("main-class", map.getOrDefault("main", "")).toString();
-                    
+
                     if (name.isEmpty() || main.isEmpty()) {
                         throw new InvalidDescriptionException("paper-plugin.yml is missing 'name' or 'main-class'");
                     }
@@ -192,19 +170,19 @@ public class LunarArcPluginLoader implements PluginLoader {
                 if (joinValue != null) joinClasspath = Boolean.parseBoolean(String.valueOf(joinValue));
             }
 
-            // Preserve Paper's explicit order without accidentally creating a
-            // dependency cycle in the legacy metadata carrier. BEFORE means the
-            // dependency loads first; AFTER means this plugin loads first. OMIT has
-            // undefined order, so required dependencies use the conservative legacy
-            // depend behavior and optional dependencies do not impose an order.
+
+            // Paper dependency ordering is independent from required/classpath.
+            // BEFORE means the dependency is loaded before this plugin; AFTER means
+            // this plugin is loaded before the dependency; OMIT intentionally adds no
+            // ordering edge. Required OMIT dependencies are validated during discovery.
             if ("AFTER".equals(load)) {
                 loadBefore.add(dependencyName);
-            } else if ("BEFORE".equals(load) || "OMIT".equals(load)) {
+            } else if ("BEFORE".equals(load)) {
                 if (required) depend.add(dependencyName);
-                else if ("BEFORE".equals(load)) softDepend.add(dependencyName);
+                else softDepend.add(dependencyName);
             }
 
-            // join-classpath is enforced by PluginClassLoader from paper-plugin.yml.
+
         }
 
         if (!depend.isEmpty()) target.put("depend", new java.util.ArrayList<>(depend));
@@ -269,15 +247,20 @@ public class LunarArcPluginLoader implements PluginLoader {
             Set<RegisteredListener> eventSet = ret.computeIfAbsent(eventClass, k -> new java.util.HashSet<>());
 
             EventExecutor executor = (ignored, event) -> {
+                if (!eventClass.isAssignableFrom(event.getClass())) return;
+                Thread thread = Thread.currentThread();
+                ClassLoader previous = thread.getContextClassLoader();
+                ClassLoader pluginLoader = plugin.getClass().getClassLoader();
                 try {
-                    if (!eventClass.isAssignableFrom(event.getClass()))
-                        return;
+                    thread.setContextClassLoader(pluginLoader);
                     method.invoke(listener, event);
                 } catch (java.lang.reflect.InvocationTargetException ex) {
                     Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
                     throw new EventException(cause);
                 } catch (Exception ex) {
                     throw new EventException(ex);
+                } finally {
+                    thread.setContextClassLoader(previous);
                 }
             };
 
@@ -291,102 +274,95 @@ public class LunarArcPluginLoader implements PluginLoader {
         if (!plugin.isEnabled()) {
             try {
                 if (plugin instanceof org.bukkit.plugin.java.JavaPlugin jp) {
-                    var method = org.bukkit.plugin.java.JavaPlugin.class.getDeclaredMethod("setEnabled", boolean.class);
-                    method.setAccessible(true);
-                    method.invoke(jp, true);
-                    // setEnabled(true) calls onEnable(); if the plugin's handleCrash() pattern
-                    // ran (e.g. EssentialsX), isEnabled() will be false even though no exception
-                    // escaped — log it so the user can see the original error in the plugin's log.
+                    Thread thread = Thread.currentThread();
+                    ClassLoader previous = thread.getContextClassLoader();
+                    try {
+                        thread.setContextClassLoader(jp.getClass().getClassLoader());
+                        jp.setEnabled(true);
+                    } finally {
+                        thread.setContextClassLoader(previous);
+                    }
+
                     if (!jp.isEnabled()) {
                         server.getLogger().severe("[LunarArc] Plugin " + plugin.getName()
                                 + " failed to enable (check its log above for the root cause).");
                     } else {
-                        repairWorldEditItemRegistry(plugin);
-                        // Match Bukkit/Paper lifecycle semantics. LuckPerms uses this
-                        // event to notice Vault enabling and installs its Vault hooks.
                         server.getPluginManager().callEvent(new org.bukkit.event.server.PluginEnableEvent(plugin));
                     }
                 }
             } catch (Exception e) {
                 Throwable cause = e;
-                if (e instanceof java.lang.reflect.InvocationTargetException ite) {
+                if (e instanceof java.lang.reflect.InvocationTargetException ite && ite.getCause() != null) {
                     cause = ite.getCause();
                 }
                 server.getLogger().log(java.util.logging.Level.SEVERE, "Error enabling plugin " + plugin.getName(), cause);
+                try {
+                    if (plugin instanceof org.bukkit.plugin.java.JavaPlugin failed && failed.isEnabled()) {
+                        Thread thread = Thread.currentThread();
+                        ClassLoader previous = thread.getContextClassLoader();
+                        try {
+                            thread.setContextClassLoader(failed.getClass().getClassLoader());
+                            failed.setEnabled(false);
+                        } finally {
+                            thread.setContextClassLoader(previous);
+                        }
+                    }
+                } catch (Throwable disableError) {
+                    cause.addSuppressed(disableError);
+                }
+                lunararc$cleanupPlugin(plugin, true);
                 if (cause instanceof RuntimeException re) throw re;
                 throw new RuntimeException(cause);
             }
         }
     }
 
-    private void repairWorldEditItemRegistry(Plugin plugin) {
-        if (!"WorldEdit".equalsIgnoreCase(plugin.getName())) return;
-        try {
-            ClassLoader cl = plugin.getClass().getClassLoader();
-            Class<?> itemTypeClass = Class.forName("com.sk89q.worldedit.world.item.ItemType", true, cl);
-            Object registry = itemTypeClass.getField("REGISTRY").get(null);
-            java.lang.reflect.Method get = registry.getClass().getMethod("get", String.class);
-            java.lang.reflect.Method register = registry.getClass().getMethod("register", String.class, Object.class);
-            java.lang.reflect.Constructor<?> ctor = itemTypeClass.getConstructor(String.class);
-            int added = 0;
-            for (org.bukkit.Material material : org.bukkit.Material.values()) {
-                if (material.isLegacy() || !material.isItem()) continue;
-                String key = material.getKey().toString();
-                if (get.invoke(registry, key) != null) continue;
-                register.invoke(registry, key, ctor.newInstance(key));
-                added++;
-            }
-            if (added > 0) server.getLogger().info("[LunarArc] Repaired WorldEdit item registry (" + added + " items).");
-        } catch (NoSuchMethodException e) {
-            // NamespacedRegistry erases the value parameter to Keyed on some WE builds.
-            try {
-                ClassLoader cl = plugin.getClass().getClassLoader();
-                Class<?> itemTypeClass = Class.forName("com.sk89q.worldedit.world.item.ItemType", true, cl);
-                Object registry = itemTypeClass.getField("REGISTRY").get(null);
-                java.lang.reflect.Method get = registry.getClass().getMethod("get", String.class);
-                java.lang.reflect.Method register = java.util.Arrays.stream(registry.getClass().getMethods())
-                        .filter(m -> m.getName().equals("register") && m.getParameterCount() == 2)
-                        .findFirst().orElseThrow();
-                java.lang.reflect.Constructor<?> ctor = itemTypeClass.getConstructor(String.class);
-                for (org.bukkit.Material material : org.bukkit.Material.values()) {
-                    if (material.isLegacy() || !material.isItem()) continue;
-                    String key = material.getKey().toString();
-                    if (get.invoke(registry, key) == null) register.invoke(registry, key, ctor.newInstance(key));
-                }
-            } catch (Throwable error) {
-                server.getLogger().warning("[LunarArc] Could not repair WorldEdit item registry: " + error);
-            }
-        } catch (Throwable error) {
-            server.getLogger().warning("[LunarArc] Could not repair WorldEdit item registry: " + error);
-        }
-    }
-
     @Override
     public void disablePlugin(Plugin plugin) {
-        if (plugin == null || !plugin.isEnabled()) return;
+        if (plugin == null) return;
+        boolean wasEnabled = plugin.isEnabled();
 
         try {
-            if (plugin instanceof org.bukkit.plugin.java.JavaPlugin javaPlugin) {
-                java.lang.reflect.Method method =
-                        org.bukkit.plugin.java.JavaPlugin.class.getDeclaredMethod("setEnabled", boolean.class);
-                method.setAccessible(true);
-                method.invoke(javaPlugin, false);
-                server.getPluginManager().callEvent(new org.bukkit.event.server.PluginDisableEvent(plugin));
+            if (wasEnabled && plugin instanceof org.bukkit.plugin.java.JavaPlugin javaPlugin) {
+                Thread thread = Thread.currentThread();
+                ClassLoader previous = thread.getContextClassLoader();
+                try {
+                    thread.setContextClassLoader(javaPlugin.getClass().getClassLoader());
+                    javaPlugin.setEnabled(false);
+                    server.getPluginManager().callEvent(new org.bukkit.event.server.PluginDisableEvent(plugin));
+                } finally {
+                    thread.setContextClassLoader(previous);
+                }
             }
         } catch (Exception e) {
             server.getLogger().log(java.util.logging.Level.SEVERE,
                     "Error disabling plugin " + plugin.getName(), e);
         } finally {
-            org.bukkit.event.HandlerList.unregisterAll(plugin);
-            server.getScheduler().cancelTasks(plugin);
-            server.getServicesManager().unregisterAll(plugin);
-            server.getMessenger().unregisterIncomingPluginChannel(plugin);
-            server.getMessenger().unregisterOutgoingPluginChannel(plugin);
-            if (server.getCommandMap() instanceof LunarArcCommandMap lunarCommands) {
-                lunarCommands.unregisterPlugin(plugin);
-            }
-            ClassLoader loader = plugin.getClass().getClassLoader();
-            if (loader instanceof java.io.Closeable closeable) {
+            lunararc$cleanupPlugin(plugin, true);
+        }
+    }
+
+    public void cleanupFailedPlugin(Plugin plugin) {
+        if (plugin != null) lunararc$cleanupPlugin(plugin, true);
+    }
+
+    private void lunararc$cleanupPlugin(Plugin plugin, boolean closeClassLoader) {
+        io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventRunner.unregisterAll(plugin);
+        org.bukkit.event.HandlerList.unregisterAll(plugin);
+        server.getScheduler().cancelTasks(plugin);
+        try { server.getAsyncScheduler().cancelTasks(plugin); } catch (Throwable ignored) {}
+        server.getServicesManager().unregisterAll(plugin);
+        server.getMessenger().unregisterIncomingPluginChannel(plugin);
+        server.getMessenger().unregisterOutgoingPluginChannel(plugin);
+        for (org.bukkit.World world : server.getWorlds()) {
+            try { world.removePluginChunkTickets(plugin); } catch (Throwable ignored) {}
+        }
+        if (server.getCommandMap() instanceof LunarArcCommandMap lunarCommands) {
+            lunarCommands.unregisterPlugin(plugin);
+        }
+        if (closeClassLoader) {
+            ClassLoader classLoader = plugin.getClass().getClassLoader();
+            if (classLoader instanceof java.io.Closeable closeable) {
                 try { closeable.close(); } catch (java.io.IOException ignored) {}
             }
         }

@@ -1,9 +1,65 @@
-// Core hybrid-server implementation: mixins, bridges, PaperMC stubs, remapper.
-// Analogous to arclight-common — compiled as an Architectury common project so
-// platform-specific transformations (NeoForge, Forge, Fabric, Quilt) can derive from it.
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Type
+import org.objectweb.asm.tree.AbstractInsnNode
+import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.tree.LdcInsnNode
+import org.objectweb.asm.tree.MethodInsnNode
+import org.objectweb.asm.tree.MethodNode
+
 plugins {
     id 'architectury-plugin'
     id 'dev.architectury.loom'
+}
+
+// Donated Paper server classes are real Paper's own compiled bytecode, which routinely does
+// `private static final Logger LOGGER = LogUtils.getClassLogger();` (or LogUtils.getLogger()) -
+// real Paper links against a newer com.mojang:logging than NeoForge 1.21.1 bundles (1.2.7,
+// confirmed from a real crash log), which lacks getClassLogger() entirely. Loading any such
+// class throws NoSuchMethodError at <clinit> (confirmed: io.papermc.paper.configuration.
+// serializer.EnumValueSerializer crashed exactly this way; at least 8 more classes in the same
+// io.papermc.paper.configuration.* package use the identical pattern and would fail one at a
+// time as each got touched). Rather than hand-reimplementing every affected donated class as it
+// crashes, rewrite the bytecode once at donation time: replace every
+// LogUtils.getClassLogger()/getLogger() call (both are `()Lorg/slf4j/Logger;`, no args) with
+// LoggerFactory.getLogger(<the class being transformed>) - functionally identical (that's what
+// getClassLogger() itself resolves to internally via caller-class detection), using only
+// standard SLF4J with no Mojang-specific dependency.
+static byte[] neutralizeMojangLogUtils(byte[] classBytes) {
+    ClassNode classNode = new ClassNode()
+    new ClassReader(classBytes).accept(classNode, 0)
+    Type selfType = Type.getObjectType(classNode.name)
+    boolean changed = false
+    for (MethodNode method : classNode.methods) {
+        for (AbstractInsnNode insn : method.instructions.toArray()) {
+            if (!(insn instanceof MethodInsnNode)) continue
+            MethodInsnNode call = (MethodInsnNode) insn
+            boolean isTargetedLogUtilsCall = call.owner == 'com/mojang/logging/LogUtils' &&
+                (call.name == 'getClassLogger' || call.name == 'getLogger') &&
+                call.desc == '()Lorg/slf4j/Logger;'
+            if (!isTargetedLogUtilsCall) continue
+
+            method.instructions.insertBefore(call, new LdcInsnNode(selfType))
+            call.owner = 'org/slf4j/LoggerFactory'
+            call.name = 'getLogger'
+            call.desc = '(Ljava/lang/Class;)Lorg/slf4j/Logger;'
+            changed = true
+        }
+    }
+    if (!changed) return classBytes
+
+    // COMPUTE_MAXS only, deliberately not COMPUTE_FRAMES: this swap doesn't add branches or
+    // change any existing frame's live types (same return type, straight-line code), so existing
+    // StackMapTable entries stay valid untouched. COMPUTE_FRAMES would need to resolve common
+    // superclasses via Class.forName, which can fail for classes referencing other
+    // not-yet-loaded donated/NMS types - avoiding it entirely sidesteps that failure mode.
+    ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS)
+    classNode.accept(writer)
+    return writer.toByteArray()
+}
+
+if (project == rootProject) {
+    throw new GradleException('lunararc-common must be built from the LunarArc root project. Run ./gradlew clean build collect from the directory containing settings.gradle.')
 }
 
 architectury {
@@ -11,7 +67,20 @@ architectury {
 }
 
 loom {
+    accessWidenerPath = file('src/main/resources/lunararc.accesswidener')
     silentMojangMappingsLicense()
+    mixin {
+        useLegacyMixinAp = true
+        defaultRefmapName = "mixins.lunararc.common.refmap.json"
+    }
+}
+
+// Resolvable view of the Paper API surface LunarArc actually ships against, used by
+// verifyPaperDonorDependencies below to decide whether a class a donated Paper class references
+// will exist at runtime. Kept separate from compileClasspath so the check never has to resolve
+// project dependencies, which would put a build-order edge on a task that feeds `classes`.
+configurations {
+    paperApiReference
 }
 
 dependencies {
@@ -24,9 +93,6 @@ dependencies {
     implementation project(':lunararc-api')
     implementation project(':i18n-config')
 
-    // Paper's modern PluginLoader/MavenLibraryResolver API links against Maven Resolver.
-    // Paper servers provide these at runtime; LunarArc must ship them for paper-plugin.yml
-    // loaders such as VeinMiner's custom loader.
     implementation 'org.apache.maven.resolver:maven-resolver-api:1.9.18'
     implementation 'org.apache.maven.resolver:maven-resolver-util:1.9.18'
     implementation 'org.apache.maven.resolver:maven-resolver-impl:1.9.18'
@@ -35,21 +101,65 @@ dependencies {
     implementation 'org.apache.maven.resolver:maven-resolver-transport-http:1.9.18'
     implementation 'org.apache.maven.resolver:maven-resolver-transport-file:1.9.18'
     implementation 'org.apache.maven:maven-resolver-provider:3.9.6'
+    implementation 'org.apache.maven:maven-model-builder:3.9.6'
+    implementation 'org.apache.maven:maven-model:3.9.6'
+    implementation 'org.apache.maven:maven-artifact:3.9.6'
+    implementation 'org.apache.maven:maven-builder-support:3.9.6'
+    implementation 'org.codehaus.plexus:plexus-utils:3.5.1'
+    implementation 'org.codehaus.plexus:plexus-interpolation:1.26'
+    implementation 'commons-logging:commons-logging:1.2'
 
-    // PaperMC — used instead of Spigot for the Bukkit API implementation.
-    // paper-api provides the public API interfaces; the deobfuscated Paper server
-    // JAR (downloaded by setupPaperServer) provides NMS/CraftBukkit implementation
-    // classes so our stubs compile with the exact Paper 1.21.1 mappings — making
-    // every plugin think it is running on a genuine Paper server.
+    // Needed for io.papermc.paper.plugin.provider.configuration.* (PaperPluginMeta and friends) —
+    // real Paper's paper-plugin.yml parsing is built on Sponge's Configurate library. This is
+    // implementation, not compileOnly: unlike paper-api's interfaces, Configurate isn't already
+    // present anywhere else on LunarArc's runtime classpath, so it needs to actually be included.
+    implementation 'org.spongepowered:configurate-core:4.1.2'
+    implementation 'org.spongepowered:configurate-yaml:4.1.2'
+
+    // Explicitly pin Adventure here too, mirroring bootstrap/build.gradle's already-correct
+    // pattern. Without this, lunararc-common's extensive Adventure work (PaperAdventure,
+    // AdventureCodecs, WrapperAwareSerializer, the providers/* SPI implementations) only
+    // compiles today by accident, via paper-api's transitive Adventure dependency — which
+    // doesn't guarantee the actual runtime jar bundles this same pinned 4.17.0 rather than
+    // whatever version a Forge/NeoForge mod happens to bundle unrelocated (Adventure is
+    // deliberately never relocated, by ecosystem convention). This is the exact same failure
+    // class that just broke LogUtils.getClassLogger() (NoSuchMethodError from a version that
+    // doesn't have a method the real Paper source calls) — closing it here before it surfaces
+    // the same way at runtime instead of waiting for the next crash report to find it.
+    implementation libs.adventure.api
+    implementation libs.adventure.text.minimessage
+    implementation libs.adventure.text.serializer.gson
+    implementation libs.adventure.text.serializer.legacy
+    implementation libs.adventure.text.serializer.plain
+
+    // SnakeYAML: real Paper's SpigotPluginProviderFactory catches org.yaml.snakeyaml.error.
+    // YAMLException directly when parsing legacy plugin.yml. configurate-yaml likely already
+    // pulls this in transitively (it's SnakeYAML-backed internally), but declaring it explicitly
+    // matches bootstrap/build.gradle's own established pattern rather than relying on an
+    // unconfirmed transitive chain for a class referenced directly by name.
+    implementation libs.snakeyaml
+
     compileOnly libs.paper.api
+    paperApiReference libs.paper.api
+    // Paper server jar for CraftBukkit/Spigot compile reference — unfiltered.
+    // Classes LunarArc owns in source are excluded via the filteredPaperCompileRef task below.
     compileOnly fileTree(dir: rootProject.ext.paperDir, include: "paper-server-*.jar")
     compileOnly libs.joml
     compileOnly libs.log4j.api
     compileOnly libs.fastutil
 
-    // Mixin
+
     compileOnly libs.asm
     compileOnly libs.asm.commons
+    // Needed for the ASM tree API (ClassNode/MethodNode/InsnList) used by
+    // LunarArcPluginFixManager to patch known-problematic third-party plugin bytecode at
+    // classload time. This was added earlier this session but lost when lunararc-common was
+    // later replaced wholesale from a separately-uploaded copy that predated this specific
+    // edit — LunarArcPluginFixManager.java itself survived the merge (it's a .java file) but
+    // this one-line build.gradle dependency didn't, which would have caused a real compile
+    // failure. compileOnly, same reasoning as asm/asm-commons above: Mixin itself is built on
+    // ASM's tree API and bundles it at runtime, so this isn't duplicated into the shipped jar.
+    compileOnly libs.asm.tree
 
     compileOnly libs.mixin
     compileOnly libs.mixinextras.common
@@ -57,18 +167,10 @@ dependencies {
 
     compileOnly libs.slf4j.api
 }
-
-// compileJava reads the Paper server JAR produced by setupPaperServer — declare
-// the dependency so Gradle enforces the correct task ordering.
-tasks.named('compileJava') { dependsOn rootProject.tasks.named('setupPaperServer') }
+tasks.named('compileJava') { dependsOn rootProject.tasks.named('preparePaperCompileReference') }
 
 def generatedPaperMappingsDir = layout.buildDirectory.dir('generated/paperMappings')
 
-// Generate the complete legacy Spigot -> Mojang plugin mapping table from the
-// same authoritative inputs used by the 1.21.1 ecosystem: Mojang's official
-// server mappings plus Spigot BuildData's version-specific class map. Paper
-// 1.21.1 does not expose reobf.tiny in its runtime distribution, so relying on
-// Paperclip contents makes the build fragile.
 tasks.register('extractPaperPluginMappings') {
     def minecraftVersion = libs.versions.minecraft.get()
     def buildDataRef = libs.versions.spigot.builddata.ref.get()
@@ -83,7 +185,7 @@ tasks.register('extractPaperPluginMappings') {
         File target = outputFile.get()
         target.parentFile.mkdirs()
 
-        def userAgent = 'LunarArc/0.0.1 (https://github.com/LabsZero/LunarArc)'
+        def userAgent = 'LunarArc (https://github.com/AMPZNetwork/LunarArc)'
         def readUtf8 = { String url ->
             def connection = URI.create(url).toURL().openConnection()
             connection.setRequestProperty('User-Agent', userAgent)
@@ -110,9 +212,6 @@ tasks.register('extractPaperPluginMappings') {
         }
         String mojangText = readUtf8(mojangMappingsUrl.toString())
 
-        // Spigot's public Stash raw-file routes are frequently blocked by the
-        // CDN/anti-bot layer. BuildTools itself obtains BuildData over Git, so
-        // do the same here and pin the exact revision for reproducibility.
         File buildDataDir = rootProject.layout.projectDirectory.dir('.gradle/lunararc-builddata').asFile
         File buildDataGitDir = new File(buildDataDir, '.git')
         File spigotMappingFile = new File(buildDataDir, "mappings/bukkit-${minecraftVersion}-cl.csrg")
@@ -144,13 +243,13 @@ tasks.register('extractPaperPluginMappings') {
 
         buildDataDir.mkdirs()
         if (!buildDataGitDir.isDirectory()) {
-            // Initialise an empty repository first so we only fetch the one pinned
-            // revision instead of cloning the complete BuildData history.
+
+
             runGit(['init', buildDataDir.absolutePath])
             runGit(['-C', buildDataDir.absolutePath, 'remote', 'add', 'origin',
                     'https://hub.spigotmc.org/stash/scm/spigot/builddata.git'])
         } else {
-            // Keep the remote deterministic even if a developer reused the cache.
+
             runGit(['-C', buildDataDir.absolutePath, 'remote', 'set-url', 'origin',
                     'https://hub.spigotmc.org/stash/scm/spigot/builddata.git'])
         }
@@ -159,7 +258,7 @@ tasks.register('extractPaperPluginMappings') {
         try {
             currentHead = runGit(['-C', buildDataDir.absolutePath, 'rev-parse', 'HEAD'])
         } catch (GradleException ignored) {
-            // Empty repository on the first run.
+
         }
         if (!currentHead.equalsIgnoreCase(buildDataRef) || !spigotMappingFile.isFile()) {
             runGit(['-C', buildDataDir.absolutePath, 'fetch', '--depth', '1', 'origin', buildDataRef])
@@ -175,11 +274,35 @@ tasks.register('extractPaperPluginMappings') {
         String spigotText = spigotMappingFile.getText('UTF-8')
         String spigotMappingsUrl = spigotMappingFile.toURI().toString()
 
+        // Spigot member renames. Since 1.17 Spigot only renames NMS *classes* wholesale and
+        // leaves member names obfuscated, renaming just a handful by hand — so this file is
+        // small (and may be absent). Whatever it does not list keeps the obfuscated name on
+        // the Spigot side, which is what a Spigot-compiled plugin's bytecode actually calls.
+        // Keyed CSRG-style: "<obfOwner> <obfName> <spigotName>" for fields and
+        // "<obfOwner> <obfName> <obfDescriptor> <spigotName>" for methods.
+        File spigotMemberFile = new File(buildDataDir, "mappings/bukkit-${minecraftVersion}-members.csrg")
+        Map<String, String> spigotMemberRenames = new LinkedHashMap<>()
+        if (spigotMemberFile.isFile()) {
+            spigotMemberFile.readLines().each { String raw ->
+                String line = raw.trim()
+                if (line.isEmpty() || line.startsWith('#')) return
+                String[] parts = line.split('\\s+')
+                if (parts.length == 3) {
+                    spigotMemberRenames.put(parts[0].replace('.', '/') + '\t' + parts[1], parts[2])
+                } else if (parts.length == 4) {
+                    spigotMemberRenames.put(parts[0].replace('.', '/') + '\t' + parts[1] + '\t' + parts[2], parts[3])
+                }
+            }
+            println "Loaded ${spigotMemberRenames.size()} Spigot member renames from ${spigotMemberFile.name}"
+        } else {
+            println "No ${spigotMemberFile.name} in BuildData; every NMS member keeps its obfuscated Spigot-side name"
+        }
+
         def normalizeInternal = { String name -> name.replace('.', '/') }
         Map<String, String> namedToObf = new LinkedHashMap<>()
         Map<String, String> obfToNamed = new LinkedHashMap<>()
 
-        // First pass: classes from Mojang ProGuard mappings.
+
         mojangText.readLines().each { String raw ->
             if (raw.isEmpty() || Character.isWhitespace(raw.charAt(0))) return
             int arrow = raw.indexOf(' -> ')
@@ -195,10 +318,6 @@ tasks.register('extractPaperPluginMappings') {
             throw new GradleException("Mojang server mapping parse produced only ${namedToObf.size()} classes")
         }
 
-        // BuildData's *-cl.csrg maps the obfuscated vanilla class namespace to
-        // the legacy Spigot NMS class namespace. Be tolerant of either mapping
-        // direction so this generator keeps working if BuildData changes its
-        // serializer without changing the mapping semantics.
         Map<String, String> namedToSpigot = new LinkedHashMap<>()
         spigotText.readLines().each { String raw ->
             String line = raw.trim()
@@ -226,13 +345,6 @@ tasks.register('extractPaperPluginMappings') {
                 "Spigot BuildData mapping parse produced only ${namedToSpigot.size()} class aliases from ${spigotMappingsUrl}"
             )
         }
-
-        // BuildData's class map has historically been inconsistent about nested
-        // classes. Spigot keeps the remapped outer class but retains the obfuscated
-        // nested suffix (for example ClientboundPlayerInfoUpdatePacket$a). Derive
-        // those aliases from Mojang's obfuscated class name whenever BuildData did
-        // not provide an explicit entry. This is the same relationship used by
-        // SpecialSource and closes the largest NMS nested-class compatibility gap.
         namedToObf.each { String named, String obf ->
             int namedDollar = named.indexOf('$')
             int obfDollar = obf.indexOf('$')
@@ -264,48 +376,164 @@ tasks.register('extractPaperPluginMappings') {
 
         Map<String, List<Map<String, Object>>> membersByClass = new LinkedHashMap<>()
         String currentNamed = null
+        List<String> memberParseSamples = new ArrayList<>()
+
+        // members.csrg keys methods by their obfuscated descriptor, so rewrite the Mojang
+        // descriptor we just built back through the class mappings to look a rename up.
+        def toObfDescriptor = { String descriptor ->
+            StringBuilder out = new StringBuilder(descriptor.length())
+            int index = 0
+            while (index < descriptor.length()) {
+                String ch = descriptor.substring(index, index + 1)
+                if (ch == 'L') {
+                    int end = descriptor.indexOf(';', index)
+                    if (end < 0) {
+                        out.append(descriptor.substring(index))
+                        break
+                    }
+                    String internal = descriptor.substring(index + 1, end)
+                    out.append('L').append(namedToObf.getOrDefault(internal, internal)).append(';')
+                    index = end + 1
+                } else {
+                    out.append(ch)
+                    index++
+                }
+            }
+            return out.toString()
+        }
+
+        def spigotMemberName = { String obfOwner, String obfMemberName, String obfDescriptor ->
+            if (obfOwner == null || spigotMemberRenames.isEmpty()) return obfMemberName
+            String renamed = obfDescriptor == null
+                ? spigotMemberRenames.get(obfOwner + '\t' + obfMemberName)
+                : spigotMemberRenames.get(obfOwner + '\t' + obfMemberName + '\t' + obfDescriptor)
+            return renamed != null ? renamed : obfMemberName
+        }
+
+        // Mojang server mappings are ProGuard mappings. Do not parse these with a
+        // single all-or-nothing regex: 1.21.1 includes indented source metadata
+        // comments and optional source line ranges on methods, for example:
+        //   net.minecraft.server.Foo -> abc:
+        //       # {"fileName":"Foo.java","id":"sourceFile"}
+        //       int fieldName -> a
+        //       68:69:void methodName(java.lang.String) -> b
+        //
+        // The Spigot-side member name is the OBFUSCATED name (the ProGuard RHS), not the
+        // Mojang name. Spigot has only remapped NMS *classes* since 1.17 and leaves member
+        // names obfuscated, so a Spigot-compiled plugin's bytecode calls e.g.
+        // net/minecraft/util/RandomSource.a() where Mojang has RandomSource.create().
+        // Paper's own build-data/reobf-mappings-patch.tiny shows the same thing for 1.21.1
+        // (mojang+yarn -> spigot: ServerLevel.serverLevelData -> K, LevelChunk.level -> r).
+        // Emitting the Mojang name on both sides, as this task previously did, made every
+        // member entry an identity mapping - the member half of the table did nothing at all,
+        // so any Spigot plugin touching NMS kept its obfuscated call and died with
+        // NoSuchMethodError/NoSuchFieldError (WorldEdit's PaperweightAdapter on RandomSource.a()).
         mojangText.readLines().each { String raw ->
-            if (raw.isEmpty()) return
-            if (!Character.isWhitespace(raw.charAt(0))) {
-                int arrow = raw.indexOf(' -> ')
-                currentNamed = (arrow >= 0 && raw.endsWith(':'))
-                    ? normalizeInternal(raw.substring(0, arrow).trim()) : null
+            if (raw == null) return
+            String trimmed = raw.trim()
+            if (trimmed.isEmpty()) return
+
+            int rawArrow = trimmed.lastIndexOf(' -> ')
+            // Class headers are the only mapping records whose RHS ends with ':'.
+            // Detect them from the trimmed content, not from indentation, so CRLF,
+            // tabs, or future Mojang whitespace changes cannot zero the member map.
+            if (rawArrow > 0 && trimmed.endsWith(':')) {
+                currentNamed = normalizeInternal(trimmed.substring(0, rawArrow).trim())
                 return
             }
-            if (currentNamed == null) return
 
-            String line = raw.trim()
-            int arrow = line.lastIndexOf(' -> ')
-            if (arrow < 0) return
-            String left = line.substring(0, arrow).trim()
-            String obfName = line.substring(arrow + 4).trim()
-            if (obfName.isEmpty()) return
+            if (currentNamed == null || trimmed.startsWith('#')) return
 
-            // ProGuard member mappings may prefix/suffix source line ranges.
-            left = left.replaceFirst(/^\d+:\d+:/, '')
-            left = left.replaceFirst(/:\d+:\d+$/, '')
+            int arrow = rawArrow
+            if (arrow <= 0 || arrow + 4 >= trimmed.length()) {
+                if (memberParseSamples.size() < 8) memberParseSamples.add(trimmed)
+                return
+            }
+
+            String left = trimmed.substring(0, arrow).trim()
+            String obfName = trimmed.substring(arrow + 4).trim()
+            if (left.isEmpty() || obfName.isEmpty()) return
+
+            // Strip Mojang's optional source line prefix (for example 68:69:).
+            // Do this procedurally instead of binding the whole member grammar to
+            // the line-number format, which has changed between mapping releases.
+            int firstColon = left.indexOf(':')
+            if (firstColon > 0 && left.substring(0, firstColon) ==~ /\d+/) {
+                int secondColon = left.indexOf(':', firstColon + 1)
+                if (secondColon > firstColon + 1 &&
+                        left.substring(firstColon + 1, secondColon) ==~ /\d+/) {
+                    left = left.substring(secondColon + 1).trim()
+                }
+            }
 
             List<Map<String, Object>> members = membersByClass.computeIfAbsent(currentNamed) { new ArrayList<>() }
             int paren = left.indexOf('(')
             if (paren >= 0) {
-                int close = left.lastIndexOf(')')
+                int close = left.indexOf(')', paren)
                 int space = left.lastIndexOf(' ', paren)
-                if (close < paren || space < 0) return
+                if (close < paren || space < 0) {
+                    if (memberParseSamples.size() < 8) memberParseSamples.add(trimmed)
+                    return
+                }
                 String returnType = left.substring(0, space).trim()
                 String namedName = left.substring(space + 1, paren).trim()
-                if (namedName == '<init>' || namedName == '<clinit>') return
+                if (namedName == '<init>' || namedName == '<clinit>' || namedName.isEmpty()) return
                 String argsText = left.substring(paren + 1, close).trim()
                 List<String> args = argsText.isEmpty() ? [] : argsText.split(',').collect { it.trim() }
                 String descriptor = '(' + args.collect { descriptorForType(it) }.join('') + ')' + descriptorForType(returnType)
-                members.add([method:true, descriptor:descriptor, named:namedName, spigot:obfName])
+                String spigotName = spigotMemberName(
+                        namedToObf.get(currentNamed), obfName, toObfDescriptor(descriptor))
+                members.add([method:true, descriptor:descriptor, named:namedName, spigot:spigotName, obf:obfName])
             } else {
                 int space = left.lastIndexOf(' ')
-                if (space < 0) return
+                if (space < 0) {
+                    if (memberParseSamples.size() < 8) memberParseSamples.add(trimmed)
+                    return
+                }
                 String type = left.substring(0, space).trim()
                 String namedName = left.substring(space + 1).trim()
+                if (type.isEmpty() || namedName.isEmpty()) return
                 String descriptor = descriptorForType(type)
-                members.add([method:false, descriptor:descriptor, named:namedName, spigot:obfName])
+                String spigotName = spigotMemberName(namedToObf.get(currentNamed), obfName, null)
+                members.add([method:false, descriptor:descriptor, named:namedName, spigot:spigotName, obf:obfName])
             }
+        }
+
+        long fieldCount = 0L
+        long methodCount = 0L
+        long renamingMembers = 0L
+        for (List<Map<String, Object>> list : membersByClass.values()) {
+            for (Map<String, Object> member : list) {
+                if (Boolean.TRUE.equals(member.get('method'))) {
+                    methodCount++
+                } else {
+                    fieldCount++
+                }
+                if (member.get('spigot') != member.get('named')) renamingMembers++
+            }
+        }
+        long memberCount = fieldCount + methodCount
+        if (memberCount < 1000L || fieldCount == 0L || methodCount == 0L) {
+            String samples = memberParseSamples.isEmpty()
+                ? '<no unparsed indented member-like lines captured>'
+                : memberParseSamples.join(' | ')
+            throw new GradleException(
+                "Plugin mapping generation is incomplete: ${fieldCount} fields + ${methodCount} methods. " +
+                "Parsed ${namedToObf.size()} Mojang classes. Unparsed samples: ${samples}. " +
+                "LunarArc must never ship class-only NMS remapping."
+            )
+        }
+        // A member row whose Spigot name equals its Mojang name remaps nothing. A few of those
+        // are legitimate (members Mojang never obfuscates, e.g. interface methods inherited from
+        // the JDK), but the vast majority of NMS members are obfuscated on the Spigot side, so a
+        // low ratio here means the member half of the table has silently gone identity again -
+        // which reads as "mappings present" while remapping nothing at all.
+        if (renamingMembers * 2L < memberCount) {
+            throw new GradleException(
+                "Plugin mapping generation produced ${renamingMembers} of ${memberCount} members whose " +
+                "Spigot-side name actually differs from the Mojang name. NMS members are obfuscated in " +
+                "the Spigot namespace, so this table would remap classes but not members."
+            )
         }
 
         target.withWriter('UTF-8') { writer ->
@@ -322,15 +550,105 @@ tasks.register('extractPaperPluginMappings') {
             }
         }
 
-        long memberCount = membersByClass.values().sum(0L) { total, list -> total + list.size() }
-        println "Generated complete Spigot -> Mojang plugin mappings: ${target} (${namedToSpigot.size()} class aliases, ${memberCount} members)"
+        println "Generated complete Spigot -> Mojang plugin mappings: ${target} " +
+                "(${namedToSpigot.size()} class aliases, ${fieldCount} fields, ${methodCount} methods, ${memberCount} total members)"
     }
 }
 
 sourceSets.main.resources.srcDir(generatedPaperMappingsDir)
 
+def lunarArcBuildChannel = { -> rootProject.ext.lunarArcBuildChannel() }
+
+def generatedBuildInfoDir = layout.buildDirectory.dir('generated/buildInfo')
+tasks.register('generateLunarArcBuildInfo') {
+    def channel = lunarArcBuildChannel()
+    def output = generatedBuildInfoDir.map { it.file('lunararc-build.properties').asFile }
+    inputs.property('buildChannel', channel)
+    inputs.property('version', project.version.toString())
+    inputs.property('buildNumber', rootProject.ext.lunarArcBuildNumber)
+    outputs.file(output)
+    doLast {
+        def target = output.get()
+        target.parentFile.mkdirs()
+        target.text = "buildChannel=${channel}\nversion=${project.version}\nbuildNumber=${rootProject.ext.lunarArcBuildNumber}\n"
+    }
+}
+sourceSets.main.resources.srcDir(generatedBuildInfoDir)
+
+// gradle/incompatibility.toml is the editable source; this bakes it into the jar so a running server has
+// no copy to edit or lose. Emitted as a flat, tab-separated resource rather than shipping the TOML
+// itself, because the runtime has no TOML parser and adding one to carry two lists is not a trade
+// worth making - the same reasoning as plugin-remap.tsv beside it.
+//
+// The grammar read here is the array-of-tables subset the file documents: [[plugins]] / [[mods]]
+// headers, then key = "value" lines. That is deliberately narrower than TOML. Anything outside it
+// fails the build with the offending line rather than being silently dropped, so an entry someone
+// believes is protecting them always is.
+def generatedIncompatibilityDir = layout.buildDirectory.dir('generated/incompatibility')
+
+tasks.register('generateIncompatibilityList') {
+    def source = rootProject.file('gradle/incompatibility.toml')
+    def output = generatedIncompatibilityDir.map { it.file('lunararc/incompatibility.tsv').asFile }
+    inputs.file(source)
+    outputs.file(output)
+
+    doLast {
+        def target = output.get()
+        target.parentFile.mkdirs()
+
+        def rows = []
+        def section = null
+        def current = null
+        def lineNumber = 0
+
+        def flush = {
+            if (current == null) return
+            if (!current.name) {
+                throw new GradleException("gradle/incompatibility.toml: [[${current.section}]] entry ending at line ${lineNumber} has no name")
+            }
+            if (!current.reason) {
+                throw new GradleException("gradle/incompatibility.toml: ${current.section} entry '${current.name}' has no reason")
+            }
+            rows << "${current.section}\t${current.name}\t${current.version ?: ''}\t${current.reason}"
+            current = null
+        }
+
+        source.eachLine { String raw ->
+            lineNumber++
+            def line = raw.trim()
+            if (line.isEmpty() || line.startsWith('#')) return
+
+            def header = (line =~ /^\[\[(plugins|mods)]]$/)
+            if (header.matches()) {
+                flush()
+                section = header[0][1]
+                current = [section: section, name: null, version: null, reason: null]
+                return
+            }
+
+            def pair = (line =~ /^(name|version|reason)\s*=\s*"(.*)"$/)
+            if (pair.matches()) {
+                if (current == null) {
+                    throw new GradleException("gradle/incompatibility.toml:${lineNumber}: '${line}' appears before any [[plugins]] or [[mods]] header")
+                }
+                current[pair[0][1]] = pair[0][2]
+                return
+            }
+
+            throw new GradleException("gradle/incompatibility.toml:${lineNumber}: cannot parse '${line}'. Expected [[plugins]], [[mods]], or key = \"value\".")
+        }
+        flush()
+
+        target.text = rows.isEmpty() ? '' : rows.join('\n') + '\n'
+        logger.lifecycle("Generated LunarArc incompatibility list with ${rows.size()} entries")
+    }
+}
+sourceSets.main.resources.srcDir(generatedIncompatibilityDir)
+
 processResources {
     dependsOn tasks.named('extractPaperPluginMappings')
+    dependsOn tasks.named('generateLunarArcBuildInfo')
+    dependsOn tasks.named('generateIncompatibilityList')
     def javaRuntime = libs.versions.java.runtime.get()
     inputs.property 'version', project.version
     inputs.property 'java_runtime', javaRuntime
@@ -350,3 +668,385 @@ tasks.named('processResources') {
         }
     }
 }
+
+def generatedPaperImplementationSurfaceDir = layout.buildDirectory.dir('generated/paper-1.21.1-implementation-surface')
+
+def ownsPaperImplementationClass = { String classEntry ->
+    if (!classEntry.endsWith('.class')) return false
+    String topLevel = classEntry.substring(0, classEntry.length() - '.class'.length())
+    int inner = topLevel.indexOf('$')
+    if (inner >= 0) topLevel = topLevel.substring(0, inner)
+    File javaSource = project.file("src/main/java/${topLevel}.java")
+    return javaSource.isFile()
+}
+
+tasks.register('verifyCraftNmsOwnership') {
+    group = 'verification'
+    description = 'Ensures CraftBlockStates is LunarArc-owned and derives BlockEntityType membership only through the public isValid(BlockState) API, never through BlockEntityType.validBlocks.'
+
+    doLast {
+        File craftBlockStates = project.file('src/main/java/org/bukkit/craftbukkit/block/CraftBlockStates.java')
+
+        if (!craftBlockStates.isFile()) {
+            throw new GradleException('Craft/NMS ownership check failed: CraftBlockStates must be a LunarArc-owned source file')
+        }
+
+        String craftSource = craftBlockStates.getText('UTF-8')
+        if (craftSource =~ /(?m)^\s*[^\/\s].*\bblockEntityType\.validBlocks\b/) {
+            throw new GradleException('CraftBlockStates must not directly access BlockEntityType.validBlocks; use the public isValid(BlockState) method instead')
+        }
+        // Current architecture (replaces the earlier BlockEntityTypeAccessBridge Mixin
+        // approach, removed as obsolete): derive block membership via vanilla's own public
+        // BlockEntityType#isValid(BlockState), which needs no private-field access and no
+        // Mixin accessor at all.
+        if (!craftSource.contains('blockEntityType.isValid(')) {
+            throw new GradleException('CraftBlockStates is not deriving BlockEntityType membership through the public isValid(BlockState) API')
+        }
+
+        if (!craftSource.contains('GENERIC_BLOCK_ENTITY_FACTORY') || !craftSource.contains('return GENERIC_BLOCK_ENTITY_FACTORY')) {
+            throw new GradleException('CraftBlockStates must retain the generic loader/mod BlockEntityType fallback')
+        }
+    }
+}
+
+tasks.register('preparePaperImplementationSurface') {
+    dependsOn tasks.named('verifyCraftNmsOwnership')
+    group = 'build setup'
+    description = 'Extracts missing exact Paper 1.21.1 CraftBukkit/Spigot implementation classes, plus Paper\'s own loader-independent config framework (io.papermc.paper.configuration.*), for loader remapping.'
+    dependsOn rootProject.tasks.named('preparePaperCompileReference')
+    inputs.file(rootProject.ext.paperServerJar)
+    inputs.files(configurations.paperApiReference)
+    inputs.files(fileTree('src/main/java') {
+        include 'org/bukkit/craftbukkit/**/*.java'
+        include 'org/spigotmc/**/*.java'
+        include 'io/papermc/paper/configuration/**/*.java'
+    })
+    outputs.dir(generatedPaperImplementationSurfaceDir)
+
+    doLast {
+        File outputDir = generatedPaperImplementationSurfaceDir.get().asFile
+        project.delete(outputDir)
+        outputDir.mkdirs()
+
+        File paperJar = rootProject.ext.paperServerJar
+        if (!paperJar.isFile()) {
+            throw new GradleException("Paper 1.21.1 implementation reference is missing: ${paperJar}")
+        }
+
+        List<String> unownedValidBlocksUsers = []
+        new java.util.jar.JarFile(paperJar).withCloseable { auditJar ->
+            auditJar.entries().each { entry ->
+                if (entry.directory || !entry.name.endsWith('.class')) return
+                if (!(entry.name.startsWith('org/bukkit/craftbukkit/') || entry.name.startsWith('org/spigotmc/'))) return
+                if (ownsPaperImplementationClass(entry.name)) return
+                byte[] bytes = auditJar.getInputStream(entry).withCloseable { it.readAllBytes() }
+                String constants = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+                if (constants.contains('net/minecraft/world/level/block/entity/BlockEntityType') &&
+                        constants.contains('validBlocks')) {
+                    unownedValidBlocksUsers.add(entry.name)
+                }
+            }
+        }
+        if (!unownedValidBlocksUsers.isEmpty()) {
+            throw new GradleException(
+                "Paper donor contains unowned Craft/Spigot classes that directly depend on patched BlockEntityType.validBlocks access: " +
+                unownedValidBlocksUsers.sort().join(', ') +
+                '. Add LunarArc-owned implementations or narrow bridges before donating these classes.'
+            )
+        }
+
+        int donatedClasses = 0
+        int ownedClasses = 0
+        List<String> blockImplClasses = []
+        Set<String> surfaceEntryNames = new HashSet<>()
+        Map<String, Set<String>> paperRefsByDonor = new TreeMap<>()
+        // Single-quoted so Groovy leaves the '$' of inner-class names alone.
+        def paperTypeReferencePattern = java.util.regex.Pattern.compile('io/papermc/paper/[A-Za-z0-9_$/]+')
+        new java.util.jar.JarFile(paperJar).withCloseable { jar ->
+            def entries = jar.entries()
+            while (entries.hasMoreElements()) {
+                def entry = entries.nextElement()
+                if (entry.directory || !entry.name.endsWith('.class')) continue
+
+                // Keep the donor boundary narrow: CraftBukkit/Spigot implementation surface,
+                // plus Paper's own config framework (io.papermc.paper.configuration.*) - a
+                // small, loader-independent Configurate/Adventure utility layer that
+                // PaperPluginMeta (LunarArc-owned) needs at runtime and that plugin.yml/
+                // paper-plugin.yml parsing depends on. Paper API is already a normal
+                // dependency and Minecraft/NMS stays exclusively loader-owned; the
+                // verify*HybridShape tasks reject any net.minecraft class that slips in.
+                boolean surfaceClass = entry.name.startsWith('org/bukkit/craftbukkit/') ||
+                    entry.name.startsWith('org/spigotmc/') ||
+                    entry.name.startsWith('io/papermc/paper/configuration/')
+                if (!surfaceClass) continue
+                // Both donated and LunarArc-owned surface classes end up in the compiled
+                // output, so both count as resolvable for the audit below.
+                surfaceEntryNames.add(entry.name)
+
+                if (ownsPaperImplementationClass(entry.name)) {
+                    ownedClasses++
+                    continue
+                }
+
+                byte[] classBytes = jar.getInputStream(entry).withCloseable { it.readAllBytes() }
+                classBytes = neutralizeMojangLogUtils(classBytes)
+
+                // Record every io/papermc/paper/** type this donated class names, so the audit
+                // below can tell whether it will still be there at runtime. Reading the constant
+                // pool as text is the same technique the validBlocks audit above uses; it can
+                // over-report (a string literal that happens to look like a class name) but it
+                // never under-reports, which is the direction that matters for a missing class.
+                String donatedConstants = new String(classBytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+                def matcher = paperTypeReferencePattern.matcher(donatedConstants)
+                Set<String> found = new TreeSet<>()
+                while (matcher.find()) found.add(matcher.group())
+                if (!found.isEmpty()) paperRefsByDonor.put(entry.name, found)
+
+                File target = new File(outputDir, entry.name)
+                target.parentFile.mkdirs()
+                target.bytes = classBytes
+                donatedClasses++
+
+                if (entry.name.startsWith('org/bukkit/craftbukkit/block/impl/') &&
+                        !entry.name.contains('$')) {
+                    blockImplClasses.add(entry.name.substring(0, entry.name.length() - 6).replace('/', '.'))
+                }
+            }
+        }
+
+        File listFile = new File(outputDir, 'META-INF/lunararc/paper-block-impl.list')
+        listFile.parentFile.mkdirs()
+        listFile.text = blockImplClasses.sort().join(System.lineSeparator()) + System.lineSeparator()
+
+        if (donatedClasses < 100) {
+            throw new GradleException(
+                "Paper 1.21.1 implementation donor extracted only ${donatedClasses} classes; expected a full CraftBukkit/Spigot surface"
+            )
+        }
+        if (blockImplClasses.size() < 100) {
+            throw new GradleException(
+                "Paper 1.21.1 implementation donor found only ${blockImplClasses.size()} generated block implementations"
+            )
+        }
+        // Donated Paper classes can name Paper's own server-internal helpers, which the donor
+        // boundary deliberately does not carry and which LunarArc may not own either. Nothing
+        // fails at build time when one is missing - the class links fine against the compileOnly
+        // paper-server jar - and nothing fails at boot either. It fails the first time a plugin
+        // touches that code path, as a NoClassDefFoundError from inside Paper's own class
+        // initializer, which reads like a broken plugin rather than a missing class.
+        //
+        // That is exactly how Commodore stayed dead here: it needs
+        // io.papermc.paper.util.MappingEnvironment and io.papermc.paper.pluginremap.reflect.
+        // ReflectionRemapper, neither of which existed, so no plugin ever got Paper's API-level
+        // rewrites. This audit names that shape of gap at build time instead.
+        Set<String> resolvable = new HashSet<>(surfaceEntryNames)
+        project.fileTree('src/main/java') { include 'io/papermc/paper/**/*.java' }.each { File source ->
+            String relative = source.absolutePath.substring(
+                project.file('src/main/java').absolutePath.length() + 1).replace(File.separator, '/')
+            resolvable.add(relative.substring(0, relative.length() - '.java'.length()) + '.class')
+        }
+        configurations.paperApiReference.each { File dependency ->
+            if (!dependency.name.endsWith('.jar')) return
+            new java.util.jar.JarFile(dependency).withCloseable { apiJar ->
+                apiJar.entries().each { apiEntry ->
+                    if (apiEntry.name.startsWith('io/papermc/paper/') && apiEntry.name.endsWith('.class')) {
+                        resolvable.add(apiEntry.name)
+                    }
+                }
+            }
+        }
+
+        Map<String, Set<String>> missingByType = new TreeMap<>()
+        paperRefsByDonor.each { String donor, Set<String> references ->
+            references.each { String reference ->
+                // Inner classes live in their outer class's file; resolving the outer one is
+                // enough to know the type will be present.
+                String topLevel = reference.contains('$') ? reference.substring(0, reference.indexOf('$')) : reference
+                if (resolvable.contains(topLevel + '.class')) return
+                Set<String> donorsForType = missingByType.get(topLevel)
+                if (donorsForType == null) {
+                    donorsForType = new TreeSet<>()
+                    missingByType.put(topLevel, donorsForType)
+                }
+                donorsForType.add(donor)
+            }
+        }
+
+        if (missingByType.isEmpty()) {
+            logger.lifecycle("Paper donor dependency audit: all io.papermc.paper references from donated classes resolve")
+        } else {
+            // Reported rather than thrown for now: the reference scan reads the constant pool as
+            // text, so a name that only ever appears in a string literal can show up here without
+            // being a real link-time dependency. Tighten this to a hard failure once the reported
+            // list has been walked once and is understood.
+            logger.warn("Paper donor dependency audit: ${missingByType.size()} io.papermc.paper type(s) referenced by " +
+                "donated Paper classes are neither donated, LunarArc-owned, nor present in paper-api. " +
+                "Each is a NoClassDefFoundError waiting for the first plugin that reaches it:")
+            missingByType.each { String type, Set<String> donors ->
+                String sample = donors.take(3).join(', ')
+                logger.warn("  ${type.replace('/', '.')}  <- ${sample}${donors.size() > 3 ? " (+${donors.size() - 3} more)" : ''}")
+            }
+        }
+
+        logger.lifecycle(
+            "Prepared exact Paper 1.21.1 implementation surface: ${donatedClasses} donated classes, " +
+            "${ownedClasses} LunarArc-owned classes retained, ${blockImplClasses.size()} generated block implementations"
+        )
+    }
+}
+
+// Treat the exact Paper 1.21.1 donor as compiled common output, not as a raw final-JAR
+// overlay. Architectury/Loom therefore transforms/remaps these classes for each loader.
+sourceSets.main.output.dir([builtBy: tasks.named('preparePaperImplementationSurface')], generatedPaperImplementationSurfaceDir)
+
+tasks.named('classes') { dependsOn tasks.named('preparePaperImplementationSurface') }
+// Mixin refuses to apply a mixin class that declares a non-private static method - see
+// MixinApplicatorStandard.checkMethodVisibility - and the only exemptions are @Overwrite (which
+// needs the method to already exist in the target) and synthetic methods. Nothing catches this at
+// compile time: the annotation processor is happy, the build is green, and the failure arrives at
+// runtime as an InvalidMixinException during MAIN Applicator Phase, which on NeoForge kills the
+// JVM inside ServerModLoader.load before the server exists at all. That is as expensive as a
+// mistake gets, and it is a one-line mistake to make, so it is checked here instead.
+tasks.register('verifyMixinStaticVisibility') {
+    group = 'verification'
+    description = 'Fails if any @Mixin class declares a non-private static method, which Mixin rejects at apply time.'
+
+    def mixinSources = rootProject.fileTree(rootProject.projectDir) {
+        include '*/src/*/java/**/mixin/**/*.java'
+    }
+    inputs.files(mixinSources).withPropertyName('mixinSources')
+
+    doLast {
+        def methodPattern = java.util.regex.Pattern.compile(
+            '^(?:(public|protected)\\s+static|static)\\s+[\\w<>\\[\\],.?\\s]+\\s+\\w+\\s*\\(')
+        List<String> offenders = []
+
+        mixinSources.each { File source ->
+            String text = source.getText('UTF-8')
+            if (!text.contains('@Mixin')) return
+
+            String[] lines = text.readLines() as String[]
+            for (int index = 0; index < lines.length; index++) {
+                String line = lines[index].trim()
+                if (line.startsWith('//') || line.startsWith('*')) continue
+                if (!methodPattern.matcher(line).find()) continue
+
+                // @Overwrite is the one legal way to declare a non-private static in a mixin, and
+                // it may sit a few annotation lines above the declaration.
+                boolean overwrite = false
+                for (int back = index - 1; back >= 0 && back >= index - 6; back--) {
+                    String previous = lines[back].trim()
+                    if (previous.isEmpty()) continue
+                    if (previous.contains('@Overwrite')) { overwrite = true; break }
+                    if (!previous.startsWith('@')) break
+                }
+                if (overwrite) continue
+
+                String relative = rootProject.relativePath(source)
+                offenders.add("  ${relative}:${index + 1}  ${line}")
+            }
+        }
+
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                "Mixin classes must not declare non-private static methods - Mixin throws " +
+                "InvalidMixinException at apply time and the server dies before it starts. " +
+                "Make the method private, move it to a normal helper class, or use @Overwrite if " +
+                "the target already declares it:\n" + offenders.join('\n'))
+        }
+        logger.lifecycle("Mixin static visibility check passed for ${mixinSources.files.size()} mixin source(s)")
+    }
+}
+
+tasks.named('classes') { dependsOn tasks.named('verifyMixinStaticVisibility') }
+
+// LunarArc supplies CraftBukkit's added Minecraft members by mixin, because it cannot patch
+// Minecraft the way CraftBukkit does. Paper's own CraftBukkit classes - the ones donated verbatim
+// rather than reimplemented - are compiled against CraftBukkit's exact signatures, and the JVM
+// resolves calls on the full descriptor. A mixin-added member with the right name but a different
+// return type therefore does not satisfy them: the call fails at runtime with NoSuchMethodError
+// while the method visibly exists, which is as quiet as a bug gets. Entity.getBukkitEntity()
+// returned the org.bukkit.entity.Entity interface where CraftBukkit returns CraftEntity for
+// exactly this reason, and nothing caught it.
+tasks.register('verifyCraftBukkitMemberParity') {
+    group = 'verification'
+    description = 'Compares mixin-added members carrying CraftBukkit names against CraftBukkit\'s own signatures.'
+
+    def reference = rootProject.file('gradle/reference/craftbukkit-nms-members.txt')
+    def mixinSources = rootProject.fileTree(rootProject.projectDir) {
+        include '*/src/*/java/**/mixin/**/*.java'
+    }
+    inputs.file(reference)
+    inputs.files(mixinSources).withPropertyName('mixinSources')
+
+    doLast {
+        // owner simple name -> (method -> return type), as CraftBukkit declares it.
+        Map<String, Map<String, String>> expected = [:]
+        reference.eachLine { String line ->
+            if (line.startsWith('#') || line.trim().isEmpty()) return
+            def parts = line.split('\\|')
+            if (parts.length != 3) return
+            String simple = parts[0].substring(parts[0].lastIndexOf('.') + 1)
+            expected.computeIfAbsent(simple, { [:] }).put(parts[1], parts[2])
+        }
+
+        def modifiers = ['final', 'static', 'synchronized', 'abstract', 'transient', 'native',
+                         'default', 'strictfp'] as Set
+        def declaration = java.util.regex.Pattern.compile(
+            '^\\s*public\\s+([\\w.<>\\[\\],? ]+?)\\s+(\\w+)\\s*\\(')
+        def mixinTarget = java.util.regex.Pattern.compile(
+            '@Mixin\\s*\\(\\s*(?:value\\s*=\\s*)?(\\w+)\\.class')
+
+        List<String> mismatches = []
+        int checked = 0
+
+        mixinSources.each { File source ->
+            String text = source.getText('UTF-8')
+            if (!text.contains('@Mixin')) return
+            def target = mixinTarget.matcher(text)
+            if (!target.find()) return
+            Map<String, String> owned = expected.get(target.group(1))
+            if (owned == null) return
+
+            text.readLines().each { String line ->
+                def matcher = declaration.matcher(line)
+                if (!matcher.find()) return
+                String name = matcher.group(2)
+                // lunararc$-prefixed members are LunarArc's own bridge surface, deliberately named
+                // so they cannot collide with anything Minecraft or a loader declares.
+                if (name.startsWith('lunararc')) return
+                String declared = owned.get(name)
+                if (declared == null) return
+
+                String ours = matcher.group(1).trim().split('\\s+')
+                        .findAll { !modifiers.contains(it) }.join(' ')
+                checked++
+                if (simpleTypeName(ours) != simpleTypeName(declared)) {
+                    mismatches.add("  ${target.group(1)}#${name}: LunarArc declares ${ours}, " +
+                                   "CraftBukkit declares ${declared}  [${rootProject.relativePath(source)}]")
+                }
+            }
+        }
+
+        if (mismatches.isEmpty()) {
+            logger.lifecycle("CraftBukkit member parity: ${checked} mixin-added member(s) match CraftBukkit's signatures")
+        } else {
+            // Reported rather than thrown while the comparison is by source text and simple name:
+            // it can disagree on a type that is spelled differently but resolves the same. Tighten
+            // to a hard failure once the reported list has been walked and stays empty.
+            logger.warn("CraftBukkit member parity: ${mismatches.size()} mixin-added member(s) do not match " +
+                        "CraftBukkit's signature. Donated Paper code calling these fails at runtime with " +
+                        "NoSuchMethodError even though the method exists:")
+            mismatches.each { logger.warn(it) }
+        }
+    }
+}
+
+// Compared on the simple name: LunarArc writes some of these fully qualified and some imported,
+// and CraftBukkit's own sources vary the same way, so the package prefix carries no signal here.
+static String simpleTypeName(String type) {
+    String bare = type.replaceAll('<.*>', '').trim()
+    return bare.substring(bare.lastIndexOf('.') + 1)
+}
+
+tasks.named('classes') { dependsOn tasks.named('verifyCraftBukkitMemberParity') }

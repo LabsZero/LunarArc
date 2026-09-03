@@ -6,9 +6,7 @@ import net.neoforged.neoforge.server.permission.handler.IPermissionHandler;
 import net.neoforged.neoforge.server.permission.nodes.PermissionNode;
 import net.neoforged.neoforge.server.permission.nodes.PermissionTypes;
 import net.neoforged.neoforge.server.permission.nodes.PermissionDynamicContext;
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
-import org.bukkit.entity.Player;
+import io.ampznetwork.lunararc.common.permission.LunarArcBukkitPermissions;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
@@ -32,22 +30,20 @@ public class LunarArcPermissionHandler implements IPermissionHandler {
     @Override
     public <T> T getPermission(@NotNull ServerPlayer player, @NotNull PermissionNode<T> node, PermissionDynamicContext<?>... context) {
         if (node.getType() == PermissionTypes.BOOLEAN) {
-            Player bukkitPlayer = Bukkit.getPlayer(player.getUUID());
-            if (bukkitPlayer != null) {
-                return (T) Boolean.valueOf(bukkitPlayer.hasPermission(node.getNodeName()));
+            var explicit = LunarArcBukkitPermissions.explicitOnlinePermission(player.getUUID(), node.getNodeName());
+            if (explicit.isPresent()) {
+                @SuppressWarnings("unchecked")
+                T resolved = (T) explicit.get();
+                return resolved;
             }
         }
-        // Fallback to node's default resolver or value
-        return null;
+
+        return node.getDefaultResolver().resolve(player, player.getUUID(), context);
     }
 
     @Override
     public <T> T getOfflinePermission(@NotNull UUID playerUUID, @NotNull PermissionNode<T> node, PermissionDynamicContext<?>... context) {
-        if (node.getType() == PermissionTypes.BOOLEAN) {
-            OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(playerUUID);
-            return (T) Boolean.valueOf(offlinePlayer.isOp());
-        }
-        return null;
+        return node.getDefaultResolver().resolve(null, playerUUID, context);
     }
 
     @Override

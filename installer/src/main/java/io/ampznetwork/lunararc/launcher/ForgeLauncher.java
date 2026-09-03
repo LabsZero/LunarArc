@@ -11,19 +11,14 @@ public class ForgeLauncher {
         System.out.println("[LunarArc] Preparing Forge launch arguments...");
 
         Path libDir = Paths.get("libraries");
-        Path argsFile = null;
-        try (var stream = Files.walk(libDir)) {
-            String preferred = System.getProperty("os.name", "").toLowerCase().contains("win")
-                    ? "win_args.txt" : "unix_args.txt";
-            argsFile = stream.filter(p -> p.getFileName().toString().equals(preferred))
-                    .findFirst().orElse(null);
-        }
+        Path argsFile = LauncherUtils.findArgsFile(libDir, "net/minecraftforge/forge");
         if (argsFile == null) {
-            System.err.println("[LunarArc] Error: Could not find Forge args file.");
+            System.err.println("[LunarArc] Error: Could not find Forge's args file under "
+                    + libDir.toAbsolutePath().resolve("net/minecraftforge/forge")
+                    + ". The Forge installer has not run, or did not finish.");
             return;
         }
 
-        // Deploy to hidden .lunararc/mods/ (keeps user mods/ folder clean)
         Path bridgeModsDir = Paths.get(".lunararc", "mods");
         Files.createDirectories(bridgeModsDir);
         if (selfPath != null && Files.exists(selfPath)) {
@@ -36,6 +31,17 @@ public class ForgeLauncher {
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
 
+        // Both of these must precede the args file, whose last token is the main class: a -D
+        // after the main class is a game argument, not a system property. fml.modsDir was being
+        // added after it and so was never set.
+        command.add("-Dfml.modsDir=" + bridgeModsDir.toAbsolutePath());
+        List<String> inherited = LauncherUtils.serverJvmArguments("fml.modsDir");
+        if (!inherited.isEmpty()) {
+            System.out.println("[LunarArc] Passing JVM arguments through to the server: "
+                    + String.join(" ", inherited));
+        }
+        command.addAll(inherited);
+
         for (String line : jvmArgs) {
             line = line.trim();
             if (line.isEmpty() || line.startsWith("#")) continue;
@@ -44,8 +50,19 @@ public class ForgeLauncher {
             }
         }
 
-        command.add("-Dfml.modsDir=" + bridgeModsDir.toAbsolutePath());
         command.add("--nogui");
+
+        // The args file can name a jar of its own - Forge's references its shim - and that jar
+        // lives in the server directory rather than beside the args file. Launching without it
+        // fails as "Unable to access jarfile", which names the file but not the reason, so the
+        // reason is given here instead.
+        String missingJar = LauncherUtils.missingLaunchJar(command);
+        if (missingJar != null) {
+            System.err.println("[LunarArc] Error: Forge's launch arguments reference " + missingJar
+                    + ", which is not in " + workingDir.toAbsolutePath() + ". It is produced by the"
+                    + " Forge installer; delete libraries/.lunararc-forge-version to install again.");
+            return;
+        }
 
         System.out.println("[LunarArc] Booting Forge...");
         ProcessBuilder pb = new ProcessBuilder(command);

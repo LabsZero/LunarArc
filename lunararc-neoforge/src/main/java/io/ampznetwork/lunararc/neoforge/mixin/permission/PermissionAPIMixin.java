@@ -4,25 +4,28 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.server.permission.handler.DefaultPermissionHandler;
 import net.neoforged.neoforge.server.permission.nodes.PermissionDynamicContext;
 import net.neoforged.neoforge.server.permission.nodes.PermissionNode;
+import net.neoforged.neoforge.server.permission.nodes.PermissionTypes;
+import io.ampznetwork.lunararc.common.permission.LunarArcBukkitPermissions;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = DefaultPermissionHandler.class, remap = false)
-public class PermissionAPIMixin {
-    
+public abstract class PermissionAPIMixin {
     @Inject(method = "getPermission", at = @At("HEAD"), cancellable = true)
-    private <T> void onGetPermission(ServerPlayer player, PermissionNode<T> node, PermissionDynamicContext<?>[] context, CallbackInfoReturnable<T> cir) {
-        try {
-            if (node.getType() == net.neoforged.neoforge.server.permission.nodes.PermissionTypes.BOOLEAN) {
-                org.bukkit.entity.Player bukkitPlayer = org.bukkit.Bukkit.getPlayer(player.getUUID());
-                if (bukkitPlayer != null && bukkitPlayer.isPermissionSet(node.getNodeName())) {
-                    cir.setReturnValue((T) (Boolean) bukkitPlayer.hasPermission(node.getNodeName()));
-                }
-            }
-        } catch (Throwable t) {
-            // Ignore if Bukkit API is not fully loaded or accessible
+    private <T> void lunararc$useBukkitPermission(
+            ServerPlayer player,
+            PermissionNode<T> node,
+            PermissionDynamicContext<?>[] context,
+            CallbackInfoReturnable<T> cir) {
+        if (node.getType() != PermissionTypes.BOOLEAN) {
+            return;
         }
+        LunarArcBukkitPermissions.explicitOnlinePermission(player.getUUID(), node.getNodeName()).ifPresent(value -> {
+            @SuppressWarnings("unchecked")
+            T resolved = (T) value;
+            cir.setReturnValue(resolved);
+        });
     }
 }

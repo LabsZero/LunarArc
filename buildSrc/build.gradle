@@ -1,5 +1,4 @@
-// buildSrc — custom Gradle build logic for LunarArc.
-// Analogous to Arclight's buildSrc (Paper remapping utilities, etc.)
+
 plugins {
     id 'groovy-gradle-plugin'
 }
@@ -7,4 +6,13 @@ plugins {
 repositories {
     gradlePluginPortal()
     mavenCentral()
+}
+
+dependencies {
+    // Makes org.objectweb.asm.* usable directly from any build.gradle's Groovy code project-wide -
+    // used by preparePaperImplementationSurface (lunararc-common/build.gradle) to neutralize
+    // com.mojang.logging.LogUtils calls in donated Paper bytecode that NeoForge's older bundled
+    // logging library doesn't support. Version matches gradle/libs.versions.toml's asm = "9.7"
+    // (buildSrc is its own Gradle project and can't reference the root catalog directly).
+    implementation 'org.ow2.asm:asm-tree:9.7'
 }

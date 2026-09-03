@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.ampznetwork.lunararc.forge.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "permission.PermissionAPIMixin",
+    "core.server.MinecraftServerMixin_Forge",
+    "bukkit.CraftWorldMixin_Forge",
+    "network.NetworkRegistryAccessor_Forge",
+    "bukkit.StandardMessengerMixin_Forge",
+    "bukkit.CraftPlayerMixin_Forge"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

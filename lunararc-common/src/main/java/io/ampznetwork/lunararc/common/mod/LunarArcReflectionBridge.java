@@ -2,16 +2,63 @@ package io.ampznetwork.lunararc.common.mod;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.StackWalker;
 
-/** Runtime reflection compatibility for Spigot-mapped NMS plugins on a Mojang runtime. */
+
 public final class LunarArcReflectionBridge {
     private static final LunarArcRemapper REMAPPER = new LunarArcRemapper(true);
 
     private LunarArcReflectionBridge() {
     }
 
+
+    public static Class<?> forName(String name) throws ClassNotFoundException {
+        String mapped = REMAPPER.mapRuntimeClassName(name);
+        ClassLoader callerLoader = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE)
+                .walk(frames -> frames
+                        .map(StackWalker.StackFrame::getDeclaringClass)
+                        .filter(type -> type != LunarArcReflectionBridge.class)
+                        .map(Class::getClassLoader)
+                        .filter(java.util.Objects::nonNull)
+                        .findFirst()
+                        .orElse(Thread.currentThread().getContextClassLoader()));
+        if (callerLoader == null) callerLoader = LunarArcReflectionBridge.class.getClassLoader();
+        try {
+            return Class.forName(mapped, true, callerLoader);
+        } catch (ClassNotFoundException first) {
+            if (!mapped.equals(name)) return Class.forName(name, true, callerLoader);
+            throw first;
+        }
+    }
+
+    public static Class<?> forName(String name, boolean initialize, ClassLoader loader) throws ClassNotFoundException {
+        String mapped = REMAPPER.mapRuntimeClassName(name);
+        ClassLoader effective = loader != null ? loader : LunarArcReflectionBridge.class.getClassLoader();
+        try {
+            return Class.forName(mapped, initialize, effective);
+        } catch (ClassNotFoundException first) {
+            if (!mapped.equals(name)) return Class.forName(name, initialize, effective);
+            throw first;
+        }
+    }
+
+    public static Class<?> loadClass(ClassLoader loader, String name) throws ClassNotFoundException {
+        String mapped = REMAPPER.mapRuntimeClassName(name);
+        try {
+            return loader.loadClass(mapped);
+        } catch (ClassNotFoundException first) {
+            if (!mapped.equals(name)) return loader.loadClass(name);
+            throw first;
+        }
+    }
+
     public static Field getField(Class<?> owner, String name) throws NoSuchFieldException {
         String mapped = REMAPPER.mapRuntimeFieldName(owner, name);
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.REFLECT) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.reflect("getField {}#{} -> {} (from {})",
+                    owner.getName(), name, mapped,
+                    io.ampznetwork.lunararc.common.LunarArcDebug.caller());
+        }
         try {
             return owner.getField(mapped);
         } catch (NoSuchFieldException first) {
@@ -25,12 +72,26 @@ public final class LunarArcReflectionBridge {
                     if (field != null) return field;
                 }
             }
+            // An enum constant LunarArc added at runtime has no declared field - a loaded class
+            // cannot gain one - so getField has nothing to find. Libraries look constants up this
+            // way routinely; Gson does it for every constant of every enum it touches, which is
+            // what stopped EssentialsX enabling. See LunarArcDynamicEnumFields.
+            Field dynamic = LunarArcDynamicEnumFields.find(owner, mapped);
+            if (dynamic == null && !mapped.equals(name)) {
+                dynamic = LunarArcDynamicEnumFields.find(owner, name);
+            }
+            if (dynamic != null) return dynamic;
             throw first;
         }
     }
 
     public static Field getDeclaredField(Class<?> owner, String name) throws NoSuchFieldException {
         String mapped = REMAPPER.mapRuntimeFieldName(owner, name);
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.REFLECT) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.reflect("getDeclaredField {}#{} -> {} (from {})",
+                    owner.getName(), name, mapped,
+                    io.ampznetwork.lunararc.common.LunarArcDebug.caller());
+        }
         try {
             return owner.getDeclaredField(mapped);
         } catch (NoSuchFieldException first) {
@@ -45,7 +106,12 @@ public final class LunarArcReflectionBridge {
     }
 
     public static Method getMethod(Class<?> owner, String name, Class<?>[] parameterTypes) throws NoSuchMethodException {
-        String mapped = REMAPPER.mapRuntimeMethodName(owner, name);
+        String mapped = REMAPPER.mapRuntimeMethodName(owner, name, parameterTypes);
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.REFLECT) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.reflect("getMethod {}#{}({} args) -> {} (from {})",
+                    owner.getName(), name, parameterTypes == null ? 0 : parameterTypes.length, mapped,
+                    io.ampznetwork.lunararc.common.LunarArcDebug.caller());
+        }
         try {
             return owner.getMethod(mapped, parameterTypes);
         } catch (NoSuchMethodException first) {
@@ -64,7 +130,12 @@ public final class LunarArcReflectionBridge {
     }
 
     public static Method getDeclaredMethod(Class<?> owner, String name, Class<?>[] parameterTypes) throws NoSuchMethodException {
-        String mapped = REMAPPER.mapRuntimeMethodName(owner, name);
+        String mapped = REMAPPER.mapRuntimeMethodName(owner, name, parameterTypes);
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.REFLECT) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.reflect("getDeclaredMethod {}#{}({} args) -> {} (from {})",
+                    owner.getName(), name, parameterTypes == null ? 0 : parameterTypes.length, mapped,
+                    io.ampznetwork.lunararc.common.LunarArcDebug.caller());
+        }
         try {
             return owner.getDeclaredMethod(mapped, parameterTypes);
         } catch (NoSuchMethodException first) {

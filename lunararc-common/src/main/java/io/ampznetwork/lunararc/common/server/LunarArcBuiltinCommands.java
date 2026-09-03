@@ -14,7 +14,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Registers LunarArc's built-in server commands into the Bukkit command map. */
+
 public final class LunarArcBuiltinCommands {
 
     private LunarArcBuiltinCommands() {}
@@ -93,7 +93,7 @@ public final class LunarArcBuiltinCommands {
                 return true;
             }
 
-            // Consent gate — required on first use.
+
             String consent = LunarArcConfig.getBlockMedicConsent();
             if ("declined".equals(consent)) {
                 sender.sendMessage(TranslationManager.get("blockmedic.declined"));
@@ -105,7 +105,7 @@ public final class LunarArcBuiltinCommands {
                     if (answer.equals("yes")) {
                         LunarArcConfig.setBlockMedicConsent("accepted");
                         sender.sendMessage(TranslationManager.get("blockmedic.consent.accepted"));
-                        // Fall through to upload logic below
+
                     } else if (answer.equals("no")) {
                         LunarArcConfig.setBlockMedicConsent("declined");
                         sender.sendMessage(TranslationManager.get("blockmedic.consent.rejected"));
@@ -126,7 +126,7 @@ public final class LunarArcBuiltinCommands {
                 }
             }
 
-            // Default: upload crash report; explicit "log" uploads latest.log
+
             boolean uploadCrash = args.length < 2 || args[1].equalsIgnoreCase("crash");
 
             if (uploadCrash) {

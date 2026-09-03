@@ -8,15 +8,9 @@ import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.Scanner;
 
-/**
- * The high-performance LunarArc Unified Launcher.
- * Designed to be better than Arclight by providing a cleaner, faster boot
- * sequence.
- */
 public class Launcher {
     public static void main(String[] args) {
-        // Arclight-style agent bootstrap: re-launch with -javaagent:self so premain()
-        // gives us Instrumentation, allowing same-JVM mod loader injection without mods/.
+
         if (LunarArcAgent.instrumentation == null) {
             try {
                 Path self = Paths.get(Launcher.class.getProtectionDomain()
@@ -25,6 +19,22 @@ public class Launcher {
                     java.util.List<String> cmd = new java.util.ArrayList<>();
                     cmd.add(LauncherUtils.getJavaExecutable());
                     cmd.add("-javaagent:" + self);
+
+                    // The JVM the operator started is not the one that ends up running the game:
+                    // this relaunch exists only to get the agent attached, and on the same-JVM
+                    // path (NeoForge) the child started here *is* the server. Everything the
+                    // operator put on the command line - -Xmx9G, -Dlunararc.debug=fluid, GC flags -
+                    // used to stop here, silently. A server asked for nine gigabytes ran on
+                    // HotSpot's default quarter-of-RAM, and a debug channel switched on at the
+                    // command line never reached the code that reads the property, which is why
+                    // -Dlunararc.debug never produced a line of output however hard it was tried.
+                    java.util.List<String> jvmArguments = LauncherUtils.serverJvmArguments();
+                    if (!jvmArguments.isEmpty()) {
+                        System.out.println("[LunarArc] Passing JVM arguments through to the server: "
+                                + String.join(" ", jvmArguments));
+                    }
+                    cmd.addAll(jvmArguments);
+
                     cmd.add("-jar");
                     cmd.add(self.toString());
                     java.util.Collections.addAll(cmd, args);
@@ -33,7 +43,7 @@ public class Launcher {
                     System.exit(pb.start().waitFor());
                 }
             } catch (Exception e) {
-                // Fall through: agent unavailable, continue without Instrumentation
+
             }
         }
 
@@ -42,24 +52,20 @@ public class Launcher {
             String minecraftVersion = versions.getProperty("minecraft", "unknown");
             String projectVersion = versions.getProperty("version", "unknown");
             String buildName = versions.getProperty("buildName", "unknown");
-            
+
             ConsoleUI.printLogo(minecraftVersion);
 
-            // EULA check — must agree before server starts
             checkEula();
 
-            // Check for updates
-            UpdateChecker.check(projectVersion, buildName);
+            // Started here and collected further down, so the release check runs while the disk
+            // work below is happening instead of in front of it.
+            UpdateChecker.Handle updates = UpdateChecker.begin(projectVersion, buildName);
 
             ConsoleUI.printStep("step.initializing");
-            LibraryExtractor.extractLibraries();
+            StartupTimer.phase("libraries", LibraryExtractor::extractLibraries);
 
             Path workingDir = Paths.get("").toAbsolutePath();
 
-            // Platform selection. Each platform-specific jar bakes a
-            // "LunarArc-Platform" manifest attribute, so when the user runs e.g.
-            // the NeoForge jar we launch it directly without prompting. Only a
-            // universal/unmarked jar falls back to the persisted/prompted choice.
             String choice = platformChoiceFromManifest();
 
             if (choice == null || choice.isEmpty()) {
@@ -94,7 +100,6 @@ public class Launcher {
                 }
             }
 
-            // Resolve the self-JAR path once; platform launchers use it for classpath injection
             Path selfPath = Paths.get(Launcher.class.getProtectionDomain().getCodeSource().getLocation().toURI())
                     .toAbsolutePath();
 
@@ -105,23 +110,25 @@ public class Launcher {
                 case "4" -> "quilt";
                 default -> "unknown";
             };
-            LunarArcRuntime.Layout runtime = LunarArcRuntime.prepare(workingDir, selfPath, versions, platformName);
+            LunarArcRuntime.Layout[] prepared = new LunarArcRuntime.Layout[1];
+            StartupTimer.phase("runtime", () ->
+                    prepared[0] = LunarArcRuntime.prepare(workingDir, selfPath, versions, platformName));
+            LunarArcRuntime.Layout runtime = prepared[0];
+
+            updates.finish();
+            StartupTimer.report();
 
             switch (choice) {
                 case "1":
-                    ConsoleUI.printHeader("NeoForge Boot Sequence");
                     NeoForgeInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 case "2":
-                    ConsoleUI.printHeader("Forge Boot Sequence");
                     ForgeInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 case "3":
-                    ConsoleUI.printHeader("Fabric Boot Sequence");
                     FabricInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 case "4":
-                    ConsoleUI.printHeader("Quilt Boot Sequence");
                     QuiltInstaller.install(workingDir, versions, runtime.coreJar());
                     break;
                 default:
@@ -135,12 +142,6 @@ public class Launcher {
         }
     }
 
-    /**
-     * Resolves the boot platform from this jar's {@code LunarArc-Platform}
-     * manifest attribute, mapping it to the numeric menu choice. Returns
-     * {@code null} for a universal/unmarked jar so the caller falls back to the
-     * persisted/prompted selection.
-     */
     private static String platformChoiceFromManifest() {
         try {
             Path self = Paths.get(

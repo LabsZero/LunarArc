@@ -21,26 +21,26 @@ public class BlockMedicReporter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc-BlockMedic");
     private static final String ENDPOINT = "https://blockmedic.ampznetwork.com/api/1/log";
-    private static final long MAX_LOG_BYTES = 100L * 1024 * 1024; // 100 MB (BlockMedic limit)
+    private static final long MAX_LOG_BYTES = 100L * 1024 * 1024;
 
-    /** Modification time of the log that was most recently uploaded (0 = never uploaded). */
+
     private static volatile long lastUploadedModified = 0;
 
-    /** Epoch-millis of the last successful upload — enforces BlockMedic's 60 req/min limit. */
+
     private static volatile long lastUploadTime = 0;
 
-    /** Minimum millis between any two uploads (2 s keeps well within 60 req/min). */
+
     private static final long MIN_UPLOAD_INTERVAL_MS = 2_000;
 
-    /** Rolling console-capture buffer — populated when no log file exists yet. */
+
+    private static volatile boolean autoUploadsDisabledForProcess = false;
+    private static volatile String lastAutoFailureMessage = "";
+
+
     private static final java.util.Deque<String> consoleBuffer = new java.util.concurrent.ConcurrentLinkedDeque<>();
     private static volatile boolean consoleCapturing = false;
 
-    /**
-     * Installs a tee on System.out / System.err so we have a fallback copy of console
-     * output for upload even before logs/latest.log is created.
-     * Safe to call multiple times — installs at most once.
-     */
+
     public static synchronized void startConsoleCapture() {
         if (consoleCapturing) return;
         consoleCapturing = true;
@@ -54,7 +54,7 @@ public class BlockMedicReporter {
                 super.write(b, off, len);
                 String line = new String(b, off, len, StandardCharsets.UTF_8);
                 consoleBuffer.addLast(line);
-                // Keep at most ~5 000 lines (≈ a few MB) to avoid OOM
+
                 while (consoleBuffer.size() > 5_000) consoleBuffer.pollFirst();
             }
         };
@@ -70,12 +70,13 @@ public class BlockMedicReporter {
     }
 
     public static void uploadLog(String context) {
-        if (!LunarArcConfig.isBlockMedicEnabled()) return;
+        if (!LunarArcConfig.isBlockMedicEnabled() || autoUploadsDisabledForProcess) return;
+        if (!"accepted".equalsIgnoreCase(LunarArcConfig.getBlockMedicConsent())) return;
 
-        // Rate limit: never upload more often than MIN_UPLOAD_INTERVAL_MS.
+
         if (System.currentTimeMillis() - lastUploadTime < MIN_UPLOAD_INTERVAL_MS) return;
 
-        // Skip if the log file hasn't changed since the last upload.
+
         Path logPath = findLogPath();
         if (logPath != null) {
             try {
@@ -90,15 +91,20 @@ public class BlockMedicReporter {
                 if (content == null || content.isEmpty()) return;
                 doUpload(content, context, logPath);
             } catch (Exception e) {
-                LOGGER.warn("[BlockMedic] Auto-upload failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
+                String message = sanitizeFailure(e);
+                if (!message.equals(lastAutoFailureMessage)) {
+                    LOGGER.warn("[BlockMedic] Auto-upload failed: {}", message);
+                    lastAutoFailureMessage = message;
+                }
+                if (message.startsWith("HTTP 403") || message.startsWith("HTTP 401")) {
+                    autoUploadsDisabledForProcess = true;
+                    LOGGER.warn("[BlockMedic] Automatic uploads disabled for this server process after remote rejection; use /lunararc blockmedic upload manually after fixing endpoint access.");
+                }
             }
         });
     }
 
-    /**
-     * Uploads the latest log and returns the BlockMedic URL (for command feedback).
-     * Bypasses the deduplication check — always uploads. Blocks the calling thread.
-     */
+
     public static String uploadLogNow(String context) {
         if (!LunarArcConfig.isBlockMedicEnabled()) return null;
         try {
@@ -114,15 +120,12 @@ public class BlockMedicReporter {
             }
             return doUpload(content, context, logPath);
         } catch (Exception e) {
-            LOGGER.warn("[BlockMedic] Upload failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
+            LOGGER.warn("[BlockMedic] Upload failed: {}", sanitizeFailure(e));
             return null;
         }
     }
 
-    /**
-     * Finds the most recent crash report in the crash-reports/ directory.
-     * Returns null if none exist.
-     */
+
     public static Path findCrashReport() {
         String userDir = System.getProperty("user.dir", ".");
         String[] dirs = {"crash-reports", userDir + "/crash-reports", "../crash-reports"};
@@ -143,10 +146,7 @@ public class BlockMedicReporter {
         return latest;
     }
 
-    /**
-     * Uploads a specific file path to BlockMedic synchronously.
-     * Returns the view URL or null on failure.
-     */
+
     public static String uploadFileNow(Path filePath, String context) {
         if (!LunarArcConfig.isBlockMedicEnabled()) return null;
         try {
@@ -214,7 +214,7 @@ public class BlockMedicReporter {
         String url = extract(response, "url");
         String errorCount = extract(response, "errors");
         if (!url.isEmpty()) {
-            LOGGER.info("[BlockMedic] Uploaded {} ({} errors). View at: {}",
+            LOGGER.debug("[BlockMedic] Uploaded {} ({} errors). View at: {}",
                     sourcePath != null ? sourcePath.getFileName() : "console", errorCount.isEmpty() ? "?" : errorCount, url);
         }
         lastUploadTime = System.currentTimeMillis();
@@ -244,12 +244,29 @@ public class BlockMedicReporter {
                 return new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
         }
-        // Read error body so callers can log it
         String errorBody = "";
         try (InputStream err = conn.getErrorStream()) {
-            if (err != null) errorBody = new String(err.readAllBytes(), StandardCharsets.UTF_8);
+            if (err != null) errorBody = new String(err.readNBytes(512), StandardCharsets.UTF_8);
         } catch (Exception ignored) {}
-        throw new Exception("HTTP " + status + ": " + errorBody);
+        throw new Exception("HTTP " + status + ": " + summarizeHttpBody(errorBody));
+    }
+
+    private static String sanitizeFailure(Exception e) {
+        String message = e.getMessage();
+        if (message == null || message.isBlank()) return e.getClass().getSimpleName();
+        return summarizeHttpBody(message);
+    }
+
+    private static String summarizeHttpBody(String message) {
+        if (message == null || message.isBlank()) return "unknown error";
+        String compact = message.replaceAll("\\s+", " ").trim();
+        if (compact.contains("Just a moment") || compact.contains("challenges.cloudflare.com") || compact.contains("__cf_chl")) {
+            int http = compact.indexOf("HTTP ");
+            String prefix = http >= 0 ? compact.substring(http, Math.min(compact.length(), http + 8)).replace(":", "") : "HTTP";
+            return prefix.trim() + ": blocked by Cloudflare challenge";
+        }
+        compact = compact.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+        return compact.length() > 180 ? compact.substring(0, 180) + "..." : compact;
     }
 
     private static String extract(String json, String key) {
@@ -289,7 +306,7 @@ public class BlockMedicReporter {
                 case '\f' -> sb.append("\\f");
                 default -> {
                     if (c < 0x20) {
-                        // Escape other control characters (null bytes, etc.)
+
                         sb.append(String.format("\\u%04x", (int) c));
                     } else {
                         sb.append(c);

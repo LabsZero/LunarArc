@@ -13,11 +13,11 @@ public class QuiltLauncher {
         List<String> command = new ArrayList<>();
         command.add(LauncherUtils.getJavaExecutable());
 
-        // Quilt Loader inherits Fabric Loader's fabric.addMods discovery mechanism.
         if (selfPath != null) {
             command.add("-Dfabric.addMods=" + selfPath.toString());
         }
 
+        command.addAll(LauncherUtils.serverJvmArguments("fabric.addMods"));
         command.add("-jar");
         command.add("quilt-server-launch.jar");
         command.add("--nogui");

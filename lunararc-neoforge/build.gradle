@@ -1,4 +1,4 @@
-// NeoForge platform integration — analogous to arclight-neoforge.
+
 plugins {
     id 'architectury-plugin'
     id 'dev.architectury.loom'
@@ -26,7 +26,96 @@ dependencies {
     implementation libs.paper.api
 }
 
-// Strip compile-only neoforgespi stubs — FancyModLoader provides the real classes at runtime.
+// Loom's accessWidenerPath only widens for compilation and the dev runtime. Forge gets the
+// widener at runtime too, because its block sets convertAccessWideners and ships the file;
+// NeoForge had no equivalent, so every "accessible"/"mutable" line was silently absent from the
+// production jar. Plugins that reach a widened member paid for it - TAB died with
+// IllegalAccessError on ServerCommonPacketListenerImpl.connection, a field the widener has
+// listed, with a comment naming TAB, since it was written.
+//
+// NeoForge reads META-INF/accesstransformer.cfg out of the jar, so translate the widener into
+// one at build time rather than maintaining a second hand-written list that drifts.
+def generatedAtDir = layout.buildDirectory.dir('generated/accesstransformer')
+
+tasks.register('generateAccessTransformer') {
+    def widener = project(':lunararc-common').file('src/main/resources/lunararc.accesswidener')
+    def output = generatedAtDir.map { it.file('META-INF/accesstransformer.cfg').asFile }
+    inputs.file(widener)
+    outputs.file(output)
+
+    doLast {
+        def target = output.get()
+        target.parentFile.mkdirs()
+        def lines = ['# Generated from lunararc.accesswidener - do not edit by hand.']
+        def dotted = { String internal -> internal.replace('/', '.') }
+
+        // NeoForge's ReplaceFieldWithGetterAccess coremod rewrites reads of these fields into
+        // calls to the matching getModified* getter, which is how the biome modifier system gets
+        // to return a modified value. It asserts the field is still private and instance, and
+        // aborts class transformation if it is not - so widening one here kills the server during
+        // BuiltInRegistries bootstrap, before anything else loads:
+        //
+        //   IllegalStateException: Field climateSettings in net/minecraft/world/level/biome/Biome
+        //   is not private and an instance field
+        //
+        // The widener entry is there for compiling lunararc-common against vanilla; at runtime on
+        // this loader the coremod already provides the access, and CraftWorldMixin_NeoForge
+        // redirects our own call site to getModifiedClimateSettings(). So these belong in the
+        // widener and not in the transformer.
+        def coremodOwnedFields = [
+                'net/minecraft/world/level/biome/Biome climateSettings',
+                'net/minecraft/world/level/biome/Biome specialEffects',
+        ] as Set
+
+        widener.eachLine { String raw ->
+            def line = raw.trim()
+            if (line.isEmpty() || line.startsWith('#') || line.startsWith('accessWidener')) return
+            def parts = line.split('\\s+')
+            if (parts.length < 3) return
+            def access = parts[0]      // accessible | mutable | extendable
+            def kind = parts[1]        // class | field | method
+
+            switch (kind) {
+                case 'class':
+                    if (access == 'accessible' || access == 'extendable') {
+                        lines << "public ${dotted(parts[2])}"
+                    }
+                    break
+                case 'field':
+                    if (parts.length < 5) return
+                    if (coremodOwnedFields.contains("${parts[2]} ${parts[3]}".toString())) {
+                        logger.lifecycle("Skipping coremod-owned field ${parts[2]}.${parts[3]} in the access transformer")
+                        return
+                    }
+                    // accessible -> public; mutable -> also strip final (public-f).
+                    def at = (access == 'mutable') ? 'public-f' : 'public'
+                    lines << "${at} ${dotted(parts[2])} ${parts[3]}"
+                    break
+                case 'method':
+                    if (parts.length < 5) return
+                    lines << "public ${dotted(parts[2])} ${parts[3]}${parts[4]}"
+                    break
+            }
+        }
+
+        // A field listed both accessible and mutable yields two rows; public-f must win, and a
+        // duplicate row would otherwise have the AT engine apply the weaker one after it.
+        def byMember = [:]
+        def header = lines.remove(0)
+        lines.each { String entry ->
+            def bits = entry.split(' ')
+            def key = bits.length > 2 ? "${bits[1]} ${bits[2]}" : bits[1]
+            def existing = byMember[key]
+            if (existing == null || entry.startsWith('public-f')) byMember[key] = entry
+        }
+        target.text = ([header] + byMember.values().toSorted()).join('\n') + '\n'
+        logger.lifecycle("Generated NeoForge access transformer with ${byMember.size()} entries")
+    }
+}
+
+sourceSets.main.resources.srcDir(generatedAtDir)
+tasks.named('processResources') { dependsOn tasks.named('generateAccessTransformer') }
+
 tasks.named('jar') {
     exclude 'net/neoforged/neoforgespi/**'
 }
@@ -36,6 +125,7 @@ processResources {
     inputs.property 'version', project.version
     inputs.property 'project_name', rootProject.name
     inputs.property 'java_runtime', javaRuntime
+
     filesMatching('META-INF/mods.toml') {
         expand version: project.version, project_name: rootProject.name
     }

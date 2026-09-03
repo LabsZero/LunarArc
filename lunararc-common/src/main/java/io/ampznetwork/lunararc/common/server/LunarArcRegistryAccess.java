@@ -6,9 +6,6 @@ import org.bukkit.Keyed;
 import org.bukkit.Registry;
 import org.jetbrains.annotations.NotNull;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -21,7 +18,10 @@ public final class LunarArcRegistryAccess implements RegistryAccess {
     @Override
     public <T extends Keyed> @NotNull Registry<T> getRegistry(@NotNull RegistryKey<T> key) {
         Class<T> type = resolveType(key);
-        return type != null ? getRegistry(type) : LunarArcBukkitRegistry.empty();
+        if (type == null) {
+            throw LunarArcMissingAdapterException.forSurface("registry " + key);
+        }
+        return getRegistry(type);
     }
 
     @Override
@@ -30,7 +30,17 @@ public final class LunarArcRegistryAccess implements RegistryAccess {
         Registry<?> existing = registries.get(type);
         if (existing != null) return (Registry<T>) existing;
 
-        Registry<T> created = createRegistry(type);
+        Registry<T> created;
+        try {
+            created = createRegistry(type);
+        } catch (LunarArcMissingAdapterException missing) {
+            throw missing;
+        } catch (Throwable throwable) {
+            throw new IllegalStateException("Unable to create concrete Bukkit registry adapter for " + type.getName(), throwable);
+        }
+        if (created == null) {
+            throw LunarArcMissingAdapterException.forSurface("registry " + type.getName());
+        }
         Registry<?> raced = registries.putIfAbsent(type, created);
         return raced == null ? created : (Registry<T>) raced;
     }
@@ -38,38 +48,42 @@ public final class LunarArcRegistryAccess implements RegistryAccess {
     @SuppressWarnings("unchecked")
     private static <T extends Keyed> Registry<T> createRegistry(Class<T> type) {
         if ("org.bukkit.damage.DamageType".equals(type.getName()) && type.isInterface()) {
-            return (Registry<T>) createDamageTypeRegistry((Class<? extends Keyed>) type);
+            return (Registry<T>) LunarArcRegistryEntries.createDamageTypeRegistry();
         }
         if ("org.bukkit.potion.PotionEffectType".equals(type.getName())) {
             Registry<? extends Keyed> effects = createPotionEffectTypeRegistry(type);
             if (effects != null) return (Registry<T>) effects;
         }
-        // Paper 1.21's Material#isItem()/isBlock() are registry-backed. Returning an
-        // empty registry here makes perfectly normal materials such as WOODEN_AXE
-        // report that they are not items, which then causes the Paper ItemStack
-        // constructor (and WorldEdit //wand) to throw. Expose the live Minecraft
-        // registries through lightweight Paper API registry-entry proxies.
+
+
         if ("org.bukkit.inventory.ItemType".equals(type.getName()) && type.isInterface()) {
             return (Registry<T>) createMinecraftTypeRegistry((Class<? extends Keyed>) type, true);
         }
         if ("org.bukkit.block.BlockType".equals(type.getName()) && type.isInterface()) {
             return (Registry<T>) createMinecraftTypeRegistry((Class<? extends Keyed>) type, false);
         }
-        // MenuType constants bootstrap through Registry.MENU.getOrThrow(...) during
-        // org.bukkit.inventory.MenuType.<clinit> (triggered by InventoryType.<clinit>
-        // at player login). An enum-only registry leaves them empty, so the first
-        // constant (generic_9x1) throws NoSuchElementException and permanently
-        // poisons InventoryType. Populate from the live vanilla menu registry.
+
+
         if ("org.bukkit.inventory.MenuType".equals(type.getName()) && type.isInterface()) {
             return (Registry<T>) createMenuTypeRegistry((Class<? extends Keyed>) type);
         }
-        // Every remaining Paper registry entry type whose <clinit> bootstraps
-        // through Registry.*.getOrThrow. Enums are safe via forType(); these
-        // interfaces/classes need populated registries or their static constants
-        // throw NoSuchElementException (same failure mode as the MenuType crash).
+
+
         switch (type.getName()) {
             case "org.bukkit.enchantments.Enchantment":
                 return (Registry<T>) LunarArcRegistryEntries.createEnchantmentRegistry();
+            case "org.bukkit.attribute.Attribute":
+                return (Registry<T>) LunarArcRegistryEntries.createAttributeRegistry();
+            case "org.bukkit.Fluid":
+                return (Registry<T>) LunarArcRegistryEntries.createFluidRegistry();
+            case "org.bukkit.Sound":
+                return (Registry<T>) LunarArcRegistryEntries.createSoundRegistry();
+            case "org.bukkit.block.Biome":
+                return (Registry<T>) LunarArcRegistryEntries.createBiomeRegistry();
+            case "org.bukkit.Art":
+                return (Registry<T>) LunarArcRegistryEntries.createArtRegistry();
+            case "org.bukkit.entity.memory.MemoryKey":
+                return (Registry<T>) LunarArcRegistryEntries.createMemoryKeyRegistry();
             case "org.bukkit.GameEvent":
                 return (Registry<T>) LunarArcRegistryEntries.createGameEventRegistry();
             case "org.bukkit.MusicInstrument":
@@ -79,54 +93,68 @@ public final class LunarArcRegistryAccess implements RegistryAccess {
             case "org.bukkit.generator.structure.StructureType":
                 return (Registry<T>) LunarArcRegistryEntries.createStructureTypeRegistry();
             case "org.bukkit.block.banner.PatternType":
-                return (Registry<T>) LunarArcRegistryEntries.createPatternTypeRegistry();
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createPatternTypeRegistry()
+                        : LunarArcBukkitRegistry.forType(type);
             case "org.bukkit.inventory.meta.trim.TrimMaterial":
-                return (Registry<T>) LunarArcRegistryEntries.createTrimRegistry(
-                        (Class<? extends Keyed>) type, LunarArcRegistryEntries.TRIM_MATERIAL_KEYS, "trim_material");
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createTrimRegistry((Class<? extends Keyed>) type)
+                        : LunarArcBukkitRegistry.forType(type);
             case "org.bukkit.inventory.meta.trim.TrimPattern":
-                return (Registry<T>) LunarArcRegistryEntries.createTrimRegistry(
-                        (Class<? extends Keyed>) type, LunarArcRegistryEntries.TRIM_PATTERN_KEYS, "trim_pattern");
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createTrimRegistry((Class<? extends Keyed>) type)
+                        : LunarArcBukkitRegistry.forType(type);
             case "org.bukkit.JukeboxSong":
-                return (Registry<T>) LunarArcRegistryEntries.createJukeboxSongRegistry();
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createJukeboxSongRegistry()
+                        : LunarArcBukkitRegistry.forType(type);
             case "org.bukkit.map.MapCursor$Type":
-                return (Registry<T>) LunarArcRegistryEntries.createMapCursorTypeRegistry();
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createMapCursorTypeRegistry()
+                        : LunarArcBukkitRegistry.forType(type);
             case "org.bukkit.entity.Cat$Type":
-                return (Registry<T>) LunarArcRegistryEntries.createKeyedNmsRegistry(
-                        (Class<? extends Keyed>) type, net.minecraft.core.registries.BuiltInRegistries.CAT_VARIANT);
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createKeyedNmsRegistry(
+                                (Class<? extends Keyed>) type, net.minecraft.core.registries.BuiltInRegistries.CAT_VARIANT)
+                        : LunarArcBukkitRegistry.forType(type);
             case "org.bukkit.entity.Frog$Variant":
-                return (Registry<T>) LunarArcRegistryEntries.createKeyedNmsRegistry(
-                        (Class<? extends Keyed>) type, net.minecraft.core.registries.BuiltInRegistries.FROG_VARIANT);
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createKeyedNmsRegistry(
+                                (Class<? extends Keyed>) type, net.minecraft.core.registries.BuiltInRegistries.FROG_VARIANT)
+                        : LunarArcBukkitRegistry.forType(type);
             case "org.bukkit.entity.Villager$Profession":
-                return (Registry<T>) LunarArcRegistryEntries.createKeyedNmsRegistry(
-                        (Class<? extends Keyed>) type, net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION);
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createKeyedNmsRegistry(
+                                (Class<? extends Keyed>) type, net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION)
+                        : LunarArcBukkitRegistry.forType(type);
             case "org.bukkit.entity.Villager$Type":
-                return (Registry<T>) LunarArcRegistryEntries.createKeyedNmsRegistry(
-                        (Class<? extends Keyed>) type, net.minecraft.core.registries.BuiltInRegistries.VILLAGER_TYPE);
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createKeyedNmsRegistry(
+                                (Class<? extends Keyed>) type, net.minecraft.core.registries.BuiltInRegistries.VILLAGER_TYPE)
+                        : LunarArcBukkitRegistry.forType(type);
             case "org.bukkit.entity.Wolf$Variant":
-                return (Registry<T>) LunarArcRegistryEntries.createKeyedHardcodedRegistry(
-                        (Class<? extends Keyed>) type, LunarArcRegistryEntries.WOLF_VARIANT_KEYS);
+                return type.isInterface()
+                        ? (Registry<T>) LunarArcRegistryEntries.createWolfVariantRegistry()
+                        : LunarArcBukkitRegistry.forType(type);
             default:
                 return LunarArcBukkitRegistry.forType(type);
         }
     }
 
-    /**
-     * Builds a Bukkit {@code Registry<MenuType>} from the live NMS menu registry.
-     * Each entry becomes a {@code CraftMenuType} (a real {@code MenuType.Typed})
-     * keyed by its {@code minecraft:<path>} id so the Paper MenuType constants and
-     * {@code Registry.MENU} lookups resolve.
-     */
+
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static Registry<? extends Keyed> createMenuTypeRegistry(Class<? extends Keyed> type) {
-        java.util.List<Keyed> values = new java.util.ArrayList<>();
         net.minecraft.core.Registry<net.minecraft.world.inventory.MenuType<?>> nms =
                 net.minecraft.core.registries.BuiltInRegistries.MENU;
-        for (java.util.Map.Entry<net.minecraft.resources.ResourceKey<net.minecraft.world.inventory.MenuType<?>>, net.minecraft.world.inventory.MenuType<?>> entry : nms.entrySet()) {
-            net.minecraft.resources.ResourceLocation location = entry.getKey().location();
-            org.bukkit.NamespacedKey key = new org.bukkit.NamespacedKey(location.getNamespace(), location.getPath());
-            values.add(new org.bukkit.craftbukkit.v1_21_R1.inventory.CraftMenuType<>(key, entry.getValue(), viewClassFor(location.getPath())));
-        }
-        return LunarArcBukkitRegistry.fromValues(values);
+        return LunarArcBukkitRegistry.lazy(() -> {
+            java.util.List<Keyed> values = new java.util.ArrayList<>();
+            for (java.util.Map.Entry<net.minecraft.resources.ResourceKey<net.minecraft.world.inventory.MenuType<?>>, net.minecraft.world.inventory.MenuType<?>> entry : nms.entrySet()) {
+                net.minecraft.resources.ResourceLocation location = entry.getKey().location();
+                org.bukkit.NamespacedKey key = new org.bukkit.NamespacedKey(location.getNamespace(), location.getPath());
+                values.add(new org.bukkit.craftbukkit.inventory.CraftMenuType<>(key, entry.getValue(), viewClassFor(location.getPath())));
+            }
+            return values;
+        });
     }
 
     private static Class<? extends org.bukkit.inventory.InventoryView> viewClassFor(String path) {
@@ -147,279 +175,77 @@ public final class LunarArcRegistryAccess implements RegistryAccess {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static Registry<? extends Keyed> createMinecraftTypeRegistry(Class<? extends Keyed> type, boolean itemRegistry) {
-        final java.util.Map<org.bukkit.NamespacedKey, Keyed> cache = new java.util.concurrent.ConcurrentHashMap<>();
-
-        return new org.bukkit.Registry<Keyed>() {
-            private boolean exists(org.bukkit.NamespacedKey key) {
-                if (key == null) return false;
-                net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.tryParse(key.toString());
-                if (id == null) return false;
-                if (itemRegistry) {
-                    return net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(id);
+        return LunarArcBukkitRegistry.lazy(() -> {
+            java.util.List<Keyed> values = new java.util.ArrayList<>();
+            if (itemRegistry) {
+                for (java.util.Map.Entry<net.minecraft.resources.ResourceKey<net.minecraft.world.item.Item>, net.minecraft.world.item.Item> entry
+                        : net.minecraft.core.registries.BuiltInRegistries.ITEM.entrySet()) {
+                    net.minecraft.resources.ResourceLocation id = entry.getKey().location();
+                    values.add(new org.bukkit.craftbukkit.inventory.CraftItemType<>(
+                            new org.bukkit.NamespacedKey(id.getNamespace(), id.getPath()), entry.getValue()));
                 }
-                return net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(id);
-            }
-
-            private Keyed create(org.bukkit.NamespacedKey key) {
-                if (!exists(key)) return null;
-                return cache.computeIfAbsent(key, ignored -> (Keyed) java.lang.reflect.Proxy.newProxyInstance(
-                        type.getClassLoader(), new Class<?>[]{type}, (instance, method, args) -> {
-                            if (method.isDefault()) {
-                                Object[] actualArgs = args == null ? new Object[0] : args;
-                                return java.lang.reflect.InvocationHandler.invokeDefault(instance, method, actualArgs);
-                            }
-                            String name = method.getName();
-                            switch (name) {
-                                case "getKey": return key;
-                                case "key": return net.kyori.adventure.key.Key.key(key.getNamespace(), key.getKey());
-                                case "translationKey":
-                                case "getTranslationKey":
-                                    return (itemRegistry ? "item." : "block.") + key.getNamespace() + "." + key.getKey();
-                                case "getMaxStackSize": {
-                                    if (!itemRegistry) return 0;
-                                    net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.tryParse(key.toString());
-                                    Object item = id == null ? null : net.minecraft.core.registries.BuiltInRegistries.ITEM.get(id);
-                                    if (item != null) {
-                                        try {
-                                            java.lang.reflect.Method max = item.getClass().getMethod("getDefaultMaxStackSize");
-                                            Object value = max.invoke(item);
-                                            if (value instanceof Number number) return number.intValue();
-                                        } catch (ReflectiveOperationException ignored2) {
-                                        }
-                                    }
-                                    return 64;
-                                }
-                                case "isEnabledByFeature": return true;
-                                case "toString": return type.getSimpleName() + "[" + key + "]";
-                                case "hashCode": return key.hashCode();
-                                case "equals": {
-                                    Object other = args == null || args.length == 0 ? null : args[0];
-                                    if (instance == other) return true;
-                                    if (!(other instanceof org.bukkit.Keyed keyed)) return false;
-                                    return key.equals(keyed.getKey());
-                                }
-                                default: {
-                                    // Paper registry entry interfaces grow convenience methods over time.
-                                    // Supply safe primitive/default values for methods not required to
-                                    // identify the entry; default interface methods are handled by the JVM.
-                                    Class<?> returnType = method.getReturnType();
-                                    if (returnType == boolean.class) return false;
-                                    if (returnType == byte.class) return (byte) 0;
-                                    if (returnType == short.class) return (short) 0;
-                                    if (returnType == int.class) return 0;
-                                    if (returnType == long.class) return 0L;
-                                    if (returnType == float.class) return 0.0F;
-                                    if (returnType == double.class) return 0.0D;
-                                    if (returnType == char.class) return (char) 0;
-                                    return null;
-                                }
-                            }
-                        }));
-            }
-
-            @Override public Keyed get(org.bukkit.NamespacedKey key) { return create(key); }
-            @Override public Keyed getOrThrow(org.bukkit.NamespacedKey key) {
-                Keyed value = create(key);
-                if (value == null) throw new java.util.NoSuchElementException(key.toString());
-                return value;
-            }
-            @Override public org.bukkit.NamespacedKey getKey(Keyed value) { return value == null ? null : value.getKey(); }
-            @Override public java.util.Iterator<Keyed> iterator() {
-                java.util.List<Keyed> values = new java.util.ArrayList<>();
-                java.util.Set<net.minecraft.resources.ResourceLocation> keys = itemRegistry
-                        ? net.minecraft.core.registries.BuiltInRegistries.ITEM.keySet()
-                        : net.minecraft.core.registries.BuiltInRegistries.BLOCK.keySet();
-                for (net.minecraft.resources.ResourceLocation id : keys) {
-                    Keyed value = create(new org.bukkit.NamespacedKey(id.getNamespace(), id.getPath()));
-                    if (value != null) values.add(value);
+            } else {
+                for (java.util.Map.Entry<net.minecraft.resources.ResourceKey<net.minecraft.world.level.block.Block>, net.minecraft.world.level.block.Block> entry
+                        : net.minecraft.core.registries.BuiltInRegistries.BLOCK.entrySet()) {
+                    net.minecraft.resources.ResourceLocation id = entry.getKey().location();
+                    values.add(new org.bukkit.craftbukkit.block.CraftBlockType<>(
+                            new org.bukkit.NamespacedKey(id.getNamespace(), id.getPath()), entry.getValue()));
                 }
-                return values.iterator();
             }
-            @Override public java.util.stream.Stream<Keyed> stream() {
-                java.util.Spliterator<Keyed> spliterator = java.util.Spliterators.spliteratorUnknownSize(iterator(), 0);
-                return java.util.stream.StreamSupport.stream(spliterator, false);
-            }
-        };
+            return values;
+        });
     }
 
 
-    /**
-     * Paper's PotionEffectType constants bootstrap through RegistryAccess. Unlike old
-     * Bukkit they are not enum constants, so an enum-only registry leaves SPEED and
-     * every other vanilla effect missing during PotionEffectType.<clinit>. Reuse the
-     * exact CraftBukkit implementation inherited from the pinned Paper server and
-     * construct it from NeoForge's live vanilla effect registry. Reflection keeps this
-     * bridge tolerant of minor constructor-shape differences within 1.21.1.
-     */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static Registry<? extends Keyed> createPotionEffectTypeRegistry(Class<?> apiType) {
-        try {
-            ClassLoader loader = LunarArcRegistryAccess.class.getClassLoader();
-            Class<?> craftType;
-            try {
-                craftType = Class.forName("org.bukkit.craftbukkit.potion.CraftPotionEffectType", false, loader);
-            } catch (ClassNotFoundException first) {
-                craftType = Class.forName("org.bukkit.craftbukkit."
-                        + LunarArcVersionInfo.craftBukkitPackage()
-                        + ".potion.CraftPotionEffectType", false, loader);
+        return LunarArcBukkitRegistry.lazy(() -> {
+            java.util.List<Keyed> values = new java.util.ArrayList<>();
+            var nmsRegistry = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT;
+            for (var location : nmsRegistry.keySet()) {
+                net.minecraft.world.effect.MobEffect effect = nmsRegistry.get(location);
+                if (effect == null) continue;
+                values.add(new org.bukkit.craftbukkit.potion.CraftPotionEffectType(
+                        new org.bukkit.NamespacedKey(location.getNamespace(), location.getPath()), effect));
             }
-            final Class<?> finalCraftType = craftType;
-            final net.minecraft.core.Registry nmsRegistry = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT;
-            final java.util.Map<org.bukkit.NamespacedKey, Keyed> cache = new java.util.concurrent.ConcurrentHashMap<>();
-
-            return new org.bukkit.Registry<Keyed>() {
-                private Keyed create(org.bukkit.NamespacedKey key) {
-                    if (key == null) return null;
-                    return cache.computeIfAbsent(key, ignored -> {
-                        try {
-                            net.minecraft.resources.ResourceLocation location = net.minecraft.resources.ResourceLocation.tryParse(key.toString());
-                            if (location == null) return null;
-                            Object effect = nmsRegistry.get(location);
-                            if (effect == null) return null;
-                            Object holder = nmsRegistry.wrapAsHolder(effect);
-                            for (java.lang.reflect.Constructor<?> constructor : finalCraftType.getDeclaredConstructors()) {
-                                constructor.setAccessible(true);
-                                Class<?>[] params = constructor.getParameterTypes();
-                                if (params.length == 1 && params[0].isInstance(holder)) {
-                                    Object value = constructor.newInstance(holder);
-                                    return value instanceof Keyed keyed ? keyed : null;
-                                }
-                            }
-                        } catch (Throwable t) {
-                            java.util.logging.Logger.getLogger("LunarArc").warning(
-                                    "Could not create PotionEffectType " + key + ": " + t.getClass().getSimpleName() + ": " + t.getMessage());
-                        }
-                        return null;
-                    });
-                }
-
-                @Override public Keyed get(org.bukkit.NamespacedKey key) { return create(key); }
-                @Override public Keyed getOrThrow(org.bukkit.NamespacedKey key) {
-                    Keyed value = create(key);
-                    if (value == null) throw new java.util.NoSuchElementException(key.toString());
-                    return value;
-                }
-                @Override public org.bukkit.NamespacedKey getKey(Keyed value) { return value == null ? null : value.getKey(); }
-                @Override public java.util.Iterator<Keyed> iterator() {
-                    java.util.List<Keyed> values = new java.util.ArrayList<>();
-                    for (Object rawKey : nmsRegistry.keySet()) {
-                        net.minecraft.resources.ResourceLocation location = (net.minecraft.resources.ResourceLocation) rawKey;
-                        Keyed value = create(new org.bukkit.NamespacedKey(location.getNamespace(), location.getPath()));
-                        if (value != null) values.add(value);
-                    }
-                    return values.iterator();
-                }
-                @Override public java.util.stream.Stream<Keyed> stream() {
-                    java.util.Spliterator<Keyed> spliterator = java.util.Spliterators.spliteratorUnknownSize(iterator(), 0);
-                    return java.util.stream.StreamSupport.stream(spliterator, false);
-                }
-            };
-        } catch (Throwable error) {
-            java.util.logging.Logger.getLogger("LunarArc").warning(
-                    "Could not build PotionEffectType registry: " + error.getClass().getSimpleName() + ": " + error.getMessage());
-            return null;
-        }
-    }
-
-    private static Registry<? extends Keyed> createDamageTypeRegistry(Class<? extends Keyed> type) {
-        String[] vanilla = {
-                "in_fire", "campfire", "lightning_bolt", "on_fire", "lava", "hot_floor",
-                "in_wall", "cramming", "drown", "starve", "cactus", "fall", "fly_into_wall",
-                "out_of_world", "generic", "magic", "wither", "dragon_breath", "dry_out",
-                "sweet_berry_bush", "freeze", "stalagmite", "falling_block", "falling_anvil",
-                "falling_stalactite", "sting", "mob_attack", "mob_attack_no_aggro",
-                "player_attack", "arrow", "trident", "mob_projectile", "spit", "fireworks",
-                "fireball", "unattributed_fireball", "wither_skull", "thrown", "indirect_magic",
-                "thorns", "explosion", "player_explosion", "sonic_boom", "bad_respawn_point",
-                "outside_border", "generic_kill", "wind_charge"
-        };
-
-        java.util.List<Keyed> values = new java.util.ArrayList<>(vanilla.length);
-        for (String name : vanilla) {
-            org.bukkit.NamespacedKey key = org.bukkit.NamespacedKey.minecraft(name);
-            Object proxy = java.lang.reflect.Proxy.newProxyInstance(
-                    type.getClassLoader(),
-                    new Class<?>[]{type},
-                    (instance, method, args) -> {
-                        return switch (method.getName()) {
-                            case "getKey" -> key;
-                            case "key" -> net.kyori.adventure.key.Key.key(key.getNamespace(), key.getKey());
-                            case "getTranslationKey" -> "death.attack." + name;
-                            case "getExhaustion" -> 0.0F;
-                            case "toString" -> "DamageType[" + key + "]";
-                            case "hashCode" -> key.hashCode();
-                            case "equals" -> instance == (args == null ? null : args[0]);
-                            default -> {
-                                Class<?> returnType = method.getReturnType();
-                                if (returnType.isEnum()) {
-                                    Object[] constants = returnType.getEnumConstants();
-                                    yield constants != null && constants.length > 0 ? constants[0] : null;
-                                }
-                                if (returnType == boolean.class) yield false;
-                                if (returnType == int.class) yield 0;
-                                if (returnType == long.class) yield 0L;
-                                if (returnType == double.class) yield 0.0D;
-                                if (returnType == float.class) yield 0.0F;
-                                yield null;
-                            }
-                        };
-                    });
-            values.add((Keyed) proxy);
-        }
-        return LunarArcBukkitRegistry.fromValues(values);
+            return values;
+        });
     }
 
     @SuppressWarnings("unchecked")
     private static <T extends Keyed> Class<T> resolveType(RegistryKey<T> key) {
-        for (Field field : RegistryKey.class.getFields()) {
-            if (!Modifier.isStatic(field.getModifiers()) || !RegistryKey.class.isAssignableFrom(field.getType())) continue;
-            try {
-                Object candidate = field.get(null);
-                if (!key.equals(candidate)) continue;
-                java.lang.reflect.Type generic = field.getGenericType();
-                if (generic instanceof java.lang.reflect.ParameterizedType parameterized) {
-                    java.lang.reflect.Type valueType = parameterized.getActualTypeArguments()[0];
-                    if (valueType instanceof Class<?> valueClass && Keyed.class.isAssignableFrom(valueClass)) {
-                        return (Class<T>) valueClass;
-                    }
-                }
-            } catch (ReflectiveOperationException ignored) {
-            }
-        }
-
-        Object identifier = readIdentifier(key);
-        if (identifier == null) return null;
-
-        for (Field field : RegistryKey.class.getFields()) {
-            if (!Modifier.isStatic(field.getModifiers()) || !RegistryKey.class.isAssignableFrom(field.getType())) continue;
-            try {
-                Object candidate = field.get(null);
-                if (!identifier.equals(readIdentifier(candidate))) continue;
-                java.lang.reflect.Type generic = field.getGenericType();
-                if (generic instanceof java.lang.reflect.ParameterizedType parameterized) {
-                    java.lang.reflect.Type valueType = parameterized.getActualTypeArguments()[0];
-                    if (valueType instanceof Class<?> valueClass && Keyed.class.isAssignableFrom(valueClass)) {
-                        return (Class<T>) valueClass;
-                    }
-                }
-            } catch (ReflectiveOperationException ignored) {
-            }
-        }
+        // Paper 1.21.1 registry keys only. Keep this explicit so registry lookup does
+        // not depend on runtime generic/reflection discovery.
+        if (key == RegistryKey.GAME_EVENT) return (Class<T>) org.bukkit.GameEvent.class;
+        if (key == RegistryKey.STRUCTURE_TYPE) return (Class<T>) org.bukkit.generator.structure.StructureType.class;
+        if (key == RegistryKey.MOB_EFFECT) return (Class<T>) org.bukkit.potion.PotionEffectType.class;
+        if (key == RegistryKey.BLOCK) return (Class<T>) org.bukkit.block.BlockType.class;
+        if (key == RegistryKey.ITEM) return (Class<T>) org.bukkit.inventory.ItemType.class;
+        if (key == RegistryKey.CAT_VARIANT) return (Class<T>) org.bukkit.entity.Cat.Type.class;
+        if (key == RegistryKey.FROG_VARIANT) return (Class<T>) org.bukkit.entity.Frog.Variant.class;
+        if (key == RegistryKey.VILLAGER_PROFESSION) return (Class<T>) org.bukkit.entity.Villager.Profession.class;
+        if (key == RegistryKey.VILLAGER_TYPE) return (Class<T>) org.bukkit.entity.Villager.Type.class;
+        if (key == RegistryKey.MAP_DECORATION_TYPE) return (Class<T>) org.bukkit.map.MapCursor.Type.class;
+        if (key == RegistryKey.MENU) return (Class<T>) org.bukkit.inventory.MenuType.class;
+        if (key == RegistryKey.ATTRIBUTE) return (Class<T>) org.bukkit.attribute.Attribute.class;
+        if (key == RegistryKey.FLUID) return (Class<T>) org.bukkit.Fluid.class;
+        if (key == RegistryKey.SOUND_EVENT) return (Class<T>) org.bukkit.Sound.class;
+        if (key == RegistryKey.BIOME) return (Class<T>) org.bukkit.block.Biome.class;
+        if (key == RegistryKey.STRUCTURE) return (Class<T>) org.bukkit.generator.structure.Structure.class;
+        if (key == RegistryKey.TRIM_MATERIAL) return (Class<T>) org.bukkit.inventory.meta.trim.TrimMaterial.class;
+        if (key == RegistryKey.TRIM_PATTERN) return (Class<T>) org.bukkit.inventory.meta.trim.TrimPattern.class;
+        if (key == RegistryKey.DAMAGE_TYPE) return (Class<T>) org.bukkit.damage.DamageType.class;
+        if (key == RegistryKey.WOLF_VARIANT) return (Class<T>) org.bukkit.entity.Wolf.Variant.class;
+        if (key == RegistryKey.ENCHANTMENT) return (Class<T>) org.bukkit.enchantments.Enchantment.class;
+        if (key == RegistryKey.JUKEBOX_SONG) return (Class<T>) org.bukkit.JukeboxSong.class;
+        if (key == RegistryKey.BANNER_PATTERN) return (Class<T>) org.bukkit.block.banner.PatternType.class;
+        if (key == RegistryKey.PAINTING_VARIANT) return (Class<T>) org.bukkit.Art.class;
+        if (key == RegistryKey.INSTRUMENT) return (Class<T>) org.bukkit.MusicInstrument.class;
+        if (key == RegistryKey.ENTITY_TYPE) return (Class<T>) org.bukkit.entity.EntityType.class;
+        if (key == RegistryKey.PARTICLE_TYPE) return (Class<T>) org.bukkit.Particle.class;
+        if (key == RegistryKey.POTION) return (Class<T>) org.bukkit.potion.PotionType.class;
+        if (key == RegistryKey.MEMORY_MODULE_TYPE) return (Class<T>) org.bukkit.entity.memory.MemoryKey.class;
         return null;
     }
 
-    private static Object readIdentifier(Object value) {
-        if (value == null) return null;
-        for (String name : new String[]{"key", "registryKey", "getKey"}) {
-            try {
-                Method method = value.getClass().getMethod(name);
-                if (method.getParameterCount() == 0) {
-                    Object result = method.invoke(value);
-                    if (result != null) return result;
-                }
-            } catch (ReflectiveOperationException ignored) {
-            }
-        }
-        return null;
-    }
 }
