@@ -5,6 +5,8 @@
 
 An experimental hybrid Minecraft server compatibility layer. **Forge/NeoForge/Fabric/Quilt**, while LunarArc layers Bukkit/Spigot/Paper plugin compatibility on top with concrete Craft-style adapters and targeted mixins. Paper is an API/behaviour contract and merge reference, not a second shaded server runtime.
 
+LunarArc also gives [EssentialsX](https://essentialsx.net) a name for every modded block and item natively, so `/give`, `/item`, and `/i` work with mod content out of the box — no separate plugin required. Built the same way [atferrys/ModdedIntegration](https://github.com/atferrys/ModdedIntegration) does it for Mohist/Arclight.
+
 |        Release        |  Forge  | NeoForge |  Fabric  |  QuiltMC  | Status |                                                                                                                                              Build                                                           
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
 | Trial Zenith (1.21.1) | 52.1.16 |21.1.249 |  0.19.3  |  0.30.0  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/AMPZNetwork/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/AMPZNetwork/LunarArc/actions?query=branch%3ATrial-Zenith) |
