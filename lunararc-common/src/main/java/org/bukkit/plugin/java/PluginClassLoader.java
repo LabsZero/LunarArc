@@ -163,33 +163,61 @@ public final class PluginClassLoader extends URLClassLoader
 
         if (checkGlobal) {
             try {
-                return this.pluginLoader.getClassSpace().findDependencyClass(
-                        this, name, visibleDependencies(), !this.paperPlugin);
+                return lunararc$traceSource(name, "another plugin (dependency class space)",
+                        this.pluginLoader.getClassSpace().findDependencyClass(
+                                this, name, visibleDependencies(), !this.paperPlugin));
             } catch (ClassNotFoundException ignored) {
             }
         }
 
         if (paperLibraryLoader != null) {
-            try { return paperLibraryLoader.loadClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return lunararc$traceSource(name, "paper library loader", paperLibraryLoader.loadClass(name)); }
+            catch (ClassNotFoundException ignored) {}
         }
 
         if (libraryLoader != null) {
-            try { return libraryLoader.loadClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return lunararc$traceSource(name, "plugin library loader", libraryLoader.loadClass(name)); }
+            catch (ClassNotFoundException ignored) {}
         }
 
         ClassLoader compatibilityLoader = compatibilityLibraryLoader();
         if (compatibilityLoader != null) {
-            try { return compatibilityLoader.loadClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return lunararc$traceSource(name, "compatibility library loader", compatibilityLoader.loadClass(name)); }
+            catch (ClassNotFoundException ignored) {}
         }
 
         ClassLoader modCL = LunarArcServer.modClassLoader();
         if (modCL != null && modCL != getParent()) {
-            try { return modCL.loadClass(name); } catch (ClassNotFoundException ignored) {}
+            try { return lunararc$traceSource(name, "mod class loader", modCL.loadClass(name)); }
+            catch (ClassNotFoundException ignored) {}
         }
 
-        try { return getParent().loadClass(name); } catch (ClassNotFoundException ignored) {}
+        try { return lunararc$traceSource(name, "parent", getParent().loadClass(name)); }
+        catch (ClassNotFoundException ignored) {}
 
         throw new ClassNotFoundException(name);
+    }
+
+    /**
+     * Record which of the six sources answered for a class name, on the classload channel.
+     *
+     * <p>This chain asks the plugin jar, then other plugins, then three library loaders, then the
+     * mod loader, then the parent - and on a hybrid server more than one of them can hold the same
+     * library. When two classes of one library come back from two different loaders the result is
+     * a VerifyError that names neither loader and reads like a compiler bug: Essentials shut down
+     * with "Type com/google/gson/JsonArray is not assignable to com/google/gson/JsonElement",
+     * which is only possible if those two classes came from different places. The stack trace
+     * cannot show that. This can: run with -Dlunararc.debug=classload and every resolution says
+     * which source answered and which loader ended up defining the class.</p>
+     */
+    private static Class<?> lunararc$traceSource(String name, String source, Class<?> resolved) {
+        if (io.ampznetwork.lunararc.common.LunarArcDebug.CLASSLOAD && resolved != null) {
+            ClassLoader definer = resolved.getClassLoader();
+            io.ampznetwork.lunararc.common.LunarArcDebug.classload("{}: answered by {}, defined by {}",
+                    name, source, definer == null ? "the bootstrap loader" : definer.getClass().getName()
+                            + "@" + Integer.toHexString(System.identityHashCode(definer)));
+        }
+        return resolved;
     }
 
     private byte[] loadOrCreateTransformedClass(String resourcePath, String className, byte[] original) throws IOException {
