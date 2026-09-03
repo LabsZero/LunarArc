@@ -232,7 +232,8 @@ public final class LunarArcDebug {
                     + (REMAP ? " remap" : "")
                     + (CLASSLOAD ? " classload" : "")
                     + (ENTITY ? " entity" : "")
-                    + (FLUID ? " fluid" : "") + "\n");
+                    + (FLUID ? " fluid" : "")
+                    + (COMMAND ? " command" : "") + "\n");
             writer.write("This file is passive tracing only; it does not change plugin behaviour.\n\n");
             writer.flush();
             Runtime.getRuntime().addShutdownHook(new Thread(LunarArcDebug::close, "LunarArc-debug-close"));

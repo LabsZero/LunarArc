@@ -49,14 +49,14 @@ public abstract class DedicatedServerMixin {
     private void lunararc$routeConsoleCommand(Commands commands, CommandSourceStack source, String command) {
         String line = command == null ? "" : command.trim();
         if (LunarArcDebug.COMMAND) {
-            LunarArcDebug.command("console input reached handleConsoleInputs: '%s'", line);
+            LunarArcDebug.command("console input reached handleConsoleInputs: '{}'", line);
         }
         if (line.isEmpty()) return;
 
         CraftServer craftServer = ((MinecraftServerBridge) (Object) this).lunararc$getCraftServer();
         if (craftServer == null) {
             if (LunarArcDebug.COMMAND) {
-                LunarArcDebug.command("no CraftServer yet; '%s' goes straight to vanilla", line);
+                LunarArcDebug.command("no CraftServer yet; '{}' goes straight to vanilla", line);
             }
             commands.performPrefixedCommand(source, command);
             return;
@@ -67,7 +67,7 @@ public abstract class DedicatedServerMixin {
         craftServer.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
             if (LunarArcDebug.COMMAND) {
-                LunarArcDebug.command("ServerCommandEvent cancelled '%s'", line);
+                LunarArcDebug.command("ServerCommandEvent cancelled '{}'", line);
             }
             return;
         }
@@ -78,7 +78,7 @@ public abstract class DedicatedServerMixin {
         try {
             boolean handled = craftServer.dispatchCommand(console, routed);
             if (LunarArcDebug.COMMAND) {
-                LunarArcDebug.command("dispatched '%s' -> %s", routed, handled);
+                LunarArcDebug.command("dispatched '{}' -> handled={}", routed, handled);
             }
         } catch (Exception failure) {
             craftServer.getLogger().log(java.util.logging.Level.WARNING,

@@ -182,6 +182,65 @@ public abstract class BucketItemMixin {
                 ? ItemStack.EMPTY : CraftItemStack.asNMSCopy(event.getItemStack()));
     }
 
+    /**
+     * What the server actually did with the pour, on the fluid debug channel.
+     *
+     * <p>"Poured water does not flow" has four possible causes and the existing trace could only
+     * see the last two: it hooks the fluid's tick and its spread, so if the fluid never gets that
+     * far the log is empty - which looks exactly like the channel not being on. These two lines
+     * close that gap by recording the one moment that separates the cases, the return from
+     * emptyContents, with the state of the world at the block that was poured into.</p>
+     *
+     * <p>Read it like this. {@code returned=false} means the server refused the placement and the
+     * water on screen is the client's own prediction - a ghost, which the next block update will
+     * erase, and which explains "it disappears when I break the block under it". {@code
+     * returned=true} with {@code fluid=empty} means something replaced the block immediately
+     * afterwards. {@code returned=true, source=true, tickScheduled=false} means the block is there
+     * and correct but nothing ever asked it to move, so the fault is in onPlace, not in spreading.
+     * {@code tickScheduled=true} means placement is fine and the tick and spread traces take over
+     * from there.</p>
+     *
+     * <p>Both overloads are hooked because which one runs depends on the loader: NeoForge patches
+     * BucketItem.use to call its own five-argument emptyContents and leaves the vanilla
+     * four-argument form as a deprecated delegate, so on that runtime only the second of these
+     * ever fires. require = 0 on both is what lets each stay out of the way where its target does
+     * not exist.</p>
+     */
+    @Inject(
+            method = "emptyContents(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/BlockHitResult;)Z",
+            at = @At("RETURN"), require = 0)
+    private void lunararc$traceEmptyVanilla(Player player, Level level, BlockPos pos, BlockHitResult hit,
+            CallbackInfoReturnable<Boolean> cir) {
+        lunararc$traceEmptyContents("vanilla-4arg", level, pos, cir.getReturnValueZ());
+    }
+
+    @Inject(
+            method = "emptyContents(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/BlockHitResult;Lnet/minecraft/world/item/ItemStack;)Z",
+            at = @At("RETURN"), require = 0)
+    private void lunararc$traceEmptyLoader(Player player, Level level, BlockPos pos, BlockHitResult hit,
+            ItemStack container, CallbackInfoReturnable<Boolean> cir) {
+        lunararc$traceEmptyContents("loader-5arg", level, pos, cir.getReturnValueZ());
+    }
+
+    @Unique
+    private static void lunararc$traceEmptyContents(String overload, Level level, BlockPos pos, boolean result) {
+        if (!io.ampznetwork.lunararc.common.LunarArcDebug.FLUID) return;
+        if (!(level instanceof ServerLevel serverLevel)) {
+            io.ampznetwork.lunararc.common.LunarArcDebug.fluid(
+                    "emptyContents({}) at {} returned {} on a non-server level {}",
+                    overload, pos, result, level.getClass().getName());
+            return;
+        }
+        BlockState placed = serverLevel.getBlockState(pos);
+        net.minecraft.world.level.material.FluidState fluid = serverLevel.getFluidState(pos);
+        boolean scheduled = !fluid.isEmpty()
+                && serverLevel.getFluidTicks().hasScheduledTick(pos, fluid.getType());
+        io.ampznetwork.lunararc.common.LunarArcDebug.fluid(
+                "emptyContents({}) at {} returned {} -> block={} fluid={} source={} amount={} tickScheduled={}",
+                overload, pos, result, placed.getBlock(),
+                fluid.isEmpty() ? "empty" : fluid.getType(), fluid.isSource(), fluid.getAmount(), scheduled);
+    }
+
     @WrapOperation(
             method = "use",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/BucketItem;getEmptySuccessItem(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/item/ItemStack;"),
