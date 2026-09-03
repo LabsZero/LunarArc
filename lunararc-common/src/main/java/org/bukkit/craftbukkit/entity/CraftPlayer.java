@@ -2137,6 +2137,22 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         return parameter.isInstance(argument) || parameter.isAssignableFrom(argument.getClass());
     }
 
+    private static java.lang.reflect.Method findCraftStatisticMethod(Class<?> craftStatistic, String methodName,
+                                                                     Object counter, Object[] arguments) {
+        outer:
+        for (java.lang.reflect.Method candidate : craftStatistic.getDeclaredMethods()) {
+            if (!java.lang.reflect.Modifier.isStatic(candidate.getModifiers()) || !candidate.getName().equals(methodName)) continue;
+            Class<?>[] parameters = candidate.getParameterTypes();
+            if (parameters.length != arguments.length + 1 || !statisticArgumentMatches(parameters[0], counter)) continue;
+            for (int i = 0; i < arguments.length; i++) {
+                if (!statisticArgumentMatches(parameters[i + 1], arguments[i])) continue outer;
+            }
+            candidate.trySetAccessible();
+            return candidate;
+        }
+        return null;
+    }
+
     private Object invokeCraftStatistic(String methodName, Object... apiArguments) {
         final Object counter = getNmsStatsCounter();
         final Class<?> craftStatistic;
@@ -2148,26 +2164,31 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             throw new IllegalStateException("Paper CraftStatistic is missing from the LunarArc runtime", ex);
         }
 
-        java.lang.reflect.Method selected = null;
-        outer:
-        for (java.lang.reflect.Method candidate : craftStatistic.getDeclaredMethods()) {
-            if (!java.lang.reflect.Modifier.isStatic(candidate.getModifiers()) || !candidate.getName().equals(methodName)) continue;
-            Class<?>[] parameters = candidate.getParameterTypes();
-            if (parameters.length != apiArguments.length + 1 || !statisticArgumentMatches(parameters[0], counter)) continue;
-            for (int i = 0; i < apiArguments.length; i++) {
-                if (!statisticArgumentMatches(parameters[i + 1], apiArguments[i])) continue outer;
-            }
-            candidate.trySetAccessible();
-            selected = candidate;
-            break;
+        // CraftBukkit's mutating overloads take the player as a trailing argument, so it can fire
+        // PlayerStatisticIncrementEvent - incrementStatistic(counter, statistic, material, amount,
+        // player). Matching only the exact arity found none of them, and every block-break statistic
+        // a plugin recorded threw instead: Veinminer's BlockBreakEvent listener died on
+        // "does not expose compatible incrementStatistic overload for [MINE_BLOCK, COPPER_ORE, 12]",
+        // which is an entirely ordinary call. Try the arguments as given, then with this player
+        // appended, so both shapes resolve and neither is assumed.
+        Object[] arguments = apiArguments;
+        java.lang.reflect.Method selected = findCraftStatisticMethod(craftStatistic, methodName, counter, arguments);
+        if (selected == null) {
+            Object[] withPlayer = new Object[apiArguments.length + 1];
+            System.arraycopy(apiArguments, 0, withPlayer, 0, apiArguments.length);
+            withPlayer[apiArguments.length] = this;
+            selected = findCraftStatisticMethod(craftStatistic, methodName, counter, withPlayer);
+            if (selected != null) arguments = withPlayer;
         }
         if (selected == null) {
-            throw new IllegalStateException("Paper CraftStatistic does not expose compatible " + methodName + " overload for " + java.util.Arrays.toString(apiArguments));
+            throw new IllegalStateException("Paper CraftStatistic does not expose compatible " + methodName
+                    + " overload for " + java.util.Arrays.toString(apiArguments)
+                    + " (also tried with a trailing Player)");
         }
 
-        Object[] invocation = new Object[apiArguments.length + 1];
+        Object[] invocation = new Object[arguments.length + 1];
         invocation[0] = counter;
-        System.arraycopy(apiArguments, 0, invocation, 1, apiArguments.length);
+        System.arraycopy(arguments, 0, invocation, 1, arguments.length);
         try {
             return selected.invoke(null, invocation);
         } catch (java.lang.reflect.InvocationTargetException ex) {
