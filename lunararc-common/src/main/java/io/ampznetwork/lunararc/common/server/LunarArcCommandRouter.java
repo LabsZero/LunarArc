@@ -1,6 +1,5 @@
 package io.ampznetwork.lunararc.common.server;
 
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import org.bukkit.Server;
 import org.bukkit.command.Command;
@@ -131,14 +130,33 @@ public final class LunarArcCommandRouter {
         return dispatchNative(server, sender, line);
     }
 
+    /**
+     * Run a line no Bukkit command claimed, the way Minecraft itself runs it.
+     *
+     * <p>This used to call {@code getDispatcher().execute(line, source)} - brigadier's own entry
+     * point, which is not the one Minecraft uses. Since 1.20.2 a command goes through
+     * {@link net.minecraft.commands.Commands#performPrefixedCommand}, which parses into a
+     * {@code ContextChain} and runs it on an ExecutionContext: that is what gives /execute its
+     * chaining and fan-out, what bounds /function recursion, and what produces the "Unknown
+     * command" message with the caret under the offending character. Brigadier's execute skips all
+     * of it and reports a failure as a bare exception message.</p>
+     *
+     * <p>CraftBukkit reaches the same method by a different road - every vanilla command is in its
+     * command map as a VanillaCommandWrapper, whose execute calls performPrefixedCommand. LunarArc
+     * has no such wrapper yet, so this fallback stands in for it, and it should call what the
+     * wrapper calls.</p>
+     *
+     * <p>The return value still says whether the label was a command at all, because callers use
+     * it to decide whether anything handled the line; the reporting of a bad one is left to
+     * Minecraft, which does it better than a rethrown parse error.</p>
+     */
     public static boolean dispatchNative(Server server, CommandSender sender, String line) {
         if (!(server instanceof CraftServer craftServer)) return false;
         try {
-            CommandSourceStack source = source(craftServer, sender);
-            return craftServer.getHandle().getCommands().getDispatcher().execute(line, source) > 0;
-        } catch (CommandSyntaxException syntax) {
-            sender.sendMessage(syntax.getRawMessage().getString());
-            return false;
+            net.minecraft.commands.Commands commands = craftServer.getHandle().getCommands();
+            boolean known = commands.getDispatcher().getRoot().getChild(rawLabelOf(line)) != null;
+            commands.performPrefixedCommand(source(craftServer, sender), line);
+            return known;
         } catch (Throwable error) {
             server.getLogger().log(Level.SEVERE, "Error dispatching command: " + line, error);
             return false;
@@ -159,6 +177,19 @@ public final class LunarArcCommandRouter {
             line = line.substring(1);
         }
         return line.trim();
+    }
+
+    /**
+     * The label exactly as typed. Brigadier's command tree is case-sensitive, so the lower-cased
+     * label {@link #labelOf} produces - right for the Bukkit command map, which is not - would miss
+     * every node when asked of the dispatcher.
+     */
+    static String rawLabelOf(String line) {
+        String trimmed = line == null ? "" : line.trim();
+        if (trimmed.startsWith("/")) trimmed = trimmed.substring(1).trim();
+        if (trimmed.isEmpty()) return "";
+        int space = trimmed.indexOf(' ');
+        return space >= 0 ? trimmed.substring(0, space) : trimmed;
     }
 
     static String labelOf(String line) {
