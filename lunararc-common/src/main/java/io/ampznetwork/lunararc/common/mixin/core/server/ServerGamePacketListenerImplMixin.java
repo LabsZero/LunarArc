@@ -42,6 +42,33 @@ public abstract class ServerGamePacketListenerImplMixin {
 
     @Unique private boolean lunararc$resyncAfterSpecialInventoryClick;
 
+    /**
+     * Chat, dispatched through both the legacy event and Paper's real one.
+     *
+     * <p>This used to fire only {@link AsyncPlayerChatEvent} - the pre-Adventure, printf-style
+     * event nothing current is written against. A rank/chat plugin built on
+     * {@link io.papermc.paper.event.player.AsyncChatEvent}, which is what LuckPerms-integrated
+     * chat formatters and every current EssentialsX-adjacent chat plugin actually listen for,
+     * never saw the message at all: its listener simply never ran, so its {@code ChatRenderer} -
+     * the thing that would have added the rank's color and prefix/suffix - was never consulted.
+     * What reached players was this method's own fallback formatting, which knows nothing about
+     * ranks.</p>
+     *
+     * <p>There was a second bug hiding behind the first: the fallback only fired, and only then
+     * cancelled the vanilla broadcast, when the legacy event's format, message or recipients had
+     * actually changed. A server with nothing listening to the legacy event - true of any server
+     * whose chat plugin is written against the modern one, which describes most of them today -
+     * took neither branch, so vanilla's own broadcast ran unformatted and un-ranked underneath.</p>
+     *
+     * <p>The legacy event still fires first, in the order real Paper fires it, so a plugin that
+     * only knows the old API keeps working and can still reshape the message or veto it outright.
+     * Its result feeds into the modern event as Paper's own {@code ChatProcessor} does: an
+     * unchanged legacy format keeps {@link io.papermc.paper.chat.ChatRenderer#defaultRenderer()},
+     * a changed one is wrapped as a renderer that reproduces the exact legacy substitution
+     * ({@code String.format(format, displayName, message)}) plugins wrote against. From there this
+     * always takes over the broadcast - real Paper never falls through to vanilla's own dispatch
+     * once its event pipeline has run, and neither does this.</p>
+     */
     @Inject(
             method = "broadcastChatMessage(Lnet/minecraft/network/chat/PlayerChatMessage;)V",
             at = @At("HEAD"),
@@ -54,29 +81,105 @@ public abstract class ServerGamePacketListenerImplMixin {
         if (!(bukkit instanceof Player bukkitPlayer)) {
             throw new IllegalStateException("ServerPlayer bridge did not expose a Bukkit Player");
         }
+        boolean async = !this.player.server.isSameThread();
+        String originalMessage = message.signedContent();
 
         Set<Player> recipients = new LinkedHashSet<>(craftServer.getOnlinePlayers());
-        Set<Player> originalRecipients = Set.copyOf(recipients);
-        String originalMessage = message.signedContent();
-        AsyncPlayerChatEvent event = new AsyncPlayerChatEvent(
-                !this.player.server.isSameThread(), bukkitPlayer, originalMessage, recipients);
-        String originalFormat = event.getFormat();
-        craftServer.getPluginManager().callEvent(event);
-
-        if (event.isCancelled()) {
+        AsyncPlayerChatEvent legacyEvent = new AsyncPlayerChatEvent(async, bukkitPlayer, originalMessage, recipients);
+        String legacyDefaultFormat = legacyEvent.getFormat();
+        craftServer.getPluginManager().callEvent(legacyEvent);
+        if (legacyEvent.isCancelled()) {
             ci.cancel();
             return;
         }
 
-        if (!originalMessage.equals(event.getMessage())
-                || !originalFormat.equals(event.getFormat())
-                || !originalRecipients.equals(event.getRecipients())) {
-            String formatted = String.format(event.getFormat(), bukkitPlayer.getDisplayName(), event.getMessage());
-            for (Player recipient : event.getRecipients()) {
-                recipient.sendMessage(formatted);
-            }
-            craftServer.getConsoleSender().sendMessage(formatted);
+        boolean legacyMessageChanged = !originalMessage.equals(legacyEvent.getMessage());
+        boolean legacyFormatChanged = !legacyDefaultFormat.equals(legacyEvent.getFormat());
+
+        net.kyori.adventure.text.Component sourceDisplayName = bukkitPlayer.displayName();
+        net.kyori.adventure.text.Component originalComponent = net.kyori.adventure.text.Component.text(originalMessage);
+        net.kyori.adventure.text.Component modernMessage = legacyMessageChanged
+                ? net.kyori.adventure.text.Component.text(legacyEvent.getMessage())
+                : originalComponent;
+
+        io.papermc.paper.chat.ChatRenderer renderer;
+        if (legacyFormatChanged) {
+            String legacyRendered = String.format(legacyEvent.getFormat(), bukkitPlayer.getDisplayName(), legacyEvent.getMessage());
+            net.kyori.adventure.text.Component legacyComponent =
+                    io.ampznetwork.lunararc.common.messaging.LunarArcComponentPipeline.legacyToAdventure(legacyRendered);
+            renderer = io.papermc.paper.chat.ChatRenderer.viewerUnaware((source, displayName, msg) -> legacyComponent);
+        } else {
+            renderer = io.papermc.paper.chat.ChatRenderer.defaultRenderer();
+        }
+
+        java.util.Set<net.kyori.adventure.audience.Audience> viewers =
+                new LinkedHashSet<>(legacyEvent.getRecipients());
+        io.papermc.paper.event.player.AsyncChatEvent modernEvent = new io.papermc.paper.event.player.AsyncChatEvent(
+                async, bukkitPlayer, viewers, renderer, modernMessage, originalComponent,
+                new LunarArcSignedChatMessage(message));
+        craftServer.getPluginManager().callEvent(modernEvent);
+        if (modernEvent.isCancelled()) {
             ci.cancel();
+            return;
+        }
+
+        io.papermc.paper.chat.ChatRenderer finalRenderer = modernEvent.renderer();
+        net.kyori.adventure.text.Component finalMessage = modernEvent.message();
+        for (net.kyori.adventure.audience.Audience viewer : modernEvent.viewers()) {
+            viewer.sendMessage(finalRenderer.render(bukkitPlayer, sourceDisplayName, finalMessage, viewer));
+        }
+        org.bukkit.command.ConsoleCommandSender console = craftServer.getConsoleSender();
+        console.sendMessage(finalRenderer.render(bukkitPlayer, sourceDisplayName, finalMessage, console));
+        ci.cancel();
+    }
+
+    /**
+     * {@link net.kyori.adventure.chat.SignedMessage}, over a {@link PlayerChatMessage} that is
+     * already fully available - no NMS patch needed. Real Paper adds this as an inner class of
+     * {@code PlayerChatMessage} itself ({@code AdventureView}, in its own Adventure patch);
+     * everything it reads off that class - {@code timeStamp()}, {@code salt()}, {@code
+     * signature()}, {@code unsignedContent()}, {@code signedContent()}, {@code sender()} - is a
+     * plain, unpatched vanilla accessor, so the same view is built here without touching NMS at
+     * all.
+     */
+    @Unique
+    private static final class LunarArcSignedChatMessage implements net.kyori.adventure.chat.SignedMessage {
+        private final PlayerChatMessage message;
+
+        private LunarArcSignedChatMessage(PlayerChatMessage message) {
+            this.message = message;
+        }
+
+        @Override
+        public java.time.Instant timestamp() {
+            return this.message.timeStamp();
+        }
+
+        @Override
+        public long salt() {
+            return this.message.salt();
+        }
+
+        @Override
+        public Signature signature() {
+            net.minecraft.network.chat.MessageSignature signature = this.message.signature();
+            return signature == null ? null : signature::bytes;
+        }
+
+        @Override
+        public net.kyori.adventure.text.Component unsignedContent() {
+            net.minecraft.network.chat.Component unsigned = this.message.unsignedContent();
+            return unsigned == null ? null : io.papermc.paper.adventure.PaperAdventure.asAdventure(unsigned);
+        }
+
+        @Override
+        public String message() {
+            return this.message.signedContent();
+        }
+
+        @Override
+        public net.kyori.adventure.identity.Identity identity() {
+            return net.kyori.adventure.identity.Identity.identity(this.message.sender());
         }
     }
 
