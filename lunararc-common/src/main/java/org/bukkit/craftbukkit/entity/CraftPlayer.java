@@ -2156,6 +2156,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         return parameter.isInstance(argument);
     }
 
+    private static Object[] statisticArgumentsWith(Object[] apiArguments, Object trailing) {
+        Object[] extended = new Object[apiArguments.length + 1];
+        System.arraycopy(apiArguments, 0, extended, 0, apiArguments.length);
+        extended[apiArguments.length] = trailing;
+        return extended;
+    }
+
     private static java.lang.reflect.Method findCraftStatisticMethod(Class<?> craftStatistic, String methodName,
                                                                      Object counter, Object[] arguments) {
         outer:
@@ -2183,26 +2190,28 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             throw new IllegalStateException("Paper CraftStatistic is missing from the LunarArc runtime", ex);
         }
 
-        // CraftBukkit's mutating overloads take the player as a trailing argument, so it can fire
-        // PlayerStatisticIncrementEvent - incrementStatistic(counter, statistic, material, amount,
-        // player). Matching only the exact arity found none of them, and every block-break statistic
-        // a plugin recorded threw instead: Veinminer's BlockBreakEvent listener died on
-        // "does not expose compatible incrementStatistic overload for [MINE_BLOCK, COPPER_ORE, 12]",
-        // which is an entirely ordinary call. Try the arguments as given, then with this player
-        // appended, so both shapes resolve and neither is assumed.
-        Object[] arguments = apiArguments;
-        java.lang.reflect.Method selected = findCraftStatisticMethod(craftStatistic, methodName, counter, arguments);
-        if (selected == null) {
-            Object[] withPlayer = new Object[apiArguments.length + 1];
-            System.arraycopy(apiArguments, 0, withPlayer, 0, apiArguments.length);
-            withPlayer[apiArguments.length] = this;
-            selected = findCraftStatisticMethod(craftStatistic, methodName, counter, withPlayer);
-            if (selected != null) arguments = withPlayer;
+        // Read off CraftBukkit's own source rather than guessed at, after two wrong attempts. The
+        // real mutating signatures are
+        //   incrementStatistic(ServerStatsCounter, Statistic, Material, int amount, ServerPlayer)
+        // so the trailing argument is the *NMS* ServerPlayer, not the Bukkit Player. Appending
+        // this CraftPlayer could never match it, which is why the previous fallback did nothing.
+        // Both are tried, NMS handle first, so the shape actually present resolves either way.
+        Object[] arguments = null;
+        java.lang.reflect.Method selected = null;
+        for (Object[] candidate : new Object[][] {
+                apiArguments,
+                statisticArgumentsWith(apiArguments, getHandle()),
+                statisticArgumentsWith(apiArguments, this) }) {
+            selected = findCraftStatisticMethod(craftStatistic, methodName, counter, candidate);
+            if (selected != null) {
+                arguments = candidate;
+                break;
+            }
         }
         if (selected == null) {
             throw new IllegalStateException("Paper CraftStatistic does not expose compatible " + methodName
                     + " overload for " + java.util.Arrays.toString(apiArguments)
-                    + " (also tried with a trailing Player)");
+                    + " (also tried with a trailing ServerPlayer and a trailing Player)");
         }
 
         Object[] invocation = new Object[arguments.length + 1];
