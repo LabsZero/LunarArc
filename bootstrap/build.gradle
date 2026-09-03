@@ -75,6 +75,11 @@ tasks.register('generateVersions') {
         props['buildName']       = libs.versions.build.name.get()
         props['javaVersion']     = libs.versions.java.runtime.get()
         props['buildDate']       = new java.text.SimpleDateFormat('dd-MM-yyyy HH:mm').format(new Date())
+        // Recorded so a log or a crash report identifies the exact source it was built from. A
+        // report that says only "LunarArc" cannot be matched to a commit, which is most of what a
+        // bug report from a stranger needs to be actionable.
+        props['gitHash']         = rootProject.ext.gitHash
+        props['gitBranch']       = rootProject.ext.gitBranch
         versionsTarget.text = ''
         props.store(versionsTarget.newWriter(), null)
     }

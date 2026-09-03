@@ -75,6 +75,29 @@ public final class LunarArcVersionInfo {
         return "prerelease".equals(buildChannel()) || "pre-release".equals(buildChannel());
     }
 
+    public static String gitHash() {
+        return property("gitHash", "unknown");
+    }
+
+    public static String gitBranch() {
+        return property("gitBranch", "unknown");
+    }
+
+    /**
+     * One line identifying exactly which LunarArc this is, for logs and crash reports.
+     *
+     * <p>A report that says only "LunarArc" cannot be matched to a commit, and most bug reports
+     * arrive from someone who cannot be asked follow-up questions. Version, build number, branch
+     * and commit together make one answerable.</p>
+     */
+    public static String brandingLine() {
+        return "LunarArc " + lunarArcVersion()
+                + " (build " + buildNumber()
+                + ", branch " + gitBranch()
+                + ", commit " + gitHash()
+                + ") for Minecraft " + minecraftVersion();
+    }
+
     public static String buildNumber() {
         return property("buildNumber", "local");
     }

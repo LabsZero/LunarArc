@@ -12,6 +12,7 @@
     "core.pathfinding.PathFinderAccessor",
     "core.server.WorldLoaderMixin",
     "core.server.MinecraftServerMixin",
+    "core.server.MinecraftServerMixin_Branding",
     "core.server.DedicatedServerMixin",
     "core.server.ServerHandshakePacketListenerImplMixin",
     "core.server.ServerLoginPacketListenerMixin",

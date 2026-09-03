@@ -47,6 +47,13 @@ allprojects {
                 def h = out.toString().trim(); return h.isEmpty() ? 'unknown' : h
             } catch (ignored) { return 'unknown' }
         }()
+        gitBranch = { ->
+            try {
+                def out = new ByteArrayOutputStream()
+                exec { commandLine 'git', 'rev-parse', '--abbrev-ref', 'HEAD'; standardOutput = out; ignoreExitValue = true }
+                def b = out.toString().trim(); return b.isEmpty() ? 'unknown' : b
+            } catch (ignored) { return 'unknown' }
+        }()
         supportedPlatforms = ['neoforge', 'forge', 'fabric', 'quilt']
         buildName          = libs.versions.build.name.get()
         paperDir           = rootProject.file('.gradle/paper')
