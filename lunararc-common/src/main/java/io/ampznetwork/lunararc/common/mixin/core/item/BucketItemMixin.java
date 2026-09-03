@@ -112,7 +112,11 @@ public abstract class BucketItemMixin {
     // event context available without replacing either loader implementation.
     @Inject(
             method = "use",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/BucketItem;emptyContents(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/BlockHitResult;Lnet/minecraft/world/item/ItemStack;)Z"),
+            // remap = false because this overload is the loader's own addition and is in no vanilla
+            // mapping, so asking for it to be remapped can only fail to find it. Arclight marks the
+            // same call site the same way. Harmless on NeoForge, whose runtime is Mojang-mapped
+            // anyway; it is Forge, remapping to SRG, where the difference shows.
+            at = @At(value = "INVOKE", remap = false, target = "Lnet/minecraft/world/item/BucketItem;emptyContents(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/BlockHitResult;Lnet/minecraft/world/item/ItemStack;)Z"),
             require = 0)
     private void lunararc$captureBucketEmptyLoader(Level level, Player player, InteractionHand hand,
             CallbackInfoReturnable<InteractionResultHolder<ItemStack>> cir,

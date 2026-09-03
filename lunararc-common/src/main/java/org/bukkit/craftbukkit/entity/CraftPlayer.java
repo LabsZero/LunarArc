@@ -2132,9 +2132,28 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         }
     }
 
+    private static final java.util.Map<Class<?>, Class<?>> STATISTIC_BOXED_PRIMITIVES = java.util.Map.of(
+            int.class, Integer.class, long.class, Long.class, double.class, Double.class,
+            float.class, Float.class, boolean.class, Boolean.class, byte.class, Byte.class,
+            short.class, Short.class, char.class, Character.class);
+
+    /**
+     * Whether a reflectively supplied argument fits a declared parameter.
+     *
+     * <p>A primitive parameter is compared against its wrapper. Every argument arriving here has
+     * been through varargs and is therefore boxed, and {@code int.class.isInstance(Integer)} is
+     * false, as is {@code int.class.isAssignableFrom(Integer.class)} - so an {@code int amount}
+     * parameter could never be matched. That is every mutating overload CraftStatistic has:
+     * incrementStatistic, decrementStatistic and setStatistic all take an amount, so all of them
+     * were unreachable and threw "does not expose compatible overload" for calls that were
+     * perfectly ordinary. Only the read-only getStatistic overloads, which take no number, worked.</p>
+     */
     private static boolean statisticArgumentMatches(Class<?> parameter, Object argument) {
         if (argument == null) return !parameter.isPrimitive();
-        return parameter.isInstance(argument) || parameter.isAssignableFrom(argument.getClass());
+        if (parameter.isPrimitive()) {
+            return STATISTIC_BOXED_PRIMITIVES.get(parameter) == argument.getClass();
+        }
+        return parameter.isInstance(argument);
     }
 
     private static java.lang.reflect.Method findCraftStatisticMethod(Class<?> craftStatistic, String methodName,
