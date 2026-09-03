@@ -575,7 +575,23 @@ public final class PluginClassLoader extends URLClassLoader
                 || name.startsWith("net.kyori.adventure.")
                 || name.startsWith("net.kyori.examination.")
                 || name.startsWith("com.mojang.")
-                || name.startsWith("net.minecraft.");
+                || name.startsWith("net.minecraft.")
+                // Ambient, not part of the Bukkit API contract, present on every server the same
+                // way com.mojang. is - and unlike com.mojang., also present a second time on a
+                // hybrid server's mod loader classpath (NeoForge depends on it too). A plugin that
+                // never declares it as a library (most don't; it has always just been there) can
+                // have two of its own references resolve through two different steps of the
+                // six-source scan below, handed two unrelated Class objects for the same name.
+                // That is exactly what VerifyError: "Type 'JsonArray' is not assignable to
+                // 'JsonElement'" is - not a plugin bug, a same-name-different-loader split, and it
+                // took Essentials down in onDisable(). Routing gson through the platform backstop
+                // first makes every reference resolve from the same one or two stable sources
+                // (parent, then the mod loader) instead of whichever of six answered first; a
+                // plugin that ships its own gson under this exact package name was already exposed
+                // to this class of bug on any multi-plugin server, hybrid or not, so preferring the
+                // platform's copy is the safer default. classload traces which of the two
+                // deterministic sources actually answers, same as it does for everything else here.
+                || name.startsWith("com.google.gson.");
     }
 
     @Override
