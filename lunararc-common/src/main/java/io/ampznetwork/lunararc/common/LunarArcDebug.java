@@ -104,8 +104,34 @@ public final class LunarArcDebug {
             if (CLASSLOAD) enabled.append(" classload");
             if (ENTITY) enabled.append(" entity");
             if (FLUID) enabled.append(" fluid");
-            LOGGER.info("Debug channels enabled:{} - writing to {}. Verbose by design; not meant to "
-                    + "be left on for a running server.", enabled, OUTPUT.toAbsolutePath());
+
+            // Opened here rather than on the first trace line. Lazily creating the file made an
+            // absent file mean two different things - the channel never turned on, or it turned on
+            // and nothing ever reached it - and those need completely different next steps. Now the
+            // file exists whenever a channel does, so an empty one is a real answer: the traced
+            // code did not run.
+            try {
+                open();
+            } catch (Throwable ignored) {
+                // open() reports its own failure once and disables itself.
+            }
+
+            String announcement = "[LunarArc/Debug] Debug channels enabled:" + enabled + " - writing to "
+                    + OUTPUT.toAbsolutePath() + ". Verbose by design; not meant to be left on for a "
+                    + "running server.";
+            LOGGER.info(announcement);
+            // Also on stdout. This class initializes from the plugin remapper, early enough that
+            // whether the logger is configured yet depends on the loader, and an announcement that
+            // may or may not appear is no use for telling someone their flag did not take.
+            System.out.println(announcement);
+        } else if (!raw.isBlank()) {
+            // A name that matches nothing used to be indistinguishable from not passing the
+            // property at all: both produced silence, and the only symptom was a trace file that
+            // never appeared. Say which names exist instead.
+            String complaint = "[LunarArc/Debug] -Dlunararc.debug=" + raw + " names no known channel."
+                    + " Known channels: reflect, remap, classload, entity, fluid, or all.";
+            LOGGER.warn(complaint);
+            System.out.println(complaint);
         }
     }
 
