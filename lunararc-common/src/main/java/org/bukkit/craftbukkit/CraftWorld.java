@@ -112,29 +112,107 @@ public class CraftWorld implements World {
     }
 
     private static UUID loadOrCreateWorldUid(ServerLevel world, String bukkitName) {
-        return loadOrCreateWorldUid(bukkitName, world.dimension().location().toString());
+        java.nio.file.Path folder = null;
+        try {
+            folder = ((io.ampznetwork.lunararc.common.bridge.ServerLevelBridge) (Object) world)
+                    .lunararc$getDimensionFolder();
+        } catch (Throwable unavailable) {
+            // The mixin that captures it did not apply; the legacy path below still answers.
+        }
+        return loadOrCreateWorldUid(folder, bukkitName, world.dimension().location().toString());
     }
 
-    public static UUID loadOrCreateWorldUid(String bukkitName, String dimensionFallback) {
-        String dim = dimensionFallback;
-        java.nio.file.Path uidPath = java.nio.file.Path.of(bukkitName, "uid.dat");
+    /**
+     * This world's persistent UUID, kept in {@code uid.dat} inside the world's own folder.
+     *
+     * <p>{@code dimensionFolder} is where the dimension's data actually lives, which is the only
+     * place the file belongs: it is what Arclight uses, and on a hybrid it is the only choice that
+     * gives each dimension its own identity. CraftBukkit puts the file at the level directory root,
+     * which works there because every Bukkit world has a directory to itself - here the server's
+     * overworld, nether and end all share one {@code LevelStorageAccess}, so that rule would hand
+     * all three the same UUID.</p>
+     *
+     * <p>The name-derived folder is still read when the real one has no file yet, and the value is
+     * written through rather than replaced. Plugins persist world UUIDs - EssentialsX homes, warps
+     * and spawns among them - so a world that already had an identity has to keep it. The stray
+     * directory this code used to create is removed once it has given up its file and holds nothing
+     * else: an empty {@code world_nether} beside a save whose nether is in {@code world/DIM-1} reads
+     * like a world that lost its data.</p>
+     */
+    public static UUID loadOrCreateWorldUid(java.nio.file.Path dimensionFolder, String bukkitName,
+                                            String dimensionFallback) {
+        java.nio.file.Path preferred = dimensionFolder == null ? null : dimensionFolder.resolve("uid.dat");
+        java.nio.file.Path legacy = java.nio.file.Path.of(bukkitName, "uid.dat");
         try {
-            if (java.nio.file.Files.isRegularFile(uidPath)) {
-                byte[] bytes = java.nio.file.Files.readAllBytes(uidPath);
-                if (bytes.length >= 16) {
-                    java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(bytes);
-                    return new UUID(buf.getLong(), buf.getLong());
+            UUID current = readWorldUid(preferred);
+            if (current != null) return current;
+
+            UUID inherited = readWorldUid(legacy);
+            if (inherited != null) {
+                // Compared as real locations, not as strings. For the overworld the two are the
+                // same file reached two ways - an absolute path from the level directory, and
+                // "world/uid.dat" relative to the working directory - and Path.equals calls those
+                // different, which would have deleted the file immediately after writing it and
+                // handed the overworld a new UUID on the next boot.
+                if (preferred != null && !sameUidFile(preferred, legacy)) {
+                    writeWorldUid(preferred, inherited);
+                    discardStrayUidFolder(legacy);
                 }
+                return inherited;
             }
+
             UUID generated = UUID.randomUUID();
-            java.nio.file.Files.createDirectories(uidPath.getParent());
-            java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(16);
-            buf.putLong(generated.getMostSignificantBits()).putLong(generated.getLeastSignificantBits());
-            java.nio.file.Files.write(uidPath, buf.array());
+            writeWorldUid(preferred != null ? preferred : legacy, generated);
             return generated;
         } catch (Throwable ignored) {
+            return UUID.nameUUIDFromBytes(dimensionFallback.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
 
-            return UUID.nameUUIDFromBytes(dim.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    /** As above, for callers that do not yet have a level and so know only the world's own folder. */
+    public static UUID loadOrCreateWorldUid(String bukkitName, String dimensionFallback) {
+        return loadOrCreateWorldUid(null, bukkitName, dimensionFallback);
+    }
+
+    private static UUID readWorldUid(java.nio.file.Path uidPath) throws java.io.IOException {
+        if (uidPath == null || !java.nio.file.Files.isRegularFile(uidPath)) return null;
+        byte[] bytes = java.nio.file.Files.readAllBytes(uidPath);
+        if (bytes.length < 16) return null;
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(bytes);
+        return new UUID(buf.getLong(), buf.getLong());
+    }
+
+    private static void writeWorldUid(java.nio.file.Path uidPath, UUID uid) throws java.io.IOException {
+        java.nio.file.Path parent = uidPath.getParent();
+        if (parent != null) java.nio.file.Files.createDirectories(parent);
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(16);
+        buf.putLong(uid.getMostSignificantBits()).putLong(uid.getLeastSignificantBits());
+        java.nio.file.Files.write(uidPath, buf.array());
+    }
+
+    private static boolean sameUidFile(java.nio.file.Path a, java.nio.file.Path b) {
+        try {
+            if (java.nio.file.Files.exists(a) && java.nio.file.Files.exists(b)) {
+                return java.nio.file.Files.isSameFile(a, b);
+            }
+        } catch (java.io.IOException ignored) {
+            // Fall through to the path comparison.
+        }
+        return a.toAbsolutePath().normalize().equals(b.toAbsolutePath().normalize());
+    }
+
+    private static void discardStrayUidFolder(java.nio.file.Path legacyUid) {
+        try {
+            java.nio.file.Files.deleteIfExists(legacyUid);
+            java.nio.file.Path folder = legacyUid.getParent();
+            if (folder == null) return;
+            // Only if uid.dat was all it held. Anything else in there is somebody's world.
+            try (java.util.stream.Stream<java.nio.file.Path> entries = java.nio.file.Files.list(folder)) {
+                if (entries.findAny().isPresent()) return;
+            }
+            java.nio.file.Files.deleteIfExists(folder);
+        } catch (Throwable ignored) {
+            // A leftover directory is untidy, not broken.
         }
     }
 

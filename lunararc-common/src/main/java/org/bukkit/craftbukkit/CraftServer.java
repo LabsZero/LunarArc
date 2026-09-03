@@ -2459,8 +2459,11 @@ public class CraftServer implements Server {
             net.minecraft.world.level.dimension.LevelStem effectiveStem = stem;
             org.bukkit.craftbukkit.generator.CustomChunkGenerator customGenerator = null;
             if (bukkitGenerator != null || bukkitBiomeProvider != null) {
+                // Same folder CraftWorld will use once the level exists, so the generator is told
+                // the identity the world actually ends up with rather than one from a folder named
+                // after it.
                 java.util.UUID generationUid = org.bukkit.craftbukkit.CraftWorld.loadOrCreateWorldUid(
-                        name, worldKey.location().toString());
+                        session.getDimensionPath(worldKey), name, worldKey.location().toString());
                 net.minecraft.world.level.dimension.DimensionType dimensionType = stem.type().value();
                 org.bukkit.craftbukkit.generator.CraftWorldInfo worldInfo =
                         new org.bukkit.craftbukkit.generator.CraftWorldInfo(

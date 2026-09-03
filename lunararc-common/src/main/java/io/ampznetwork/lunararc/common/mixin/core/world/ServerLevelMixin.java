@@ -21,6 +21,50 @@ public abstract class ServerLevelMixin implements ServerLevelBridge {
     @Shadow
     public abstract boolean addFreshEntity(Entity entity);
 
+    @org.spongepowered.asm.mixin.Unique
+    private java.nio.file.Path lunararc$dimensionFolder;
+
+    /**
+     * Remembers where this level's data is written, since vanilla does not.
+     *
+     * <p>CraftWorld needs it to put {@code uid.dat} in the world it identifies. It used to derive a
+     * folder from the Bukkit world name instead, resolved against the process working directory,
+     * which created empty {@code world_nether} and {@code world_the_end} directories beside a save
+     * whose nether and end actually live in {@code world/DIM-1} and {@code world/DIM1} - so the
+     * identity of a world did not travel with the world, and deleting the stray directory silently
+     * gave it a new UUID.</p>
+     *
+     * <p>{@code require = 0} because this is a twelve-argument constructor a loader could extend:
+     * failing to apply leaves the folder null and CraftWorld falls back to the old path rather than
+     * failing to boot.</p>
+     */
+    @Inject(method = "<init>", at = @At("RETURN"), require = 0)
+    private void lunararc$captureDimensionFolder(
+            net.minecraft.server.MinecraftServer server,
+            java.util.concurrent.Executor dispatcher,
+            net.minecraft.world.level.storage.LevelStorageSource.LevelStorageAccess access,
+            net.minecraft.world.level.storage.ServerLevelData levelData,
+            net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
+            net.minecraft.world.level.dimension.LevelStem levelStem,
+            net.minecraft.server.level.progress.ChunkProgressListener progressListener,
+            boolean isDebug,
+            long biomeZoomSeed,
+            java.util.List<net.minecraft.world.level.CustomSpawner> customSpawners,
+            boolean tickTime,
+            net.minecraft.world.RandomSequences randomSequences,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        try {
+            this.lunararc$dimensionFolder = access == null ? null : access.getDimensionPath(dimension);
+        } catch (Throwable unavailable) {
+            this.lunararc$dimensionFolder = null;
+        }
+    }
+
+    @Override
+    public java.nio.file.Path lunararc$getDimensionFolder() {
+        return this.lunararc$dimensionFolder;
+    }
+
     @Override
     public boolean lunararc$addFreshEntity(Entity entity, CreatureSpawnEvent.SpawnReason reason) {
         java.util.Objects.requireNonNull(entity, "entity");
