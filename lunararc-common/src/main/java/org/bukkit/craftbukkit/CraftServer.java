@@ -47,7 +47,7 @@ import io.ampznetwork.lunararc.common.server.LunarArcLogger;
 import io.papermc.paper.configuration.FeatureFlagConfig;
 
 public class CraftServer implements Server {
-    private volatile CachedServerIcon serverIcon;
+    private volatile org.bukkit.craftbukkit.util.CraftIconCache serverIcon;
     private final org.bukkit.potion.PotionBrewer potionBrewer;
     private final MinecraftServer console;
     private final PlayerList playerList;
@@ -58,7 +58,7 @@ public class CraftServer implements Server {
     private final ServicesManager servicesManager = new SimpleServicesManager();
     private final Map<NamespacedKey, KeyedBossBar> bossBars = new LinkedHashMap<>();
 
-    private final Map<Integer, MapView> mapViews = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<Integer, org.bukkit.craftbukkit.map.CraftMapView> mapViews = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicInteger nextMapId = new java.util.concurrent.atomic.AtomicInteger();
     private final org.bukkit.metadata.MetadataStore<org.bukkit.entity.Entity> entityMetadata =
             new org.bukkit.craftbukkit.metadata.CraftMetadataStore<>();
@@ -333,13 +333,24 @@ public class CraftServer implements Server {
         return (net.minecraft.server.dedicated.DedicatedServer) console;
     }
 
-    // NOTE: CraftBukkit declares getHandle() as DedicatedPlayerList, and this returning
-    // MinecraftServer has the same latent defect as getServer() did - a plugin calling it gets
-    // NoSuchMethodError. Left alone deliberately: nothing has hit it yet, and unlike getServer()
-    // it is load-bearing internally, so changing it needs a real call-site audit rather than a
-    // grep (the first attempt broke 11 call sites across several modules).
-    public MinecraftServer getHandle() {
-        return console;
+    /**
+     * The player list, which is what CraftBukkit's getHandle() returns.
+     *
+     * <p>This used to return the MinecraftServer, and the note here said the defect had not been
+     * hit yet. It has: the donated CraftOfflinePlayer calls {@code server.getHandle().isOp(...)},
+     * {@code .op(...)}, {@code .deop(...)}, {@code .getWhiteList()} and {@code .getPlayerStats(...)},
+     * every one of which resolves against DedicatedPlayerList. Compiled against that descriptor,
+     * the call site cannot bind to a method returning MinecraftServer, so any plugin reading or
+     * setting op, whitelist or offline statistics through OfflinePlayer got a NoSuchMethodError -
+     * and Essentials does all three.
+     *
+     * <p>The call-site audit the old note asked for is done: thirteen internal uses now call
+     * {@link #getServer()}, which returns the DedicatedServer they actually wanted. The cast is
+     * the same assumption getServer() already makes and states - this runtime is server-only, so
+     * the list is always the dedicated subclass.</p>
+     */
+    public net.minecraft.server.dedicated.DedicatedPlayerList getHandle() {
+        return (net.minecraft.server.dedicated.DedicatedPlayerList) playerList;
     }
 
     @Override
@@ -436,12 +447,15 @@ public class CraftServer implements Server {
     }
 
     @Override
-    public @NotNull Collection<? extends Player> getOnlinePlayers() {
-        List<Player> players = new ArrayList<>();
+    public @NotNull List<CraftPlayer> getOnlinePlayers() {
+        // List<CraftPlayer>, as CraftBukkit declares it. The erasure is part of the descriptor, so
+        // returning Collection here means donated code compiled against ()Ljava/util/List; cannot
+        // bind - PaperServerListPingEvent, Title and the mobcaps command all call it.
+        List<CraftPlayer> players = new ArrayList<>();
         for (net.minecraft.server.level.ServerPlayer player : playerList.getPlayers()) {
-            Player cp = getPlayer(player.getUUID());
-            if (cp != null)
-                players.add(cp);
+            if (getPlayer(player.getUUID()) instanceof CraftPlayer craftPlayer) {
+                players.add(craftPlayer);
+            }
         }
         return players;
     }
@@ -461,7 +475,7 @@ public class CraftServer implements Server {
     }
 
     @Override
-    public @NotNull org.bukkit.command.CommandMap getCommandMap() {
+    public @NotNull SimpleCommandMap getCommandMap() {
         return commandMap;
     }
 
@@ -843,16 +857,16 @@ public class CraftServer implements Server {
     }
 
     @Override
-    public @NotNull MapView createMap(@NotNull World world) {
+    public @NotNull org.bukkit.craftbukkit.map.CraftMapView createMap(@NotNull World world) {
         Objects.requireNonNull(world, "world");
         int id = this.nextMapId.getAndIncrement();
-        MapView view = new org.bukkit.craftbukkit.map.CraftMapView(id, world);
+        org.bukkit.craftbukkit.map.CraftMapView view = new org.bukkit.craftbukkit.map.CraftMapView(id, world);
         this.mapViews.put(id, view);
         return view;
     }
 
     @Override
-    public @Nullable MapView getMap(int id) {
+    public @Nullable org.bukkit.craftbukkit.map.CraftMapView getMap(int id) {
         return mapViews.get(id);
     }
 
@@ -942,7 +956,7 @@ public class CraftServer implements Server {
     }
 
     @Override
-    public @Nullable BukkitScheduler getScheduler() {
+    public @Nullable org.bukkit.craftbukkit.scheduler.CraftScheduler getScheduler() {
         return scheduler;
     }
 
@@ -1221,8 +1235,8 @@ public class CraftServer implements Server {
     }
 
     @Override
-    public @Nullable CachedServerIcon getServerIcon() {
-        CachedServerIcon cached = this.serverIcon;
+    public @Nullable org.bukkit.craftbukkit.util.CraftIconCache getServerIcon() {
+        org.bukkit.craftbukkit.util.CraftIconCache cached = this.serverIcon;
         if (cached != null) return cached;
         File file = new File("server-icon.png");
         if (!file.isFile()) return null;
@@ -1237,7 +1251,7 @@ public class CraftServer implements Server {
     }
 
     @Override
-    public @NotNull CachedServerIcon loadServerIcon(@NotNull File file) throws Exception {
+    public @NotNull org.bukkit.craftbukkit.util.CraftIconCache loadServerIcon(@NotNull File file) throws Exception {
         Objects.requireNonNull(file, "file");
         if (!file.isFile()) throw new IllegalArgumentException("File is not a valid file: " + file);
         BufferedImage image = ImageIO.read(file);
@@ -1246,7 +1260,7 @@ public class CraftServer implements Server {
     }
 
     @Override
-    public @NotNull CachedServerIcon loadServerIcon(@NotNull BufferedImage image) throws Exception {
+    public @NotNull org.bukkit.craftbukkit.util.CraftIconCache loadServerIcon(@NotNull BufferedImage image) throws Exception {
         Objects.requireNonNull(image, "image");
         if (image.getWidth() != 64 || image.getHeight() != 64) {
             throw new IllegalArgumentException("Server icon must be exactly 64x64 pixels");
@@ -2616,7 +2630,12 @@ public class CraftServer implements Server {
     }
 
     @Override
-    public @NotNull ScoreboardManager getScoreboardManager() {
+    // CraftScoreboardManager, not the ScoreboardManager interface: the donated CraftStatistic
+    // calls getScoreboardManager().forAllObjectives(...) to keep scoreboard objectives in step
+    // with a statistic, and forAllObjectives exists only on the Craft class. Declaring the
+    // interface here made every incrementStatistic with a scoreboard-visible criterion throw
+    // NoSuchMethodError - which is what VeinMiner hit on every block it mined.
+    public @NotNull org.bukkit.craftbukkit.scoreboard.CraftScoreboardManager getScoreboardManager() {
         return this.scoreboardManager;
     }
 

@@ -153,7 +153,7 @@ public final class LunarArcCommandRouter {
     public static boolean dispatchNative(Server server, CommandSender sender, String line) {
         if (!(server instanceof CraftServer craftServer)) return false;
         try {
-            net.minecraft.commands.Commands commands = craftServer.getHandle().getCommands();
+            net.minecraft.commands.Commands commands = craftServer.getServer().getCommands();
             boolean known = commands.getDispatcher().getRoot().getChild(rawLabelOf(line)) != null;
             commands.performPrefixedCommand(source(craftServer, sender), line);
             return known;
@@ -167,7 +167,7 @@ public final class LunarArcCommandRouter {
         if (sender instanceof CraftPlayer player) {
             return player.getHandle().createCommandSourceStack();
         }
-        return server.getHandle().createCommandSourceStack();
+        return server.getServer().createCommandSourceStack();
     }
 
 

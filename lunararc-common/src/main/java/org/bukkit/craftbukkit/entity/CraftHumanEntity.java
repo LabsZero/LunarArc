@@ -72,7 +72,7 @@ public abstract class CraftHumanEntity extends CraftLivingEntity {
             return false;
         }
         try {
-            net.minecraft.server.players.PlayerList playerList = server.getHandle().getPlayerList();
+            net.minecraft.server.players.PlayerList playerList = server.getServer().getPlayerList();
             if (playerList != null) {
                 return playerList.isOp(handle.getGameProfile());
             }
@@ -85,9 +85,9 @@ public abstract class CraftHumanEntity extends CraftLivingEntity {
     public void setOp(boolean value) {
         if (value == isOp()) return;
         try {
-            Object playerList = server.getHandle().getPlayerList();
+            Object playerList = server.getServer().getPlayerList();
             if (value) {
-                int opLevel = server.getHandle().getOperatorUserPermissionLevel();
+                int opLevel = server.getServer().getOperatorUserPermissionLevel();
                 boolean bypass = (boolean) playerList.getClass().getMethod("canBypassPlayerLimit", com.mojang.authlib.GameProfile.class).invoke(playerList, getHandle().getGameProfile());
                 Object entry = Class.forName("net.minecraft.server.players.ServerOpListEntry")
                         .getConstructor(com.mojang.authlib.GameProfile.class, int.class, boolean.class)

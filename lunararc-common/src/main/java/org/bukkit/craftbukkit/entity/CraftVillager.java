@@ -31,7 +31,7 @@ public final class CraftVillager extends CraftAbstractVillager implements Villag
     @Override
     public Profession getProfession() {
         net.minecraft.world.entity.npc.VillagerProfession nms = getHandle().getVillagerData().getProfession();
-        ResourceLocation key = server.getHandle().registryAccess().registryOrThrow(Registries.VILLAGER_PROFESSION).getKey(nms);
+        ResourceLocation key = server.getServer().registryAccess().registryOrThrow(Registries.VILLAGER_PROFESSION).getKey(nms);
         if (key == null) throw new IllegalStateException("Villager profession is not registry-backed");
         Profession profession = Registry.VILLAGER_PROFESSION.get(new NamespacedKey(key.getNamespace(), key.getPath()));
         if (profession == null) throw new IllegalStateException("No Bukkit profession for " + key);
@@ -42,7 +42,7 @@ public final class CraftVillager extends CraftAbstractVillager implements Villag
     public void setProfession(Profession profession) {
         Objects.requireNonNull(profession, "profession");
         NamespacedKey key = profession.getKey();
-        net.minecraft.world.entity.npc.VillagerProfession nms = server.getHandle().registryAccess().registryOrThrow(Registries.VILLAGER_PROFESSION)
+        net.minecraft.world.entity.npc.VillagerProfession nms = server.getServer().registryAccess().registryOrThrow(Registries.VILLAGER_PROFESSION)
                 .get(ResourceLocation.fromNamespaceAndPath(key.getNamespace(), key.getKey()));
         if (nms == null) throw new IllegalArgumentException("Unknown villager profession " + key);
         getHandle().setVillagerData(getHandle().getVillagerData().setProfession(nms));
@@ -51,7 +51,7 @@ public final class CraftVillager extends CraftAbstractVillager implements Villag
     @Override
     public Type getVillagerType() {
         net.minecraft.world.entity.npc.VillagerType nms = getHandle().getVillagerData().getType();
-        ResourceLocation key = server.getHandle().registryAccess().registryOrThrow(Registries.VILLAGER_TYPE).getKey(nms);
+        ResourceLocation key = server.getServer().registryAccess().registryOrThrow(Registries.VILLAGER_TYPE).getKey(nms);
         if (key == null) throw new IllegalStateException("Villager type is not registry-backed");
         Type type = Registry.VILLAGER_TYPE.get(new NamespacedKey(key.getNamespace(), key.getPath()));
         if (type == null) throw new IllegalStateException("No Bukkit villager type for " + key);
@@ -62,7 +62,7 @@ public final class CraftVillager extends CraftAbstractVillager implements Villag
     public void setVillagerType(Type type) {
         Objects.requireNonNull(type, "type");
         NamespacedKey key = type.getKey();
-        net.minecraft.world.entity.npc.VillagerType nms = server.getHandle().registryAccess().registryOrThrow(Registries.VILLAGER_TYPE)
+        net.minecraft.world.entity.npc.VillagerType nms = server.getServer().registryAccess().registryOrThrow(Registries.VILLAGER_TYPE)
                 .get(ResourceLocation.fromNamespaceAndPath(key.getNamespace(), key.getKey()));
         if (nms == null) throw new IllegalArgumentException("Unknown villager type " + key);
         getHandle().setVillagerData(getHandle().getVillagerData().setType(nms));

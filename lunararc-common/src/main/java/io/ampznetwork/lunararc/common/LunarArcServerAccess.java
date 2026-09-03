@@ -31,7 +31,7 @@ public final class LunarArcServerAccess {
     }
 
     public static MinecraftServer getMinecraftServer() {
-        return getCraftServer().getHandle();
+        return getCraftServer().getServer();
     }
 
     /**

@@ -41,7 +41,7 @@ public class RestartCommand extends Command {
         if (server instanceof org.bukkit.craftbukkit.CraftServer craftServer) {
             // Onto the server thread: the console and RCON both dispatch off it, and disconnecting
             // players from another thread is exactly what AsyncCatcher exists to refuse.
-            craftServer.getHandle().execute(() -> restart(sender));
+            craftServer.getServer().execute(() -> restart(sender));
         } else {
             restart(sender);
         }

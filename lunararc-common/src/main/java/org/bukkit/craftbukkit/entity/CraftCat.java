@@ -38,7 +38,7 @@ public final class CraftCat extends CraftTameableAnimal implements Cat {
         NamespacedKey key = type.getKey();
         ResourceLocation location = ResourceLocation.fromNamespaceAndPath(key.getNamespace(), key.getKey());
         ResourceKey<CatVariant> resourceKey = ResourceKey.create(Registries.CAT_VARIANT, location);
-        Holder.Reference<CatVariant> holder = server.getHandle().registryAccess().registryOrThrow(Registries.CAT_VARIANT)
+        Holder.Reference<CatVariant> holder = server.getServer().registryAccess().registryOrThrow(Registries.CAT_VARIANT)
                 .getHolder(resourceKey).orElseThrow(() -> new IllegalArgumentException("Unknown cat type " + key));
         getHandle().setVariant(holder);
     }

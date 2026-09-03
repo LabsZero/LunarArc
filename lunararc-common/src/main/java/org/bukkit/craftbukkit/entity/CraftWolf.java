@@ -80,7 +80,7 @@ public final class CraftWolf extends CraftTameableAnimal implements Wolf {
         NamespacedKey key = variant.getKey();
         ResourceLocation location = ResourceLocation.fromNamespaceAndPath(key.getNamespace(), key.getKey());
         ResourceKey<WolfVariant> resourceKey = ResourceKey.create(Registries.WOLF_VARIANT, location);
-        Holder.Reference<WolfVariant> holder = server.getHandle().registryAccess().registryOrThrow(Registries.WOLF_VARIANT)
+        Holder.Reference<WolfVariant> holder = server.getServer().registryAccess().registryOrThrow(Registries.WOLF_VARIANT)
                 .getHolder(resourceKey).orElseThrow(() -> new IllegalArgumentException("Unknown wolf variant " + key));
         getHandle().setVariant(holder);
     }
