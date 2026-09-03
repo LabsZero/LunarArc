@@ -38,6 +38,7 @@ public abstract class MinecraftServerMixin_Branding {
 
     @Inject(method = "runServer", at = @At("HEAD"), require = 0)
     private void lunararc$announceBuild(CallbackInfo ci) {
-        LUNARARC_BRANDING_LOGGER.info("{}", LunarArcVersionInfo.brandingLine());
+        LUNARARC_BRANDING_LOGGER.info("{} | debug channels: {}", LunarArcVersionInfo.brandingLine(),
+                io.ampznetwork.lunararc.common.LunarArcDebug.enabledChannels());
     }
 }

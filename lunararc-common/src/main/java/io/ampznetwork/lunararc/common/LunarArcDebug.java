@@ -158,6 +158,23 @@ public final class LunarArcDebug {
         write("entity", format, args);
     }
 
+    /**
+     * The enabled channels, or "none", for reporting alongside the build banner.
+     *
+     * <p>Whether -Dlunararc.debug reached the server JVM at all has cost more than one round trip to
+     * establish. The banner is a line already known to appear, so putting the answer on it removes
+     * that question from every future one.</p>
+     */
+    public static String enabledChannels() {
+        StringBuilder enabled = new StringBuilder();
+        if (REFLECT) enabled.append("reflect ");
+        if (REMAP) enabled.append("remap ");
+        if (CLASSLOAD) enabled.append("classload ");
+        if (ENTITY) enabled.append("entity ");
+        if (FLUID) enabled.append("fluid ");
+        return enabled.isEmpty() ? "none" : enabled.toString().trim().replace(' ', ',');
+    }
+
     /** Log on the fluid channel. Call behind {@code if (LunarArcDebug.FLUID)}. */
     public static void fluid(String format, Object... args) {
         write("fluid", format, args);

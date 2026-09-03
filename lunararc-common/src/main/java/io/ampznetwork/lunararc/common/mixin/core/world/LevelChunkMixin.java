@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -22,8 +21,6 @@ public abstract class LevelChunkMixin implements io.ampznetwork.lunararc.common.
     public abstract BlockState setBlockState(BlockPos pos, BlockState state, boolean isMoving);
 
     @Unique
-    private int lunararc$suppressOnPlaceDepth;
-    @Unique
     private boolean lunararc$needsDecoration;
 
     @Unique
@@ -35,37 +32,20 @@ public abstract class LevelChunkMixin implements io.ampznetwork.lunararc.common.
         return this.lunararc$persistentData;
     }
 
+    /**
+     * CraftBukkit's four-argument setBlockState, kept so donated Paper bytecode that calls it links.
+     *
+     * <p>{@code doPlace} is not honoured. It exists in CraftBukkit to suppress {@code onPlace} while
+     * a BlockPlaceEvent is being captured, and LunarArc has no such capture - nothing here sets
+     * captureBlockStates, and nothing in this project calls this overload at all. Honouring it
+     * needed a {@code @Redirect} on {@code BlockState#onPlace} inside {@code setBlockState}, which
+     * put an exclusive injector, one no other mod could then claim, on the single hottest
+     * block-mutation path in the game to serve a parameter no caller passes. That trade was not
+     * worth making, so the redirect is gone and every placement runs {@code onPlace} - which is
+     * also what schedules a fluid's first tick and makes a falling block fall.</p>
+     */
     public BlockState setBlockState(BlockPos pos, BlockState state, boolean isMoving, boolean doPlace) {
-        if (doPlace) {
-            return this.setBlockState(pos, state, isMoving);
-        }
-        this.lunararc$suppressOnPlaceDepth++;
-        try {
-            return this.setBlockState(pos, state, isMoving);
-        } finally {
-            this.lunararc$suppressOnPlaceDepth--;
-        }
-    }
-
-    @Redirect(
-            method = "setBlockState(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Z)Lnet/minecraft/world/level/block/state/BlockState;",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/block/state/BlockState;onPlace(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Z)V"),
-            require = 0)
-    private void lunararc$conditionallyRunOnPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
-        boolean run = this.lunararc$suppressOnPlaceDepth == 0;
-        // onPlace is where LiquidBlock schedules a fluid's first tick, so suppressing it here is
-        // one of the few ways placed water can end up sitting still forever. Traced on the fluid
-        // channel for exactly that: a placement whose onPlace never ran never gets a tick, and
-        // nothing further down the chain can say so.
-        if (io.ampznetwork.lunararc.common.LunarArcDebug.FLUID && !state.getFluidState().isEmpty()) {
-            io.ampznetwork.lunararc.common.LunarArcDebug.fluid("onPlace {} at {} run={} (suppressDepth={})",
-                    state.getFluidState().getType(), pos, run, this.lunararc$suppressOnPlaceDepth);
-        }
-        if (run) {
-            state.onPlace(level, pos, oldState, movedByPiston);
-        }
+        return this.setBlockState(pos, state, isMoving);
     }
 
     @Inject(method = "<init>(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ProtoChunk;Lnet/minecraft/world/level/chunk/LevelChunk$PostLoadProcessor;)V",
