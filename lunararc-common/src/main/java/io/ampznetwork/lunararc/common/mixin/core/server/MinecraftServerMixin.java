@@ -304,7 +304,6 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         io.ampznetwork.lunararc.common.LunarArcPaths.initialize();
         io.ampznetwork.lunararc.common.LunarArcPaths.platformRuntime(
                 io.ampznetwork.lunararc.common.mod.server.LunarArcServer.platformName());
-        io.ampznetwork.lunararc.common.telemetry.BlockMedicReporter.startConsoleCapture();
         LunarArcConfig.load();
         io.ampznetwork.lunararc.api.LunarArcServer.init();
     }
@@ -320,7 +319,6 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         }
 
         CraftServer craftServer = this.lunararc$requireCraftServer();
-        io.ampznetwork.lunararc.common.server.LunarArcBuiltinCommands.register(craftServer);
         this.lunararc$bukkitStartupStartedNanos = System.nanoTime();
 
         // Real, confirmed by bootstrap/build.gradle's own verifyNeoforgeHybridShape task: the
