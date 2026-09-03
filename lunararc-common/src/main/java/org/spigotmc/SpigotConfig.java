@@ -17,11 +17,27 @@ public final class SpigotConfig {
     public static boolean lateBind = false;
     public static boolean restartOnCrash = false;
     public static String restartScript = "./start.sh";
+    public static String restartMessage = "Server is restarting";
     public static int timeoutTime = 60;
     public static int nettyThreads = 4;
     public static int userCacheCap = 1000;
     public static double movedWronglyThreshold = 0.0625D;
     public static double movedTooQuicklyMultiplier = 10.0D;
+
+    /**
+     * The commands Spigot contributes to the Bukkit command map, keyed by label.
+     *
+     * <p>Spigot keeps its built-in commands here and CraftBukkit registers the map during the
+     * STARTUP plugin phase. LunarArc had neither, so {@code /restart} did not exist - typing it
+     * reached brigadier, which has no vanilla command by that name, and the operator got silence.
+     * A plugin or a panel that shells out to {@code restart} was equally out of luck.</p>
+     */
+    public static final java.util.Map<String, org.bukkit.command.Command> commands =
+            new java.util.LinkedHashMap<>();
+
+    static {
+        commands.put("restart", new RestartCommand("restart"));
+    }
 
     private SpigotConfig() {
     }
@@ -55,6 +71,7 @@ public final class SpigotConfig {
             lateBind = config.getBoolean("settings.late-bind", lateBind);
             restartOnCrash = config.getBoolean("settings.restart-on-crash", restartOnCrash);
             restartScript = config.getString("settings.restart-script", restartScript);
+            restartMessage = config.getString("messages.restart", restartMessage);
             timeoutTime = config.getInt("settings.timeout-time", timeoutTime);
             nettyThreads = config.getInt("settings.netty-threads", nettyThreads);
             userCacheCap = config.getInt("settings.user-cache-size", userCacheCap);

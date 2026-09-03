@@ -19,6 +19,22 @@ public class Launcher {
                     java.util.List<String> cmd = new java.util.ArrayList<>();
                     cmd.add(LauncherUtils.getJavaExecutable());
                     cmd.add("-javaagent:" + self);
+
+                    // The JVM the operator started is not the one that ends up running the game:
+                    // this relaunch exists only to get the agent attached, and on the same-JVM
+                    // path (NeoForge) the child started here *is* the server. Everything the
+                    // operator put on the command line - -Xmx9G, -Dlunararc.debug=fluid, GC flags -
+                    // used to stop here, silently. A server asked for nine gigabytes ran on
+                    // HotSpot's default quarter-of-RAM, and a debug channel switched on at the
+                    // command line never reached the code that reads the property, which is why
+                    // -Dlunararc.debug never produced a line of output however hard it was tried.
+                    java.util.List<String> jvmArguments = LauncherUtils.serverJvmArguments();
+                    if (!jvmArguments.isEmpty()) {
+                        System.out.println("[LunarArc] Passing JVM arguments through to the server: "
+                                + String.join(" ", jvmArguments));
+                    }
+                    cmd.addAll(jvmArguments);
+
                     cmd.add("-jar");
                     cmd.add(self.toString());
                     java.util.Collections.addAll(cmd, args);

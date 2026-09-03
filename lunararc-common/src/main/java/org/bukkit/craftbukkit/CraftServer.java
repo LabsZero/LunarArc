@@ -496,6 +496,15 @@ public class CraftServer implements Server {
     public void enablePlugins(org.bukkit.plugin.PluginLoadOrder type) {
         io.ampznetwork.lunararc.common.mod.util.log.LunarArcConsole.info(logger, "Enabling Bukkit plugins (Order: " + type + ")...");
 
+        if (type == org.bukkit.plugin.PluginLoadOrder.STARTUP) {
+            // Where CraftBukkit registers Spigot's own commands, before any plugin can claim the
+            // labels. Without this LunarArc had no /restart at all.
+            for (java.util.Map.Entry<String, org.bukkit.command.Command> entry
+                    : org.spigotmc.SpigotConfig.commands.entrySet()) {
+                commandMap.register(entry.getKey(), "spigot", entry.getValue());
+            }
+        }
+
         simplePluginManager.enablePlugins(type);
     }
 

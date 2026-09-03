@@ -80,6 +80,17 @@ public final class LunarArcDebug {
      */
     public static final boolean FLUID;
 
+    /**
+     * Commands arriving from the console, and what LunarArc did with each one.
+     *
+     * <p>"stop does nothing at the console" has three possible shapes - the line never reaches the
+     * server at all, it reaches it and Bukkit refuses it, or it is dispatched and the command
+     * itself does nothing - and the console gives no way to tell them apart. One line per console
+     * command, recorded where the server first sees it, separates the first case from the other
+     * two straight away.</p>
+     */
+    public static final boolean COMMAND;
+
     private static BufferedWriter writer;
     private static boolean unusable;
 
@@ -96,14 +107,16 @@ public final class LunarArcDebug {
         CLASSLOAD = all || channels.contains("classload");
         ENTITY = all || channels.contains("entity");
         FLUID = all || channels.contains("fluid");
+        COMMAND = all || channels.contains("command");
 
-        if (REFLECT || REMAP || CLASSLOAD || ENTITY || FLUID) {
+        if (REFLECT || REMAP || CLASSLOAD || ENTITY || FLUID || COMMAND) {
             StringBuilder enabled = new StringBuilder();
             if (REFLECT) enabled.append(" reflect");
             if (REMAP) enabled.append(" remap");
             if (CLASSLOAD) enabled.append(" classload");
             if (ENTITY) enabled.append(" entity");
             if (FLUID) enabled.append(" fluid");
+            if (COMMAND) enabled.append(" command");
 
             // Opened here rather than on the first trace line. Lazily creating the file made an
             // absent file mean two different things - the channel never turned on, or it turned on
@@ -129,7 +142,7 @@ public final class LunarArcDebug {
             // property at all: both produced silence, and the only symptom was a trace file that
             // never appeared. Say which names exist instead.
             String complaint = "[LunarArc/Debug] -Dlunararc.debug=" + raw + " names no known channel."
-                    + " Known channels: reflect, remap, classload, entity, fluid, or all.";
+                    + " Known channels: reflect, remap, classload, entity, fluid, command, or all.";
             LOGGER.warn(complaint);
             System.out.println(complaint);
         }
@@ -172,7 +185,13 @@ public final class LunarArcDebug {
         if (CLASSLOAD) enabled.append("classload ");
         if (ENTITY) enabled.append("entity ");
         if (FLUID) enabled.append("fluid ");
+        if (COMMAND) enabled.append("command ");
         return enabled.isEmpty() ? "none" : enabled.toString().trim().replace(' ', ',');
+    }
+
+    /** Log on the command channel. Call behind {@code if (LunarArcDebug.COMMAND)}. */
+    public static void command(String format, Object... args) {
+        write("command", format, args);
     }
 
     /** Log on the fluid channel. Call behind {@code if (LunarArcDebug.FLUID)}. */
