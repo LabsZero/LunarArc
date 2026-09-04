@@ -123,6 +123,10 @@ public abstract class ServerPlayerGameModeMixin implements ServerPlayerGameModeB
                         this.player.serverLevel(), pos));
                 ci.cancel();
             }
+            // Real Paper's onPlayerLeftClickBlock anti-xray hook: starting to break a block near a
+            // hidden ore reveals it, the same as actually breaking a neighbouring block would.
+            io.ampznetwork.lunararc.common.server.LunarArcAntiXrayEngine.forLevel(this.player.serverLevel())
+                    .onBlockInteractStart(this.player.serverLevel(), pos);
         } finally {
             io.ampznetwork.lunararc.common.server.LunarArcContext.clear();
         }

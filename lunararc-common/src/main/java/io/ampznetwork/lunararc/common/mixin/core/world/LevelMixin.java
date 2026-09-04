@@ -1,9 +1,12 @@
 package io.ampznetwork.lunararc.common.mixin.core.world;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import io.ampznetwork.lunararc.common.LunarArcServerAccess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import org.bukkit.craftbukkit.CraftServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -14,6 +17,29 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class LevelMixin implements io.ampznetwork.lunararc.common.bridge.LevelBridge {
 
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("LunarArc/LevelMixin");
+
+    /**
+     * Real Paper's anti-xray reveal trigger, verified against
+     * {@code patches/server/0992-Anti-Xray.patch}'s {@code Level#setBlock} hook - see
+     * {@link io.ampznetwork.lunararc.common.server.LunarArcAntiXrayEngine#onBlockChange} for the
+     * actual algorithm. Wraps the whole call rather than a HEAD/RETURN pair so the "before" state
+     * lives in a local variable instead of shared per-thread state - a block's own
+     * {@code onPlace}/shape-update side effects can synchronously call {@code setBlock} again on the
+     * same thread before this call returns, and a local variable naturally gets a fresh copy per
+     * call frame where a shared field or ThreadLocal would need its own reentrancy bookkeeping.
+     */
+    @WrapMethod(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z", require = 0)
+    private boolean lunararc$antiXrayOnSetBlock(
+            BlockPos pos, BlockState newState, int flags, int maxUpdateDepth, Operation<Boolean> original) {
+        Level level = (Level) (Object) this;
+        BlockState oldState = level instanceof ServerLevel ? level.getBlockState(pos) : null;
+        boolean result = original.call(pos, newState, flags, maxUpdateDepth);
+        if (oldState != null) {
+            io.ampznetwork.lunararc.common.server.LunarArcAntiXrayEngine.forLevel((ServerLevel) level)
+                    .onBlockChange((ServerLevel) level, pos, newState, oldState);
+        }
+        return result;
+    }
 
     @Override
     public org.bukkit.craftbukkit.CraftWorld lunararc$getWorld() {
