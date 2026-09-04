@@ -31,7 +31,7 @@ jobs:
           echo "version=$java_runtime" >> "$GITHUB_OUTPUT"
 
       - name: Set up required JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           java-version: '${{ steps.java-runtime.outputs.version }}'
           distribution: 'temurin'
@@ -41,7 +41,7 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Cache Loom / compile reference setup
+      - name: Cache Loom / Paper setup
         uses: actions/cache@v4
         with:
           path: |
@@ -59,16 +59,48 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build & Assemble
-        run: ./gradlew clean preparePaperCompileReference forgeBuild collectForge --no-daemon --stacktrace
+      - name: Build project and all four hybrid JARs
+        run: |
+          ./gradlew \
+            setupPaperServer \
+            build \
+            :bootstrap:verifyNeoforgePaperSurface \
+            :bootstrap:verifyForgePaperSurface \
+            :bootstrap:verifyFabricPaperSurface \
+            :bootstrap:verifyQuiltPaperSurface \
+            --no-daemon \
+            --stacktrace
 
-      - name: List Artifacts
-        run: ls -R build/libs
+      - name: Validate all loader artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for loader in neoforge forge fabric quilt; do
+            if ! compgen -G "bootstrap/build/libs/lunararc-${loader}-*.jar" > /dev/null; then
+              echo "::error::Missing LunarArc ${loader} JAR"
+              echo "Contents of bootstrap/build/libs:"
+              ls -lah bootstrap/build/libs || true
+              exit 1
+            fi
+          done
+
+          echo "All four LunarArc loader JARs are present:"
+          ls -lah bootstrap/build/libs/lunararc-*.jar
+
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          mkdir -p build/artifacts
+          cp bootstrap/build/libs/lunararc-neoforge-*.jar build/artifacts/
+          cp bootstrap/build/libs/lunararc-forge-*.jar build/artifacts/
+          cp bootstrap/build/libs/lunararc-fabric-*.jar build/artifacts/
+          cp bootstrap/build/libs/lunararc-quilt-*.jar build/artifacts/
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: LunarArc
-          path: build/libs
-
-
+          path: build/artifacts/*.jar
+          if-no-files-found: error
+          retention-days: 90
