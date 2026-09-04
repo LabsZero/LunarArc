@@ -4,13 +4,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.chunk.PalettedContainer;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -139,63 +137,35 @@ public final class LunarArcAntiXrayEngine {
         return state.blocksMotion();
     }
 
-    private BlockState replacementFor(Level level, int sectionBottomY) {
-        return switch (LunarArcDynamicBukkitEnums.environment(level.dimension().location())) {
-            case NETHER -> Blocks.NETHERRACK.defaultBlockState();
-            case THE_END -> Blocks.END_STONE.defaultBlockState();
-            default -> sectionBottomY < 0 ? Blocks.DEEPSLATE.defaultBlockState() : Blocks.STONE.defaultBlockState();
-        };
-    }
-
     /**
-     * Builds a temporary, obfuscated copy of {@code chunk}'s sections for sending over the network.
-     * Returns the chunk's own real section array unchanged when disabled, or when none of its
-     * sections fall under {@code max-block-height} - the common case above ground, where this must
-     * add no cost at all.
+     * DISABLED pending a redesign. Always returns the
+     * chunk's own real sections unmodified; nothing is hidden right now.
+     *
+     * <p>The obfuscated copy this used to build was sized however a fresh
+     * {@code PalettedContainer} populated via 4096 {@code set(x,y,z,value)} calls happened to come
+     * out - there is no way to control the bit-width it chooses through that public API, only to
+     * observe what it picked afterward. {@code ClientboundLevelChunkPacketData}'s constructor
+     * pre-sizes the network buffer from the chunk's real, unobfuscated sections before this method
+     * ever runs - only the one {@code getSections()} call inside {@code extractChunkData} is
+     * redirected, not whatever separate size-estimation call happens first - so a rebuilt section
+     * whose palette needed a wider bit-width than the original's crashed the server outright:
+     * {@code IndexOutOfBoundsException: writerIndex(6378) + minWritableBytes(1) exceeds
+     * maxCapacity(6378)} while writing a chunk on entering a modded dimension, confirmed in the
+     * crash report with this class's own mixin in the call stack. A heavily-modded dimension is
+     * exactly where this was likeliest to happen - more distinct registered block states server-wide
+     * pushes more sections toward the palette strategies where bit-width is sensitive to exactly
+     * which values got inserted and in what order.</p>
+     *
+     * <p>Fixing this for real needs either the buffer size estimate and the actual write to agree
+     * (redirecting whatever {@code calculateChunkSize} does internally too, which was not
+     * verifiable against real source here) or a substitution technique that provably cannot need
+     * more bits than the section already used (real Paper's own raw palette-index bit-swap, which
+     * needs lower-level access than the public {@code PalettedContainer} API exposes). Guessing
+     * either under the same "cannot compile-test, one bad guess crashes the server" constraint that
+     * produced this bug once already is not an acceptable way to re-enable it.</p>
      */
     public LevelChunkSection[] obfuscateForSend(LevelChunk chunk) {
-        LevelChunkSection[] original = chunk.getSections();
-        if (!enabled) return original;
-
-        Level level = chunk.getLevel();
-        int minBuildHeight = level.getMinBuildHeight();
-        LevelChunkSection[] result = null;
-
-        for (int i = 0; i < original.length; i++) {
-            LevelChunkSection section = original[i];
-            if (section == null) continue;
-            int bottomY = (i << 4) + minBuildHeight;
-            if (bottomY >= maxBlockHeight) continue;
-
-            LevelChunkSection obfuscated = obfuscateSection(section, level, bottomY);
-            if (obfuscated == null) continue;
-            if (result == null) result = original.clone();
-            result[i] = obfuscated;
-        }
-
-        return result == null ? original : result;
-    }
-
-    private LevelChunkSection obfuscateSection(LevelChunkSection section, Level level, int bottomY) {
-        BlockState replacement = replacementFor(level, bottomY);
-        boolean changedAny = false;
-        PalettedContainer<BlockState> states = new PalettedContainer<>(
-                net.minecraft.world.level.block.Block.BLOCK_STATE_REGISTRY, Blocks.AIR.defaultBlockState(),
-                PalettedContainer.Strategy.SECTION_STATES);
-
-        for (int x = 0; x < 16; x++) {
-            for (int y = 0; y < 16; y++) {
-                for (int z = 0; z < 16; z++) {
-                    BlockState real = section.getStates().get(x, y, z);
-                    BlockState toWrite = isHidden(real) ? replacement : real;
-                    if (toWrite != real) changedAny = true;
-                    states.set(x, y, z, toWrite);
-                }
-            }
-        }
-
-        if (!changedAny) return null;
-        return new LevelChunkSection(states, section.getBiomes());
+        return chunk.getSections();
     }
 
     public void onBlockChange(ServerLevel level, BlockPos pos, BlockState newState, BlockState oldState) {
