@@ -384,6 +384,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
         io.ampznetwork.lunararc.common.server.LunarArcTier3RuntimeProbe.run(craftServer);
         io.ampznetwork.lunararc.common.server.LunarArcEssentialsItemBridge.populateModdedItems(craftServer);
+        io.ampznetwork.lunararc.common.server.LunarArcAntiXrayOreBridge.mergeModdedOres(craftServer);
 
         long startupMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - this.lunararc$bukkitStartupStartedNanos);
         LunarArcConsole.success(lunararc$logger, "Bukkit/Paper 1.21.1 compatibility layer ready ({}ms)", startupMillis);

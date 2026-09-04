@@ -311,7 +311,33 @@ public class CraftServer implements Server {
             paperGlobalConfig.options().copyDefaults(true);
             paperGlobalConfig.save(paperGlobalFile);
 
-            paperWorldConfig.addDefault("anticheat.obfuscation.items.enabled", false);
+            // Real key paths and defaults verified against Paper's own
+            // patches/server/0005-Paper-config-files.patch - "anticheat.obfuscation.items.enabled"
+            // was never a real Paper key (obfuscation.items has hide-itemmeta/hide-durability/
+            // hide-itemmeta-with-visual-effects, not a single enabled toggle), and the anti-xray
+            // section - the "hidden blocks" list - was missing entirely, which is why nothing
+            // existed for LunarArcAntiXrayOreBridge to add modded ores into.
+            paperWorldConfig.addDefault("anticheat.obfuscation.items.hide-itemmeta", false);
+            paperWorldConfig.addDefault("anticheat.obfuscation.items.hide-durability", false);
+            paperWorldConfig.addDefault("anticheat.obfuscation.items.hide-itemmeta-with-visual-effects", false);
+            paperWorldConfig.addDefault("anticheat.anti-xray.enabled", false);
+            paperWorldConfig.addDefault("anticheat.anti-xray.engine-mode", 1);
+            paperWorldConfig.addDefault("anticheat.anti-xray.max-block-height", 64);
+            paperWorldConfig.addDefault("anticheat.anti-xray.update-radius", 2);
+            paperWorldConfig.addDefault("anticheat.anti-xray.lava-obscures", false);
+            paperWorldConfig.addDefault("anticheat.anti-xray.use-permission", false);
+            paperWorldConfig.addDefault("anticheat.anti-xray.hidden-blocks", new java.util.ArrayList<>(java.util.List.of(
+                    "copper_ore", "deepslate_copper_ore", "raw_copper_block",
+                    "gold_ore", "deepslate_gold_ore",
+                    "iron_ore", "deepslate_iron_ore", "raw_iron_block",
+                    "coal_ore", "deepslate_coal_ore",
+                    "lapis_ore", "deepslate_lapis_ore",
+                    "mossy_cobblestone", "obsidian", "chest",
+                    "diamond_ore", "deepslate_diamond_ore",
+                    "redstone_ore", "deepslate_redstone_ore",
+                    "clay", "emerald_ore", "deepslate_emerald_ore", "ender_chest")));
+            paperWorldConfig.addDefault("anticheat.anti-xray.replacement-blocks",
+                    new java.util.ArrayList<>(java.util.List.of("stone", "oak_planks", "deepslate")));
             paperWorldConfig.addDefault("entities.spawning.despawn-ranges.ambient.hard", 128);
             paperWorldConfig.addDefault("entities.spawning.despawn-ranges.ambient.soft", 32);
             paperWorldConfig.options().copyDefaults(true);
