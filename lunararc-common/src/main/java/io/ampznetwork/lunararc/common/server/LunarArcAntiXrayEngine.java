@@ -213,7 +213,12 @@ public final class LunarArcAntiXrayEngine {
 
     private void revealNear(ServerLevel level, BlockPos pos) {
         for (BlockPos neighbor : neighborsWithinTwo(pos)) {
-            BlockState state = level.getBlockStateIfLoaded(neighbor);
+            // getBlockStateIfLoaded is a Paper addition, not vanilla - getChunkNow is the plain
+            // vanilla way to read a chunk only if it is already loaded, without loading/generating
+            // it (confirmed via CraftWorld's own getChunkNow(x, z) usage).
+            net.minecraft.world.level.chunk.LevelChunk chunk =
+                    level.getChunkSource().getChunkNow(neighbor.getX() >> 4, neighbor.getZ() >> 4);
+            BlockState state = chunk == null ? null : chunk.getBlockState(neighbor);
             if (state != null && isHidden(state)) {
                 level.getChunkSource().blockChanged(neighbor);
             }
