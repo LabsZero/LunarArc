@@ -438,7 +438,24 @@ public final class PluginClassLoader extends URLClassLoader
                 || name.startsWith("net.minecraft.")
                 || name.startsWith("io.papermc.paper.")
                 || name.startsWith("com.destroystokyo.paper.")
-                || name.startsWith("net.kyori.");
+                || name.startsWith("net.kyori.")
+                // isPlatformClass's own comment explains why gson is routed through the platform
+                // backstop first - a same-name-different-loader split between it and a plugin's own
+                // bundled gson is exactly what took Essentials down with "Type 'JsonArray' is not
+                // assignable to 'JsonElement'" in onDisable(). "Preferring" the platform copy was
+                // not enough on its own: loadClass's catch at line ~110 falls back to this
+                // classloader's own six-source chain - which can find a plugin's own bundled gson -
+                // whenever the platform backstop's two sources (parent, then the mod loader) both
+                // miss, and Essentials shipping its own gson under this exact package is exactly the
+                // case where that fallback finds something. That single fallback resolving
+                // differently than every other reference already cached as the platform's copy is
+                // the split itself, not a fix for it. Being server-owned here closes that: a miss on
+                // both platform sources throws instead of silently trying a plugin-local copy, so
+                // every reference across the whole server resolves from the same source or fails
+                // together - the same guarantee this class already gives net.minecraft./org.bukkit.,
+                // and just as safe here since NeoForge's own dependency tree carries gson the same
+                // way it carries net.kyori., so the platform backstop realistically never misses.
+                || name.startsWith("com.google.gson.");
     }
 
     private ClassLoader wrapPluginLibraryLoader(ClassLoader raw, String cacheName) {
