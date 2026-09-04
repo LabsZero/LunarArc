@@ -9,7 +9,10 @@ import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.VarInsnNode;
 
+import java.util.Locale;
+import java.util.Map;
 import java.util.function.Consumer;
 
 public final class LunarArcPluginFixManager {
@@ -76,9 +79,83 @@ public final class LunarArcPluginFixManager {
                     node -> redirectMethodToGetNMSVersion(node, "getPackageVersion");
             case "com.ghostchu.quickshop.platform.spigot.AbstractSpigotPlatform" ->
                     node -> redirectMethodToGetNMSVersion(node, "getNMSVersion");
+            case "com.earth2me.essentials.items.FlatItemDb" ->
+                    LunarArcPluginFixManager::fixEssentialsModdedMaterials;
             default -> null;
         };
         return patcher == null ? clazz : patch(clazz, patcher);
+    }
+
+    private static void fixEssentialsModdedMaterials(ClassNode node) {
+        for (MethodNode method : node.methods) {
+            if (!method.name.equals("get")
+                    || !method.desc.equals("(Ljava/lang/String;Z)Lorg/bukkit/inventory/ItemStack;")) {
+                continue;
+            }
+
+            InsnList normalizeName = new InsnList();
+            normalizeName.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            normalizeName.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    Type.getInternalName(LunarArcPluginFixManager.class),
+                    "normalizeEssentialsItemName",
+                    "(Ljava/lang/String;)Ljava/lang/String;",
+                    false));
+            normalizeName.add(new VarInsnNode(Opcodes.ASTORE, 1));
+            method.instructions.insert(normalizeName);
+
+            for (AbstractInsnNode instruction : method.instructions.toArray()) {
+                if (!(instruction instanceof MethodInsnNode call)) continue;
+                if (call.getOpcode() != Opcodes.INVOKEVIRTUAL
+                        || !call.name.equals("getMaterial")
+                        || !call.desc.equals("()Lorg/bukkit/Material;")) {
+                    continue;
+                }
+
+                InsnList replacement = new InsnList();
+                replacement.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                replacement.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        Type.getInternalName(LunarArcPluginFixManager.class),
+                        "resolveEssentialsMaterial",
+                        "(Lorg/bukkit/Material;Ljava/lang/String;)Lorg/bukkit/Material;",
+                        false));
+                method.instructions.insert(call, replacement);
+                method.maxStack = Math.max(method.maxStack, 2);
+                return;
+            }
+        }
+    }
+
+    public static String normalizeEssentialsItemName(String itemName) {
+        if (itemName == null) return null;
+
+        String requested = itemName.trim().toLowerCase(Locale.ROOT);
+        if (requested.startsWith("minecraft:") || requested.indexOf(':') <= 0) return itemName;
+
+        net.minecraft.resources.ResourceLocation id =
+                net.minecraft.resources.ResourceLocation.tryParse(requested);
+        if (id == null || LunarArcDynamicBukkitEnums.material(id) == null) return itemName;
+
+        return (id.getNamespace() + "_" + id.getPath()).toLowerCase(Locale.ROOT);
+    }
+
+    public static org.bukkit.Material resolveEssentialsMaterial(org.bukkit.Material material, String itemName) {
+        if (material != null || itemName == null) return material;
+
+        String requested = itemName.trim().toLowerCase(Locale.ROOT);
+        if (requested.isEmpty()) return null;
+
+        for (Map.Entry<net.minecraft.resources.ResourceLocation, org.bukkit.Material> entry
+                : LunarArcDynamicBukkitEnums.materialsById().entrySet()) {
+            net.minecraft.resources.ResourceLocation id = entry.getKey();
+            if (id == null || "minecraft".equals(id.getNamespace())) continue;
+
+            String alias = (id.getNamespace() + "_" + id.getPath()).toLowerCase(Locale.ROOT);
+            if (alias.equals(requested)) return entry.getValue();
+        }
+
+        return null;
     }
 
     private static void removePaper0(ClassNode node) {

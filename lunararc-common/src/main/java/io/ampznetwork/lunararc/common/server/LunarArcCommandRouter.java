@@ -58,6 +58,7 @@ public final class LunarArcCommandRouter {
         server.getPluginManager().callEvent(event);
 
         if (event.isCancelled()) {
+            LunarArcCommandLogger.markCancelled();
             return PacketResult.CANCEL;
         }
 
@@ -101,33 +102,45 @@ public final class LunarArcCommandRouter {
         String line = commandLine.trim();
         if (line.isEmpty()) return false;
 
-        if (server instanceof CraftServer craftServer) {
-            HookResult hookResult = platformCommandHook.apply(craftServer, sender, line);
-            if (hookResult == null || hookResult.cancelled()) return false;
-            line = hookResult.commandLine() == null ? "" : hookResult.commandLine().trim();
-            if (line.isEmpty()) return false;
+        boolean startedSession = false;
+        if (sender instanceof Player player && !LunarArcCommandLogger.isSessionActive(player.getUniqueId())) {
+            LunarArcCommandLogger.begin(player.getUniqueId(), player.getName(), line);
+            startedSession = true;
         }
 
-        CommandMap map = server.getCommandMap();
+        try {
+            if (server instanceof CraftServer craftServer) {
+                HookResult hookResult = platformCommandHook.apply(craftServer, sender, line);
+                if (hookResult == null || hookResult.cancelled()) return false;
+                line = hookResult.commandLine() == null ? "" : hookResult.commandLine().trim();
+                if (line.isEmpty()) return false;
+            }
+
+            CommandMap map = server.getCommandMap();
 
 
-        String exactLabel = labelOf(line);
-        if (map.getCommand(exactLabel) != null) {
-            return map.dispatch(sender, line);
+            String exactLabel = labelOf(line);
+            if (map.getCommand(exactLabel) != null) {
+                return map.dispatch(sender, line);
+            }
+
+
+            if (line.startsWith("/")) {
+                line = line.substring(1).trim();
+                if (line.isEmpty()) return false;
+            }
+
+            String label = labelOf(line);
+            if (map.getCommand(label) != null) {
+                return map.dispatch(sender, line);
+            }
+
+            return dispatchNative(server, sender, line);
+        } finally {
+            if (startedSession) {
+                LunarArcCommandLogger.end();
+            }
         }
-
-
-        if (line.startsWith("/")) {
-            line = line.substring(1).trim();
-            if (line.isEmpty()) return false;
-        }
-
-        String label = labelOf(line);
-        if (map.getCommand(label) != null) {
-            return map.dispatch(sender, line);
-        }
-
-        return dispatchNative(server, sender, line);
     }
 
     /**

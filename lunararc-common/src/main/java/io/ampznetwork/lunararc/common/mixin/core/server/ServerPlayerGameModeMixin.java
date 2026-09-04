@@ -1,5 +1,7 @@
 package io.ampznetwork.lunararc.common.mixin.core.server;
 
+import io.ampznetwork.lunararc.common.bridge.ServerPlayerGameModeBridge;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerPlayerGameMode;
 import net.minecraft.world.InteractionHand;
@@ -10,18 +12,42 @@ import net.minecraft.world.phys.BlockHitResult;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ServerPlayerGameMode.class)
-public abstract class ServerPlayerGameModeMixin {
+public abstract class ServerPlayerGameModeMixin implements ServerPlayerGameModeBridge {
 
     @Shadow
     @Final
     protected ServerPlayer player;
 
+    @Unique private boolean lunararc$firedInteract;
+    @Unique private boolean lunararc$interactResult;
+    @Unique private BlockPos lunararc$interactPosition;
+    @Unique private InteractionHand lunararc$interactHand;
+    @Unique private ItemStack lunararc$interactItemStack;
+
+    @Override public boolean lunararc$firedInteract() { return this.lunararc$firedInteract; }
+    @Override public boolean lunararc$interactResult() { return this.lunararc$interactResult; }
+    @Override public BlockPos lunararc$interactPosition() { return this.lunararc$interactPosition; }
+    @Override public InteractionHand lunararc$interactHand() { return this.lunararc$interactHand; }
+    @Override public ItemStack lunararc$interactItemStack() { return this.lunararc$interactItemStack; }
+    @Override public void lunararc$clearFiredInteract() { this.lunararc$firedInteract = false; }
+
+    /**
+     * Real CraftBukkit's {@code useItemOn} fires exactly one {@code RIGHT_CLICK_BLOCK}
+     * {@link org.bukkit.event.player.PlayerInteractEvent} and records the block/hand/item it
+     * fired for, so the network-layer {@code handleUseItem} handler - which runs right after,
+     * for the same physical click, whenever this block use did not consume the interaction -
+     * can reuse the result instead of firing a second, wrongly-classified {@code RIGHT_CLICK_AIR}
+     * event. Denying {@code useInteractedBlock()} cancels the block-half of the interaction and
+     * resyncs the client; denying {@code useItemInHand()} only marks the dedup state so the
+     * item-half is skipped downstream.
+     */
     @Inject(method = "useItemOn", at = @At("HEAD"), cancellable = true)
     private void lunararc$onUseItemOn(ServerPlayer player, Level level, net.minecraft.world.item.ItemStack stack, InteractionHand hand,
             BlockHitResult hitResult, CallbackInfoReturnable<InteractionResult> cir) {
@@ -35,33 +61,33 @@ public abstract class ServerPlayerGameModeMixin {
             stack,
             hand == InteractionHand.OFF_HAND ? org.bukkit.inventory.EquipmentSlot.OFF_HAND : org.bukkit.inventory.EquipmentSlot.HAND
         );
+        if (event == null) return;
 
-        if (event != null && event.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
+        this.lunararc$firedInteract = true;
+        this.lunararc$interactResult = event.useItemInHand() == org.bukkit.event.Event.Result.DENY;
+        this.lunararc$interactPosition = hitResult.getBlockPos().immutable();
+        this.lunararc$interactHand = hand;
+        this.lunararc$interactItemStack = stack.copy();
 
-
-            cir.setReturnValue(InteractionResult.FAIL);
+        if (event.useInteractedBlock() == org.bukkit.event.Event.Result.DENY) {
+            player.connection.send(new net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(
+                    player.serverLevel(), hitResult.getBlockPos()));
+            Object bukkit = ((io.ampznetwork.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity();
+            if (bukkit instanceof org.bukkit.craftbukkit.entity.CraftPlayer craftPlayer) craftPlayer.updateInventory();
+            cir.setReturnValue(event.useItemInHand() != org.bukkit.event.Event.Result.ALLOW
+                    ? InteractionResult.SUCCESS : InteractionResult.PASS);
         }
     }
 
-    @Inject(method = "useItem", at = @At("HEAD"), cancellable = true)
+    /**
+     * No Bukkit event belongs here - real CraftBukkit's {@code useItem} is otherwise vanilla.
+     * The {@code RIGHT_CLICK_AIR}/{@code RIGHT_CLICK_BLOCK} event for this action already fired
+     * at the network layer ({@code handleUseItem}), before {@code gameMode.useItem()} was called.
+     */
+    @Inject(method = "useItem", at = @At("HEAD"))
     private void lunararc$onUseItem(ServerPlayer player, Level level, net.minecraft.world.item.ItemStack stack, InteractionHand hand,
             CallbackInfoReturnable<InteractionResult> cir) {
         io.ampznetwork.lunararc.common.server.LunarArcContext.setCurrentPlayer(player);
-
-        org.bukkit.event.player.PlayerInteractEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
-            player,
-            org.bukkit.event.block.Action.RIGHT_CLICK_AIR,
-            null,
-            null,
-            stack,
-            hand == InteractionHand.OFF_HAND ? org.bukkit.inventory.EquipmentSlot.OFF_HAND : org.bukkit.inventory.EquipmentSlot.HAND
-        );
-
-        if (event != null && event.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
-
-
-            cir.setReturnValue(InteractionResult.FAIL);
-        }
     }
 
     @Inject(method = "useItemOn", at = @At("RETURN"))
@@ -97,6 +123,10 @@ public abstract class ServerPlayerGameModeMixin {
                         this.player.serverLevel(), pos));
                 ci.cancel();
             }
+            // Real Paper's onPlayerLeftClickBlock anti-xray hook: starting to break a block near a
+            // hidden ore reveals it, the same as actually breaking a neighbouring block would.
+            io.ampznetwork.lunararc.common.server.LunarArcAntiXrayEngine.forLevel(this.player.serverLevel())
+                    .onBlockInteractStart(this.player.serverLevel(), pos);
         } finally {
             io.ampznetwork.lunararc.common.server.LunarArcContext.clear();
         }

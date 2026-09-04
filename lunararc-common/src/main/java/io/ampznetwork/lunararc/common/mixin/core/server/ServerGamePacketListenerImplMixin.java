@@ -3,8 +3,10 @@ package io.ampznetwork.lunararc.common.mixin.core.server;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 
+import io.ampznetwork.lunararc.common.LunarArcDebug;
 import io.ampznetwork.lunararc.common.LunarArcServerAccess;
 import io.ampznetwork.lunararc.common.bridge.EntityBridge;
+import io.ampznetwork.lunararc.common.server.LunarArcCommandLogger;
 import io.ampznetwork.lunararc.common.server.LunarArcCommandRouter;
 import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
@@ -41,7 +43,69 @@ public abstract class ServerGamePacketListenerImplMixin {
     public ServerPlayer player;
 
     @Unique private boolean lunararc$resyncAfterSpecialInventoryClick;
+    @Unique private InteractTraceContext lunararc$interactTrace;
 
+    @Unique
+    private static final class InteractTraceContext {
+        final String packetType;
+        final String hand;
+        final String itemId;
+        final String hitResult;
+        final String action;
+        final boolean eventCancelled;
+        final String useItemInHand;
+        final boolean firedInteract;
+        final boolean handleUseItemContinues;
+
+        InteractTraceContext(String packetType, String hand, String itemId, String hitResult,
+                             String action, boolean eventCancelled, String useItemInHand,
+                             boolean firedInteract, boolean handleUseItemContinues) {
+            this.packetType = packetType;
+            this.hand = hand;
+            this.itemId = itemId;
+            this.hitResult = hitResult;
+            this.action = action;
+            this.eventCancelled = eventCancelled;
+            this.useItemInHand = useItemInHand;
+            this.firedInteract = firedInteract;
+            this.handleUseItemContinues = handleUseItemContinues;
+        }
+
+        void log(boolean useItemCalled, String interactionResult, boolean usingBefore, boolean usingAfter) {
+            LunarArcDebug.interact("packet={} hand={} item={} hitResult={} action={} cancelled={} useItemInHand={} firedInteract={} continues={} useItemCalled={} result={} isUsingItem(before={}, after={})",
+                    packetType, hand, itemId, hitResult, action, eventCancelled, useItemInHand,
+                    firedInteract, handleUseItemContinues, useItemCalled, interactionResult,
+                    usingBefore, usingAfter);
+        }
+    }
+
+    /**
+     * Chat, dispatched through both the legacy event and Paper's real one.
+     *
+     * <p>This used to fire only {@link AsyncPlayerChatEvent} - the pre-Adventure, printf-style
+     * event nothing current is written against. A rank/chat plugin built on
+     * {@link io.papermc.paper.event.player.AsyncChatEvent}, which is what LuckPerms-integrated
+     * chat formatters and every current EssentialsX-adjacent chat plugin actually listen for,
+     * never saw the message at all: its listener simply never ran, so its {@code ChatRenderer} -
+     * the thing that would have added the rank's color and prefix/suffix - was never consulted.
+     * What reached players was this method's own fallback formatting, which knows nothing about
+     * ranks.</p>
+     *
+     * <p>There was a second bug hiding behind the first: the fallback only fired, and only then
+     * cancelled the vanilla broadcast, when the legacy event's format, message or recipients had
+     * actually changed. A server with nothing listening to the legacy event - true of any server
+     * whose chat plugin is written against the modern one, which describes most of them today -
+     * took neither branch, so vanilla's own broadcast ran unformatted and un-ranked underneath.</p>
+     *
+     * <p>The legacy event still fires first, in the order real Paper fires it, so a plugin that
+     * only knows the old API keeps working and can still reshape the message or veto it outright.
+     * Its result feeds into the modern event as Paper's own {@code ChatProcessor} does: an
+     * unchanged legacy format keeps {@link io.papermc.paper.chat.ChatRenderer#defaultRenderer()},
+     * a changed one is wrapped as a renderer that reproduces the exact legacy substitution
+     * ({@code String.format(format, displayName, message)}) plugins wrote against. From there this
+     * always takes over the broadcast - real Paper never falls through to vanilla's own dispatch
+     * once its event pipeline has run, and neither does this.</p>
+     */
     @Inject(
             method = "broadcastChatMessage(Lnet/minecraft/network/chat/PlayerChatMessage;)V",
             at = @At("HEAD"),
@@ -54,29 +118,105 @@ public abstract class ServerGamePacketListenerImplMixin {
         if (!(bukkit instanceof Player bukkitPlayer)) {
             throw new IllegalStateException("ServerPlayer bridge did not expose a Bukkit Player");
         }
+        boolean async = !this.player.server.isSameThread();
+        String originalMessage = message.signedContent();
 
         Set<Player> recipients = new LinkedHashSet<>(craftServer.getOnlinePlayers());
-        Set<Player> originalRecipients = Set.copyOf(recipients);
-        String originalMessage = message.signedContent();
-        AsyncPlayerChatEvent event = new AsyncPlayerChatEvent(
-                !this.player.server.isSameThread(), bukkitPlayer, originalMessage, recipients);
-        String originalFormat = event.getFormat();
-        craftServer.getPluginManager().callEvent(event);
-
-        if (event.isCancelled()) {
+        AsyncPlayerChatEvent legacyEvent = new AsyncPlayerChatEvent(async, bukkitPlayer, originalMessage, recipients);
+        String legacyDefaultFormat = legacyEvent.getFormat();
+        craftServer.getPluginManager().callEvent(legacyEvent);
+        if (legacyEvent.isCancelled()) {
             ci.cancel();
             return;
         }
 
-        if (!originalMessage.equals(event.getMessage())
-                || !originalFormat.equals(event.getFormat())
-                || !originalRecipients.equals(event.getRecipients())) {
-            String formatted = String.format(event.getFormat(), bukkitPlayer.getDisplayName(), event.getMessage());
-            for (Player recipient : event.getRecipients()) {
-                recipient.sendMessage(formatted);
-            }
-            craftServer.getConsoleSender().sendMessage(formatted);
+        boolean legacyMessageChanged = !originalMessage.equals(legacyEvent.getMessage());
+        boolean legacyFormatChanged = !legacyDefaultFormat.equals(legacyEvent.getFormat());
+
+        net.kyori.adventure.text.Component sourceDisplayName = bukkitPlayer.displayName();
+        net.kyori.adventure.text.Component originalComponent = net.kyori.adventure.text.Component.text(originalMessage);
+        net.kyori.adventure.text.Component modernMessage = legacyMessageChanged
+                ? net.kyori.adventure.text.Component.text(legacyEvent.getMessage())
+                : originalComponent;
+
+        io.papermc.paper.chat.ChatRenderer renderer;
+        if (legacyFormatChanged) {
+            String legacyRendered = String.format(legacyEvent.getFormat(), bukkitPlayer.getDisplayName(), legacyEvent.getMessage());
+            net.kyori.adventure.text.Component legacyComponent =
+                    io.ampznetwork.lunararc.common.messaging.LunarArcComponentPipeline.legacyToAdventure(legacyRendered);
+            renderer = io.papermc.paper.chat.ChatRenderer.viewerUnaware((source, displayName, msg) -> legacyComponent);
+        } else {
+            renderer = io.papermc.paper.chat.ChatRenderer.defaultRenderer();
+        }
+
+        java.util.Set<net.kyori.adventure.audience.Audience> viewers =
+                new LinkedHashSet<>(legacyEvent.getRecipients());
+        io.papermc.paper.event.player.AsyncChatEvent modernEvent = new io.papermc.paper.event.player.AsyncChatEvent(
+                async, bukkitPlayer, viewers, renderer, modernMessage, originalComponent,
+                new LunarArcSignedChatMessage(message));
+        craftServer.getPluginManager().callEvent(modernEvent);
+        if (modernEvent.isCancelled()) {
             ci.cancel();
+            return;
+        }
+
+        io.papermc.paper.chat.ChatRenderer finalRenderer = modernEvent.renderer();
+        net.kyori.adventure.text.Component finalMessage = modernEvent.message();
+        for (net.kyori.adventure.audience.Audience viewer : modernEvent.viewers()) {
+            viewer.sendMessage(finalRenderer.render(bukkitPlayer, sourceDisplayName, finalMessage, viewer));
+        }
+        org.bukkit.command.ConsoleCommandSender console = craftServer.getConsoleSender();
+        console.sendMessage(finalRenderer.render(bukkitPlayer, sourceDisplayName, finalMessage, console));
+        ci.cancel();
+    }
+
+    /**
+     * {@link net.kyori.adventure.chat.SignedMessage}, over a {@link PlayerChatMessage} that is
+     * already fully available - no NMS patch needed. Real Paper adds this as an inner class of
+     * {@code PlayerChatMessage} itself ({@code AdventureView}, in its own Adventure patch);
+     * everything it reads off that class - {@code timeStamp()}, {@code salt()}, {@code
+     * signature()}, {@code unsignedContent()}, {@code signedContent()}, {@code sender()} - is a
+     * plain, unpatched vanilla accessor, so the same view is built here without touching NMS at
+     * all.
+     */
+    @Unique
+    private static final class LunarArcSignedChatMessage implements net.kyori.adventure.chat.SignedMessage {
+        private final PlayerChatMessage message;
+
+        private LunarArcSignedChatMessage(PlayerChatMessage message) {
+            this.message = message;
+        }
+
+        @Override
+        public java.time.Instant timestamp() {
+            return this.message.timeStamp();
+        }
+
+        @Override
+        public long salt() {
+            return this.message.salt();
+        }
+
+        @Override
+        public Signature signature() {
+            net.minecraft.network.chat.MessageSignature signature = this.message.signature();
+            return signature == null ? null : signature::bytes;
+        }
+
+        @Override
+        public net.kyori.adventure.text.Component unsignedContent() {
+            net.minecraft.network.chat.Component unsigned = this.message.unsignedContent();
+            return unsigned == null ? null : io.papermc.paper.adventure.PaperAdventure.asAdventure(unsigned);
+        }
+
+        @Override
+        public String message() {
+            return this.message.signedContent();
+        }
+
+        @Override
+        public net.kyori.adventure.identity.Identity identity() {
+            return net.kyori.adventure.identity.Identity.identity(this.message.sender());
         }
     }
 
@@ -94,11 +234,22 @@ public abstract class ServerGamePacketListenerImplMixin {
         }
 
         CraftServer craftServer = LunarArcServerAccess.getCraftServer(this.player.server);
-        if (LunarArcCommandRouter.routePlayerPacket(craftServer, bukkitPlayer, packet.command()) == LunarArcCommandRouter.PacketResult.CANCEL) {
-            ci.cancel();
+        LunarArcCommandLogger.begin(this.player.getUUID(), this.player.getScoreboardName(), packet.command());
+        try {
+            if (LunarArcCommandRouter.routePlayerPacket(craftServer, bukkitPlayer, packet.command()) == LunarArcCommandRouter.PacketResult.CANCEL) {
+                ci.cancel();
+            }
+        } finally {
+            if (ci.isCancelled()) {
+                LunarArcCommandLogger.end();
+            }
         }
     }
 
+    @Inject(method = "handleChatCommand", at = @At("RETURN"), require = 0)
+    private void lunararc$afterHandleChatCommand(ServerboundChatCommandPacket packet, CallbackInfo ci) {
+        LunarArcCommandLogger.end();
+    }
 
     @Inject(method = "handleSignedChatCommand", at = @At("HEAD"), cancellable = true, require = 0)
     private void lunararc$routeSignedCommandPacket(ServerboundChatCommandSignedPacket packet, CallbackInfo ci) {
@@ -112,10 +263,22 @@ public abstract class ServerGamePacketListenerImplMixin {
             return;
         }
         CraftServer craftServer = LunarArcServerAccess.getCraftServer(this.player.server);
-        if (LunarArcCommandRouter.routePlayerPacket(craftServer, bukkitPlayer, packet.command())
-                == LunarArcCommandRouter.PacketResult.CANCEL) {
-            ci.cancel();
+        LunarArcCommandLogger.begin(this.player.getUUID(), this.player.getScoreboardName(), packet.command());
+        try {
+            if (LunarArcCommandRouter.routePlayerPacket(craftServer, bukkitPlayer, packet.command())
+                    == LunarArcCommandRouter.PacketResult.CANCEL) {
+                ci.cancel();
+            }
+        } finally {
+            if (ci.isCancelled()) {
+                LunarArcCommandLogger.end();
+            }
         }
+    }
+
+    @Inject(method = "handleSignedChatCommand", at = @At("RETURN"), require = 0)
+    private void lunararc$afterHandleSignedChatCommand(ServerboundChatCommandSignedPacket packet, CallbackInfo ci) {
+        LunarArcCommandLogger.end();
     }
 
 
@@ -232,8 +395,7 @@ public abstract class ServerGamePacketListenerImplMixin {
                     org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
                             this.player, org.bukkit.event.block.Action.LEFT_CLICK_AIR, null, null,
                             this.player.getMainHandItem(), org.bukkit.inventory.EquipmentSlot.HAND);
-            if (interact != null && (interact.isCancelled()
-                    || interact.useItemInHand() == org.bukkit.event.Event.Result.DENY)) {
+            if (interact != null && interact.useItemInHand() == org.bukkit.event.Event.Result.DENY) {
                 ci.cancel();
                 return;
             }
@@ -270,6 +432,20 @@ public abstract class ServerGamePacketListenerImplMixin {
         return entityHit == null;
     }
 
+    /**
+     * A right click while aiming at a block within range already fires a
+     * {@code RIGHT_CLICK_BLOCK} {@link org.bukkit.event.player.PlayerInteractEvent} from
+     * {@code ServerPlayerGameMode#useItemOn} - the client sends {@code ServerboundUseItemOnPacket}
+     * first, and this packet ({@code ServerboundUseItemPacket}) right behind it whenever that
+     * block use did not consume the interaction. Firing a second, always-{@code RIGHT_CLICK_AIR}
+     * event here regardless of what the player is actually looking at, as this used to
+     * unconditionally do, misclassifies most real right clicks (aiming at terrain, a wall, or the
+     * ground is the common case) and can fire the interact event twice for one physical click.
+     * This raytraces the same way {@code ServerPlayerGameMode#useItemOn} does and, when it finds
+     * the same block/hand/item {@code useItemOn} already fired for, reuses that result instead -
+     * matching real CraftBukkit's {@code firedInteract} dedup - and otherwise fires its own
+     * correctly-classified event.
+     */
     @Inject(method = "handleUseItem", at = @At("HEAD"), cancellable = true, require = 0)
     private void lunararc$onRightClickAir(ServerboundUseItemPacket packet, CallbackInfo ci) {
         if (!this.player.server.isSameThread()) {
@@ -279,28 +455,179 @@ public abstract class ServerGamePacketListenerImplMixin {
         }
         net.minecraft.world.InteractionHand hand = packet.getHand();
         net.minecraft.world.item.ItemStack stack = this.player.getItemInHand(hand);
+        io.ampznetwork.lunararc.common.bridge.ServerPlayerGameModeBridge gameMode =
+                (io.ampznetwork.lunararc.common.bridge.ServerPlayerGameModeBridge) this.player.gameMode;
+        boolean firedInteractBefore = gameMode.lunararc$firedInteract();
+
         if (stack.isEmpty() || !stack.isItemEnabled(this.player.serverLevel().enabledFeatures())) {
+            if (LunarArcDebug.INTERACT) {
+                String hitResult = lunararc$determineHitResult();
+                String itemId = stack.isEmpty() ? "minecraft:air" : net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                boolean isUsing = this.player.isUsingItem();
+                LunarArcDebug.interact("packet=ServerboundUseItemPacket hand={} item={} hitResult={} action=RIGHT_CLICK_AIR cancelled=false useItemInHand=DEFAULT firedInteract={} continues=false useItemCalled=false result=N/A isUsingItem(before={}, after={})",
+                        hand.name(), itemId, hitResult, firedInteractBefore, isUsing, isUsing);
+            }
             return;
         }
 
         org.bukkit.inventory.EquipmentSlot slot = hand == net.minecraft.world.InteractionHand.OFF_HAND
                 ? org.bukkit.inventory.EquipmentSlot.OFF_HAND
                 : org.bukkit.inventory.EquipmentSlot.HAND;
-        org.bukkit.event.player.PlayerInteractEvent event =
-                org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
-                        this.player,
-                        org.bukkit.event.block.Action.RIGHT_CLICK_AIR,
-                        null,
-                        null,
-                        stack,
-                        slot);
-        if (event != null && (event.isCancelled()
-                || event.useItemInHand() == org.bukkit.event.Event.Result.DENY)) {
-            // Cancel only the Bukkit-visible air use. The original loader-owned
+
+        net.minecraft.world.phys.BlockHitResult blockHit = lunararc$clipForUseItem();
+        boolean cancelled;
+        org.bukkit.event.block.Action action;
+        boolean eventCancelled = false;
+        org.bukkit.event.Event.Result useItemInHandResult = org.bukkit.event.Event.Result.DEFAULT;
+
+        if (blockHit == null) {
+            action = org.bukkit.event.block.Action.RIGHT_CLICK_AIR;
+            org.bukkit.event.player.PlayerInteractEvent event =
+                    org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
+                            this.player, action, null, null, stack, slot);
+            if (event != null) {
+                useItemInHandResult = event.useItemInHand();
+                cancelled = useItemInHandResult == org.bukkit.event.Event.Result.DENY;
+                eventCancelled = cancelled;
+            } else {
+                cancelled = false;
+            }
+        } else if (firedInteractBefore
+                && blockHit.getBlockPos().equals(gameMode.lunararc$interactPosition())
+                && hand == gameMode.lunararc$interactHand()
+                && net.minecraft.world.item.ItemStack.isSameItemSameComponents(gameMode.lunararc$interactItemStack(), stack)) {
+            action = org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK;
+            cancelled = gameMode.lunararc$interactResult();
+            useItemInHandResult = cancelled ? org.bukkit.event.Event.Result.DENY : org.bukkit.event.Event.Result.DEFAULT;
+            eventCancelled = cancelled;
+        } else {
+            action = org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK;
+            org.bukkit.event.player.PlayerInteractEvent event =
+                    org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
+                            this.player, action,
+                            blockHit.getBlockPos(), blockHit.getDirection(), stack, slot);
+            if (event != null) {
+                useItemInHandResult = event.useItemInHand();
+                cancelled = useItemInHandResult == org.bukkit.event.Event.Result.DENY;
+                eventCancelled = cancelled;
+            } else {
+                cancelled = false;
+            }
+        }
+        gameMode.lunararc$clearFiredInteract();
+
+        boolean continues = !cancelled && !this.player.getItemInHand(hand).isEmpty();
+
+        if (LunarArcDebug.INTERACT) {
+            String packetType = "ServerboundUseItemPacket";
+            String handName = hand.name();
+            String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+            String hitResult = lunararc$determineHitResult();
+            String actionName = action.name();
+            String useItemInHandStr = useItemInHandResult.name();
+
+            if (!continues) {
+                this.lunararc$interactTrace = null;
+                boolean isUsing = this.player.isUsingItem();
+                LunarArcDebug.interact("packet={} hand={} item={} hitResult={} action={} cancelled={} useItemInHand={} firedInteract={} continues={} useItemCalled={} result={} isUsingItem(before={}, after={})",
+                        packetType, handName, itemId, hitResult, actionName, eventCancelled, useItemInHandStr,
+                        firedInteractBefore, false, false, "N/A", isUsing, isUsing);
+            } else {
+                this.lunararc$interactTrace = new InteractTraceContext(
+                        packetType, handName, itemId, hitResult, actionName, eventCancelled,
+                        useItemInHandStr, firedInteractBefore, true);
+            }
+        }
+
+        if (cancelled) {
+            // Cancel only the Bukkit-visible use. The original loader-owned
             // packet method remains intact whenever plugins permit the action.
             this.player.getInventory().setChanged();
             ci.cancel();
+            return;
         }
+        // A plugin listening to the event above may have emptied the stack (e.g. consumed it);
+        // re-read it so a use that no longer has an item to act on does not fall through to
+        // the loader's own useItem() call with an item that is no longer actually there.
+        if (this.player.getItemInHand(hand).isEmpty()) {
+            ci.cancel();
+        }
+    }
+
+    @WrapOperation(
+            method = "handleUseItem",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerPlayerGameMode;useItem(Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/InteractionHand;)Lnet/minecraft/world/InteractionResult;"),
+            require = 0)
+    private net.minecraft.world.InteractionResult lunararc$wrapUseItemInHandleUseItem(
+            net.minecraft.server.level.ServerPlayerGameMode gameMode,
+            net.minecraft.server.level.ServerPlayer player,
+            net.minecraft.world.level.Level level,
+            net.minecraft.world.item.ItemStack stack,
+            net.minecraft.world.InteractionHand hand,
+            Operation<net.minecraft.world.InteractionResult> original) {
+        boolean usingBefore = player.isUsingItem();
+        net.minecraft.world.InteractionResult result = original.call(gameMode, player, level, stack, hand);
+        boolean usingAfter = player.isUsingItem();
+
+        if (this.lunararc$interactTrace != null) {
+            this.lunararc$interactTrace.log(true, result.name(), usingBefore, usingAfter);
+            this.lunararc$interactTrace = null;
+        }
+        return result;
+    }
+
+    @Inject(method = "handleUseItem", at = @At("RETURN"), require = 0)
+    private void lunararc$afterHandleUseItem(ServerboundUseItemPacket packet, CallbackInfo ci) {
+        if (this.lunararc$interactTrace != null) {
+            boolean isUsing = this.player.isUsingItem();
+            this.lunararc$interactTrace.log(false, "N/A", isUsing, isUsing);
+            this.lunararc$interactTrace = null;
+        }
+    }
+
+    @Unique
+    private String lunararc$determineHitResult() {
+        net.minecraft.world.phys.Vec3 eye = this.player.getEyePosition();
+        net.minecraft.world.phys.Vec3 look = this.player.getViewVector(1.0F);
+        double blockRange = this.player.blockInteractionRange();
+        net.minecraft.world.phys.Vec3 blockEnd = eye.add(look.scale(blockRange));
+        net.minecraft.world.phys.BlockHitResult blockHit = this.player.serverLevel().clip(
+                new net.minecraft.world.level.ClipContext(eye, blockEnd,
+                        net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                        net.minecraft.world.level.ClipContext.Fluid.NONE, this.player));
+        boolean hasBlock = blockHit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK;
+        double blockDistSqr = hasBlock ? eye.distanceToSqr(blockHit.getLocation()) : Double.MAX_VALUE;
+
+        double entityRange = this.player.entityInteractionRange();
+        net.minecraft.world.phys.Vec3 entityEnd = eye.add(look.scale(entityRange));
+        net.minecraft.world.phys.AABB box = this.player.getBoundingBox().expandTowards(look.scale(entityRange)).inflate(1.0D);
+        net.minecraft.world.phys.EntityHitResult entityHit = net.minecraft.world.entity.projectile.ProjectileUtil.getEntityHitResult(
+                this.player.serverLevel(), this.player, eye, entityEnd, box,
+                entity -> !entity.isSpectator() && entity.isPickable() && !entity.isPassengerOfSameVehicle(this.player),
+                (float) (entityRange * entityRange));
+        boolean hasEntity = entityHit != null && entityHit.getEntity() != null;
+        double entityDistSqr = hasEntity ? eye.distanceToSqr(entityHit.getLocation()) : Double.MAX_VALUE;
+
+        if (hasEntity && entityDistSqr <= blockDistSqr) {
+            return "ENTITY";
+        } else if (hasBlock) {
+            return "BLOCK";
+        } else {
+            return "MISS";
+        }
+    }
+
+    @Unique
+    private net.minecraft.world.phys.BlockHitResult lunararc$clipForUseItem() {
+        net.minecraft.world.phys.Vec3 eye = this.player.getEyePosition();
+        net.minecraft.world.phys.Vec3 look = this.player.getViewVector(1.0F);
+        double range = this.player.blockInteractionRange();
+        net.minecraft.world.phys.Vec3 end = eye.add(look.scale(range));
+        net.minecraft.world.phys.BlockHitResult hit = this.player.serverLevel().clip(
+                new net.minecraft.world.level.ClipContext(eye, end,
+                        net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                        net.minecraft.world.level.ClipContext.Fluid.NONE, this.player));
+        return hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK ? hit : null;
     }
 
     @Inject(method = "handleSetCarriedItem", at = @At("HEAD"), cancellable = true, require = 0)

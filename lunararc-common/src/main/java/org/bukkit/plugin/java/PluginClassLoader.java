@@ -307,7 +307,7 @@ public final class PluginClassLoader extends URLClassLoader
             digest.update(io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.minecraftVersion()
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
-            digest.update("compat-transform-v15-remap-validation".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            digest.update("compat-transform-v19-essentials-namespaced".getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             // The token above has to be bumped by hand whenever the transform changes, and it was
             // missed once already: a remapper fix shipped, every plugin kept loading the bad
@@ -438,7 +438,24 @@ public final class PluginClassLoader extends URLClassLoader
                 || name.startsWith("net.minecraft.")
                 || name.startsWith("io.papermc.paper.")
                 || name.startsWith("com.destroystokyo.paper.")
-                || name.startsWith("net.kyori.");
+                || name.startsWith("net.kyori.")
+                // isPlatformClass's own comment explains why gson is routed through the platform
+                // backstop first - a same-name-different-loader split between it and a plugin's own
+                // bundled gson is exactly what took Essentials down with "Type 'JsonArray' is not
+                // assignable to 'JsonElement'" in onDisable(). "Preferring" the platform copy was
+                // not enough on its own: loadClass's catch at line ~110 falls back to this
+                // classloader's own six-source chain - which can find a plugin's own bundled gson -
+                // whenever the platform backstop's two sources (parent, then the mod loader) both
+                // miss, and Essentials shipping its own gson under this exact package is exactly the
+                // case where that fallback finds something. That single fallback resolving
+                // differently than every other reference already cached as the platform's copy is
+                // the split itself, not a fix for it. Being server-owned here closes that: a miss on
+                // both platform sources throws instead of silently trying a plugin-local copy, so
+                // every reference across the whole server resolves from the same source or fails
+                // together - the same guarantee this class already gives net.minecraft./org.bukkit.,
+                // and just as safe here since NeoForge's own dependency tree carries gson the same
+                // way it carries net.kyori., so the platform backstop realistically never misses.
+                || name.startsWith("com.google.gson.");
     }
 
     private ClassLoader wrapPluginLibraryLoader(ClassLoader raw, String cacheName) {
@@ -575,7 +592,23 @@ public final class PluginClassLoader extends URLClassLoader
                 || name.startsWith("net.kyori.adventure.")
                 || name.startsWith("net.kyori.examination.")
                 || name.startsWith("com.mojang.")
-                || name.startsWith("net.minecraft.");
+                || name.startsWith("net.minecraft.")
+                // Ambient, not part of the Bukkit API contract, present on every server the same
+                // way com.mojang. is - and unlike com.mojang., also present a second time on a
+                // hybrid server's mod loader classpath (NeoForge depends on it too). A plugin that
+                // never declares it as a library (most don't; it has always just been there) can
+                // have two of its own references resolve through two different steps of the
+                // six-source scan below, handed two unrelated Class objects for the same name.
+                // That is exactly what VerifyError: "Type 'JsonArray' is not assignable to
+                // 'JsonElement'" is - not a plugin bug, a same-name-different-loader split, and it
+                // took Essentials down in onDisable(). Routing gson through the platform backstop
+                // first makes every reference resolve from the same one or two stable sources
+                // (parent, then the mod loader) instead of whichever of six answered first; a
+                // plugin that ships its own gson under this exact package name was already exposed
+                // to this class of bug on any multi-plugin server, hybrid or not, so preferring the
+                // platform's copy is the safer default. classload traces which of the two
+                // deterministic sources actually answers, same as it does for everything else here.
+                || name.startsWith("com.google.gson.");
     }
 
     @Override

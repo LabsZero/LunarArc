@@ -197,6 +197,7 @@ public final class LunarArcComponentPipeline {
 
     public static void sendSystem(ServerPlayer player, net.minecraft.network.chat.Component component) {
         if (player == null || player.connection == null || component == null) return;
+        io.ampznetwork.lunararc.common.server.LunarArcCommandLogger.capture(player.getUUID(), component.getString());
         player.connection.send(new ClientboundSystemChatPacket(component, false));
     }
 

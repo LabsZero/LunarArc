@@ -25,11 +25,10 @@
 # names the mod and the reason, which at least turns "the server behaves
 # strangely" into a line naming the cause.
 
-# [[plugins]]
-# name = "ExamplePlugin"
-# version = "1.0.0"
-# reason = "Crashes on NeoForge; use 1.0.1 or newer."
-
 # [[mods]]
 # name = "examplemod"
 # reason = "Replaces the chunk system; conflicts with LunarArc's chunk handling."
+
+[[plugins]]
+name = "ModdedIntegration"
+reason = "LunarArc gives Essentials a name for every modded item natively; this plugin's own items.json edits are redundant and its EssentialsX reload timing can race LunarArc's own."

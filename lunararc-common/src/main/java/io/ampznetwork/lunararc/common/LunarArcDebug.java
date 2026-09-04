@@ -91,6 +91,19 @@ public final class LunarArcDebug {
      */
     public static final boolean COMMAND;
 
+    /**
+     * Player interaction pipeline tracing: packet type, hand, item, hit result, event action, event
+     * cancelled state, useItemInHand result, firedInteract state, whether handleUseItem continues,
+     * whether gameMode.useItem() is called, InteractionResult, and player.isUsingItem before/after.
+     */
+    public static final boolean INTERACT;
+
+    /**
+     * Startup and shutdown lifecycle timing: per-plugin enable/disable durations, phase-level
+     * totals, and a ranked summary of the slowest items at the end of each lifecycle.
+     */
+    public static final boolean TIMING;
+
     private static BufferedWriter writer;
     private static boolean unusable;
 
@@ -101,16 +114,25 @@ public final class LunarArcDebug {
             String trimmed = part.trim().toLowerCase(java.util.Locale.ROOT);
             if (!trimmed.isEmpty()) channels.add(trimmed);
         }
-        boolean all = channels.contains("all");
-        REFLECT = all || channels.contains("reflect");
-        REMAP = all || channels.contains("remap");
-        CLASSLOAD = all || channels.contains("classload");
-        ENTITY = all || channels.contains("entity");
-        FLUID = all || channels.contains("fluid");
-        COMMAND = all || channels.contains("command");
+        boolean isDebugAll = Boolean.getBoolean("debugall")
+                || Boolean.getBoolean("lunararc.debugall")
+                || channels.contains("debugall")
+                || channels.contains("all");
+        // debugall enables interaction pipeline and timing, so other channels do not flood logs
+        INTERACT = isDebugAll || channels.contains("interact");
+        TIMING = isDebugAll || channels.contains("timing");
+        boolean everything = channels.contains("everything");
+        REFLECT = everything || channels.contains("reflect");
+        REMAP = everything || channels.contains("remap");
+        CLASSLOAD = everything || channels.contains("classload");
+        ENTITY = everything || channels.contains("entity");
+        FLUID = everything || channels.contains("fluid");
+        COMMAND = everything || channels.contains("command");
 
-        if (REFLECT || REMAP || CLASSLOAD || ENTITY || FLUID || COMMAND) {
+        if (INTERACT || TIMING || REFLECT || REMAP || CLASSLOAD || ENTITY || FLUID || COMMAND) {
             StringBuilder enabled = new StringBuilder();
+            if (INTERACT) enabled.append(" interact");
+            if (TIMING) enabled.append(" timing");
             if (REFLECT) enabled.append(" reflect");
             if (REMAP) enabled.append(" remap");
             if (CLASSLOAD) enabled.append(" classload");
@@ -142,7 +164,7 @@ public final class LunarArcDebug {
             // property at all: both produced silence, and the only symptom was a trace file that
             // never appeared. Say which names exist instead.
             String complaint = "[LunarArc/Debug] -Dlunararc.debug=" + raw + " names no known channel."
-                    + " Known channels: reflect, remap, classload, entity, fluid, command, or all.";
+                    + " Known channels: interact, timing, reflect, remap, classload, entity, fluid, command, or all/debugall.";
             LOGGER.warn(complaint);
             System.out.println(complaint);
         }
@@ -171,6 +193,12 @@ public final class LunarArcDebug {
         write("entity", format, args);
     }
 
+    /** Log on the interact channel. Call behind {@code if (LunarArcDebug.INTERACT)}. */
+    public static void interact(String format, Object... args) {
+        write("interact", format, args);
+        LOGGER.info("[interact] " + format(format, args));
+    }
+
     /**
      * The enabled channels, or "none", for reporting alongside the build banner.
      *
@@ -180,6 +208,8 @@ public final class LunarArcDebug {
      */
     public static String enabledChannels() {
         StringBuilder enabled = new StringBuilder();
+        if (INTERACT) enabled.append("interact ");
+        if (TIMING) enabled.append("timing ");
         if (REFLECT) enabled.append("reflect ");
         if (REMAP) enabled.append("remap ");
         if (CLASSLOAD) enabled.append("classload ");
@@ -192,6 +222,11 @@ public final class LunarArcDebug {
     /** Log on the command channel. Call behind {@code if (LunarArcDebug.COMMAND)}. */
     public static void command(String format, Object... args) {
         write("command", format, args);
+    }
+
+    /** Log on the timing channel. Call behind {@code if (LunarArcDebug.TIMING)}. */
+    public static void timing(String format, Object... args) {
+        write("timing", format, args);
     }
 
     /** Log on the fluid channel. Call behind {@code if (LunarArcDebug.FLUID)}. */
@@ -228,6 +263,8 @@ public final class LunarArcDebug {
             writer.write("LunarArc debug trace\n");
             writer.write("session-start: " + Instant.now() + "\n");
             writer.write("channels:"
+                    + (INTERACT ? " interact" : "")
+                    + (TIMING ? " timing" : "")
                     + (REFLECT ? " reflect" : "")
                     + (REMAP ? " remap" : "")
                     + (CLASSLOAD ? " classload" : "")

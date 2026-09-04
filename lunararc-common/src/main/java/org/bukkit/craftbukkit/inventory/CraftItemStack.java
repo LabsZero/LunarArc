@@ -38,7 +38,10 @@ public class CraftItemStack extends ItemStack {
                 net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(handle.getItem());
         if (key == null) return Material.AIR;
 
-        Material material = Material.matchMaterial(key.toString());
+        Material material = io.ampznetwork.lunararc.common.server.LunarArcDynamicBukkitEnums.material(key);
+        if (material != null) return material;
+
+        material = Material.matchMaterial(key.toString());
         if (material != null) return material;
 
         material = Material.matchMaterial(key.getPath());

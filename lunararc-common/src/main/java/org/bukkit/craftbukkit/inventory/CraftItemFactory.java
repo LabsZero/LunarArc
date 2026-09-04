@@ -55,21 +55,55 @@ public final class CraftItemFactory implements ItemFactory {
         return INSTANCE;
     }
 
+    /**
+     * A fresh, zero-amount NMS stack of {@code material}, carrying the item's own default data
+     * components - the same prototype vanilla itself hands out before any plugin touches it.
+     *
+     * <p>{@code getItemMeta(Material)} used to construct every meta with each Craft*Meta's no-arg
+     * constructor, which leaves every field at Java's own default - {@code null} for tool, food,
+     * attribute modifiers, everything a real item actually carries by default. That meta then went
+     * back through {@link CraftItemMeta#applyToNms}, whose {@code writeOptionalComponents} writes
+     * {@code null} as a removal for a field it never held a value for - see real CraftBukkit's own
+     * equivalent, which guards each of these with {@code if (hasTool())} and simply does not touch
+     * the component otherwise. Ours had no value to guard on, because nothing had ever read the
+     * item's real default into it, so it always took the removal branch. The result was invisible
+     * on the item itself - the display name, lore, everything Bukkit's API surfaces looked correct
+     * - because what disappeared was never Bukkit-visible in the first place: a pickaxe's TOOL
+     * component (what it can mine and how fast) and a sword's ATTRIBUTE_MODIFIERS (its attack
+     * damage) are both stack-level data components with no ItemMeta getter/setter most plugins
+     * ever call. Any {@code /give}, and any plugin building an ItemStack from a bare Material,
+     * produced a tool that could not mine and a weapon with no attack bonus - vanilla or modded
+     * alike, since neither path is material-specific.</p>
+     *
+     * <p>Every Craft*Meta subclass already has an {@code (ItemStack)} constructor that reads a
+     * stack's real components - it exists for exactly this, deserializing an existing item. Handing
+     * it this prototype, instead of building blank and relying on {@code applyToNms} to fill in
+     * what was never captured, is what makes the round trip real: the meta now holds the item's
+     * actual defaults, and {@code writeOptionalComponents} writes them back rather than removing
+     * them.</p>
+     */
+    private static net.minecraft.world.item.ItemStack prototypeStack(Material material) {
+        Item item = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
+                ResourceLocation.parse(material.getKey().toString()));
+        return new net.minecraft.world.item.ItemStack(item);
+    }
+
     @Override
     public @Nullable ItemMeta getItemMeta(@NotNull Material material) {
         Objects.requireNonNull(material, "material");
         if (material == Material.AIR) return null;
         Preconditions.checkArgument(material.isItem(), "%s is not an item", material);
+        net.minecraft.world.item.ItemStack prototype = prototypeStack(material);
         if (material == Material.POTION || material == Material.SPLASH_POTION
-                || material == Material.LINGERING_POTION || material == Material.TIPPED_ARROW) return new CraftMetaPotion();
-        if (material == Material.WRITABLE_BOOK) return new CraftMetaBook();
-        if (material == Material.WRITTEN_BOOK) return new CraftMetaBookSigned();
-        if (material == Material.FIREWORK_ROCKET) return new CraftMetaFirework();
-        if (material == Material.FIREWORK_STAR) return new CraftMetaCharge();
-        if (material == Material.PLAYER_HEAD) return new CraftMetaSkull();
-        if (isArmor(material)) return new CraftMetaArmor();
-        if (material.name().endsWith("_BANNER")) return new CraftMetaBanner();
-        return new CraftMetaItem();
+                || material == Material.LINGERING_POTION || material == Material.TIPPED_ARROW) return new CraftMetaPotion(prototype);
+        if (material == Material.WRITABLE_BOOK) return new CraftMetaBook(prototype);
+        if (material == Material.WRITTEN_BOOK) return new CraftMetaBookSigned(prototype);
+        if (material == Material.FIREWORK_ROCKET) return new CraftMetaFirework(prototype);
+        if (material == Material.FIREWORK_STAR) return new CraftMetaCharge(prototype);
+        if (material == Material.PLAYER_HEAD) return new CraftMetaSkull(prototype);
+        if (isArmor(material)) return new CraftMetaArmor(prototype);
+        if (material.name().endsWith("_BANNER")) return new CraftMetaBanner(prototype);
+        return new CraftMetaItem(prototype);
     }
 
     @Override

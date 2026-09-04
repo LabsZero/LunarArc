@@ -24,6 +24,7 @@
     "core.server.ServerPlayerGameModeMixin",
     "core.network.ConnectionMixin",
     "core.network.ClientboundPlayerInfoUpdatePacketMixin",
+    "core.network.ClientboundLevelChunkPacketDataMixin",
     "core.player.FoodDataMixin",
     "core.command.CommandsMixin",
     "core.command.CommandSourceStackMixin",

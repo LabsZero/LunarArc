@@ -238,6 +238,24 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
      */
     public double[] recentTps = new double[3];
 
+    /**
+     * A fake {@code nextTickTime} on {@code MinecraftServer}, matching Mohist/Youer's own
+     * compatibility field verbatim (their comment: "Add fake tickField worldedit need this").
+     *
+     * <p>Vanilla renamed its real tick-timing field to the nanosecond-based
+     * {@code nextTickTimeNanos} years ago, but WorldEdit's Bukkit adapter layer still reflects for
+     * the pre-rename {@code long nextTickTime} field CraftBukkit used to carry, to estimate time
+     * until the next tick for its fast/async edit throttling. Without it here, that reflective
+     * lookup fails - "No reflective mapping found for field MinecraftServer#nextTickTime" - which
+     * is also why WorldEdit falls back to running with no Bukkit adapter at all right afterward:
+     * its adapter validation treats a missing field the same as an incompatible one.</p>
+     *
+     * <p>Never written to, same as upstream - its only job is to exist under this name so the
+     * reflective probe succeeds. Real tick pacing stays entirely on vanilla's own
+     * {@code nextTickTimeNanos}.</p>
+     */
+    public long nextTickTime = 0L;
+
     @Override
     public double[] lunararc$getTps() {
         // Built element by element rather than with recentTps.clone(). An array's clone() is an
@@ -298,15 +316,19 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void lunararc$onInit(CallbackInfo ci) {
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.markServerStart();
+        long initStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
+
         this.lunararc$dataLoadContext = io.ampznetwork.lunararc.common.mod.util.LunarArcWorldLoaderCapture.take();
         LunarArcServer.attach((MinecraftServer) (Object) this);
 
         io.ampznetwork.lunararc.common.LunarArcPaths.initialize();
         io.ampznetwork.lunararc.common.LunarArcPaths.platformRuntime(
                 io.ampznetwork.lunararc.common.mod.server.LunarArcServer.platformName());
-        io.ampznetwork.lunararc.common.telemetry.BlockMedicReporter.startConsoleCapture();
         LunarArcConfig.load();
         io.ampznetwork.lunararc.api.LunarArcServer.init();
+
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartupPhase("Server Init", initStart);
     }
 
     @Inject(method = "loadLevel", at = @At("HEAD"))
@@ -320,20 +342,15 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         }
 
         CraftServer craftServer = this.lunararc$requireCraftServer();
-        io.ampznetwork.lunararc.common.server.LunarArcBuiltinCommands.register(craftServer);
         this.lunararc$bukkitStartupStartedNanos = System.nanoTime();
 
-        // Real, confirmed by bootstrap/build.gradle's own verifyNeoforgeHybridShape task: the
-        // isolated-classloader/nested-jar approach this used to switch to here was already
-        // deliberately retired at the project level (that task explicitly fails the build if
-        // META-INF/lunararc/plugin-runtime-libs/ or LunarArcPluginLibraryRuntime.class are
-        // present at all). Maven Resolver's classes are shaded and relocated directly into the
-        // main runtime jar instead (io.ampznetwork.lunararc.libs.maven.*), already on the
-        // normal classpath — no context-classloader switching needed. Building the isolated
-        // classloader was chasing a mechanism that no longer exists, which is why it kept
-        // failing at progressively deeper points instead of just working.
+        long loadStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
         craftServer.loadPlugins();
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartupPhase("Plugin Load", loadStart);
+
+        long enableStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
         this.lunararc$enablePlugins(craftServer, PluginLoadOrder.STARTUP);
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartupPhase("Plugin Enable STARTUP", enableStart);
     }
 
 
@@ -345,20 +362,28 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         MinecraftServer minecraftServer = (MinecraftServer) (Object) this;
         CraftServer craftServer = this.lunararc$requireCraftServer();
 
+        long worldInitStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
         for (net.minecraft.server.level.ServerLevel level : minecraftServer.getAllLevels()) {
             if (!craftServer.worldLoadEventFired.add(level.dimension())) continue;
+            long worldStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
             org.bukkit.craftbukkit.CraftWorld craftWorld = craftServer.getCraftWorld(level);
             craftServer.getPluginManager().callEvent(new org.bukkit.event.world.WorldInitEvent(craftWorld));
             craftServer.getPluginManager().callEvent(new org.bukkit.event.world.WorldLoadEvent(craftWorld));
+            io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartup(
+                    "World Init", level.dimension().location().toString(), worldStart);
         }
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartupPhase("World Init Events", worldInitStart);
 
+        long enableStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
         this.lunararc$enablePlugins(craftServer, PluginLoadOrder.POSTWORLD);
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartupPhase("Plugin Enable POSTWORLD", enableStart);
 
         long commandSyncStarted = System.nanoTime();
         this.lunararc$firePaperCommandLifecycle(minecraftServer);
         this.lunararc$syncCommands(craftServer, minecraftServer);
         long commandSyncMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - commandSyncStarted);
         LunarArcConsole.success(lunararc$logger, "Bukkit command tree finalized in {}ms", commandSyncMillis);
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartupPhase("Command Sync", commandSyncStarted);
 
         if (!this.lunararc$serverLoadEventFired) {
             this.lunararc$serverLoadEventFired = true;
@@ -366,10 +391,16 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
                     org.bukkit.event.server.ServerLoadEvent.LoadType.STARTUP));
         }
 
+        long bridgeStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
         io.ampznetwork.lunararc.common.server.LunarArcTier3RuntimeProbe.run(craftServer);
+        io.ampznetwork.lunararc.common.server.LunarArcEssentialsItemBridge.populateModdedItems(craftServer);
+        io.ampznetwork.lunararc.common.server.LunarArcAntiXrayOreBridge.mergeModdedOres(craftServer);
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartupPhase("Compatibility Bridges", bridgeStart);
 
         long startupMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - this.lunararc$bukkitStartupStartedNanos);
         LunarArcConsole.success(lunararc$logger, "Bukkit/Paper 1.21.1 compatibility layer ready ({}ms)", startupMillis);
+
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.logStartupSummary();
     }
 
     @Unique
@@ -416,16 +447,29 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
     @Inject(method = "stopServer", at = @At("HEAD"))
     private void lunararc$onStop(CallbackInfo ci) {
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.markShutdownStart();
+
         CraftServer craftServer = this.lunararc$craftServer;
         if (craftServer != null) {
+            long disableStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
             craftServer.disablePlugins();
+            io.ampznetwork.lunararc.common.server.LunarArcTimings.recordShutdownPhase("Plugin Disable", disableStart);
+
+            long clearStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
             craftServer.clearPluginsForShutdown();
             craftServer.shutdownSchedulers();
+            io.ampznetwork.lunararc.common.server.LunarArcTimings.recordShutdownPhase("Scheduler/Cleanup", clearStart);
         }
+
+        long cleanupStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
         io.ampznetwork.lunararc.common.network.LunarArcPluginMessageOwnership.clear();
         io.ampznetwork.lunararc.common.server.LunarArcLifecycleEventRunner.resetServerState();
         org.bukkit.plugin.java.PluginClassLoader.shutdownSharedLoaders();
         io.ampznetwork.lunararc.common.server.LunarArcContext.clearServerReferences();
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordShutdownPhase("Server Cleanup", cleanupStart);
+
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.logShutdownSummary();
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.reset();
     }
 
 }

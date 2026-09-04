@@ -201,6 +201,9 @@ class PaperPluginInstanceManager {
             return;
         }
 
+        long enableStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
+        String pluginDisplayName = plugin.getPluginMeta().getDisplayName();
+
         if (plugin.getPluginMeta() instanceof PluginDescriptionFile) {
             List<Command> bukkitCommands = PluginCommandYamlParser.parse(plugin);
 
@@ -210,7 +213,7 @@ class PaperPluginInstanceManager {
         }
 
         try {
-            String enableMsg = "Enabling " + plugin.getPluginMeta().getDisplayName();
+            String enableMsg = "Enabling " + pluginDisplayName;
             if (plugin.getPluginMeta() instanceof PluginDescriptionFile descriptionFile && CraftMagicNumbers.isLegacy(descriptionFile)) {
                 enableMsg += "*";
             }
@@ -220,14 +223,14 @@ class PaperPluginInstanceManager {
 
             if (jPlugin.getClass().getClassLoader() instanceof ConfiguredPluginClassLoader classLoader) { // Paper
                 if (PaperClassLoaderStorage.instance().registerUnsafePlugin(classLoader)) {
-                    this.server.getLogger().log(Level.WARNING, "Enabled plugin with unregistered ConfiguredPluginClassLoader " + plugin.getPluginMeta().getDisplayName());
+                    this.server.getLogger().log(Level.WARNING, "Enabled plugin with unregistered ConfiguredPluginClassLoader " + pluginDisplayName);
                 }
             } // Paper
 
             try {
                 jPlugin.setEnabled(true);
             } catch (Throwable ex) {
-                this.server.getLogger().log(Level.SEVERE, "Error occurred while enabling " + plugin.getPluginMeta().getDisplayName() + " (Is it up to date?)", ex);
+                this.server.getLogger().log(Level.SEVERE, "Error occurred while enabling " + pluginDisplayName + " (Is it up to date?)", ex);
                 // Paper start - Disable plugins that fail to load
                 this.server.getPluginManager().disablePlugin(jPlugin);
                 return;
@@ -239,10 +242,13 @@ class PaperPluginInstanceManager {
             this.server.getPluginManager().callEvent(new PluginEnableEvent(plugin));
         } catch (Throwable ex) {
             this.handlePluginException("Error occurred (in the plugin loader) while enabling "
-                + plugin.getPluginMeta().getDisplayName() + " (Is it up to date?)", ex, plugin);
+                + pluginDisplayName + " (Is it up to date?)", ex, plugin);
         }
 
         HandlerList.bakeAll();
+
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartup(
+                "Plugin Enable", pluginDisplayName, enableStart);
     }
 
     public synchronized void disablePlugin(@NotNull Plugin plugin) {
@@ -253,6 +259,7 @@ class PaperPluginInstanceManager {
             return;
         }
 
+        long disableStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
         String pluginName = plugin.getPluginMeta().getDisplayName();
 
         try {
@@ -335,6 +342,8 @@ class PaperPluginInstanceManager {
             this.handlePluginException("Error occurred (in the plugin loader) while removing chunk tickets for " + pluginName + " (Is it up to date?)", ex, plugin); // Paper
         }
 
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordShutdown(
+                "Plugin Disable", pluginName, disableStart);
     }
 
     // TODO: Implement event part in future patch (paper patch move up, this patch is lower)

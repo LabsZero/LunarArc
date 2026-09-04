@@ -622,4 +622,10 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         this.lunararc$deathEvent = null;
     }
 
+    @Inject(method = "sendSystemMessage(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), require = 0)
+    private void lunararc$captureCommandSystemMessage(net.minecraft.network.chat.Component component, boolean overlay, CallbackInfo ci) {
+        if (!overlay && component != null) {
+            io.ampznetwork.lunararc.common.server.LunarArcCommandLogger.capture(((ServerPlayer) (Object) this).getUUID(), component.getString());
+        }
+    }
 }
