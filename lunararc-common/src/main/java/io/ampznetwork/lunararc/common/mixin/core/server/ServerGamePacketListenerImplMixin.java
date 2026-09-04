@@ -373,6 +373,20 @@ public abstract class ServerGamePacketListenerImplMixin {
         return entityHit == null;
     }
 
+    /**
+     * A right click while aiming at a block within range already fires a
+     * {@code RIGHT_CLICK_BLOCK} {@link org.bukkit.event.player.PlayerInteractEvent} from
+     * {@code ServerPlayerGameMode#useItemOn} - the client sends {@code ServerboundUseItemOnPacket}
+     * first, and this packet ({@code ServerboundUseItemPacket}) right behind it whenever that
+     * block use did not consume the interaction. Firing a second, always-{@code RIGHT_CLICK_AIR}
+     * event here regardless of what the player is actually looking at, as this used to
+     * unconditionally do, misclassifies most real right clicks (aiming at terrain, a wall, or the
+     * ground is the common case) and can fire the interact event twice for one physical click.
+     * This raytraces the same way {@code ServerPlayerGameMode#useItemOn} does and, when it finds
+     * the same block/hand/item {@code useItemOn} already fired for, reuses that result instead -
+     * matching real CraftBukkit's {@code firedInteract} dedup - and otherwise fires its own
+     * correctly-classified event.
+     */
     @Inject(method = "handleUseItem", at = @At("HEAD"), cancellable = true, require = 0)
     private void lunararc$onRightClickAir(ServerboundUseItemPacket packet, CallbackInfo ci) {
         if (!this.player.server.isSameThread()) {
@@ -389,21 +403,56 @@ public abstract class ServerGamePacketListenerImplMixin {
         org.bukkit.inventory.EquipmentSlot slot = hand == net.minecraft.world.InteractionHand.OFF_HAND
                 ? org.bukkit.inventory.EquipmentSlot.OFF_HAND
                 : org.bukkit.inventory.EquipmentSlot.HAND;
-        org.bukkit.event.player.PlayerInteractEvent event =
-                org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
-                        this.player,
-                        org.bukkit.event.block.Action.RIGHT_CLICK_AIR,
-                        null,
-                        null,
-                        stack,
-                        slot);
-        if (event != null && (event.isCancelled()
-                || event.useItemInHand() == org.bukkit.event.Event.Result.DENY)) {
-            // Cancel only the Bukkit-visible air use. The original loader-owned
+
+        io.ampznetwork.lunararc.common.bridge.ServerPlayerGameModeBridge gameMode =
+                (io.ampznetwork.lunararc.common.bridge.ServerPlayerGameModeBridge) this.player.gameMode;
+        net.minecraft.world.phys.BlockHitResult blockHit = lunararc$clipForUseItem();
+        boolean cancelled;
+        if (blockHit == null) {
+            org.bukkit.event.player.PlayerInteractEvent event =
+                    org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
+                            this.player, org.bukkit.event.block.Action.RIGHT_CLICK_AIR, null, null, stack, slot);
+            cancelled = event != null && (event.isCancelled() || event.useItemInHand() == org.bukkit.event.Event.Result.DENY);
+        } else if (gameMode.lunararc$firedInteract()
+                && blockHit.getBlockPos().equals(gameMode.lunararc$interactPosition())
+                && hand == gameMode.lunararc$interactHand()
+                && net.minecraft.world.item.ItemStack.isSameItemSameComponents(gameMode.lunararc$interactItemStack(), stack)) {
+            cancelled = gameMode.lunararc$interactResult();
+        } else {
+            org.bukkit.event.player.PlayerInteractEvent event =
+                    org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(
+                            this.player, org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK,
+                            blockHit.getBlockPos(), blockHit.getDirection(), stack, slot);
+            cancelled = event != null && (event.isCancelled() || event.useItemInHand() == org.bukkit.event.Event.Result.DENY);
+        }
+        gameMode.lunararc$clearFiredInteract();
+
+        if (cancelled) {
+            // Cancel only the Bukkit-visible use. The original loader-owned
             // packet method remains intact whenever plugins permit the action.
             this.player.getInventory().setChanged();
             ci.cancel();
+            return;
         }
+        // A plugin listening to the event above may have emptied the stack (e.g. consumed it);
+        // re-read it so a use that no longer has an item to act on does not fall through to
+        // the loader's own useItem() call with an item that is no longer actually there.
+        if (this.player.getItemInHand(hand).isEmpty()) {
+            ci.cancel();
+        }
+    }
+
+    @Unique
+    private net.minecraft.world.phys.BlockHitResult lunararc$clipForUseItem() {
+        net.minecraft.world.phys.Vec3 eye = this.player.getEyePosition();
+        net.minecraft.world.phys.Vec3 look = this.player.getViewVector(1.0F);
+        double range = this.player.blockInteractionRange();
+        net.minecraft.world.phys.Vec3 end = eye.add(look.scale(range));
+        net.minecraft.world.phys.BlockHitResult hit = this.player.serverLevel().clip(
+                new net.minecraft.world.level.ClipContext(eye, end,
+                        net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                        net.minecraft.world.level.ClipContext.Fluid.NONE, this.player));
+        return hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK ? hit : null;
     }
 
     @Inject(method = "handleSetCarriedItem", at = @At("HEAD"), cancellable = true, require = 0)
