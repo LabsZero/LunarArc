@@ -238,6 +238,24 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
      */
     public double[] recentTps = new double[3];
 
+    /**
+     * A fake {@code nextTickTime} on {@code MinecraftServer}, matching Mohist/Youer's own
+     * compatibility field verbatim (their comment: "Add fake tickField worldedit need this").
+     *
+     * <p>Vanilla renamed its real tick-timing field to the nanosecond-based
+     * {@code nextTickTimeNanos} years ago, but WorldEdit's Bukkit adapter layer still reflects for
+     * the pre-rename {@code long nextTickTime} field CraftBukkit used to carry, to estimate time
+     * until the next tick for its fast/async edit throttling. Without it here, that reflective
+     * lookup fails - "No reflective mapping found for field MinecraftServer#nextTickTime" - which
+     * is also why WorldEdit falls back to running with no Bukkit adapter at all right afterward:
+     * its adapter validation treats a missing field the same as an incompatible one.</p>
+     *
+     * <p>Never written to, same as upstream - its only job is to exist under this name so the
+     * reflective probe succeeds. Real tick pacing stays entirely on vanilla's own
+     * {@code nextTickTimeNanos}.</p>
+     */
+    public long nextTickTime = 0L;
+
     @Override
     public double[] lunararc$getTps() {
         // Built element by element rather than with recentTps.clone(). An array's clone() is an
