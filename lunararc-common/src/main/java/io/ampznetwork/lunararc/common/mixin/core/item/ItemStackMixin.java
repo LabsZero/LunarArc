@@ -2,7 +2,12 @@ package io.ampznetwork.lunararc.common.mixin.core.item;
 
 import io.ampznetwork.lunararc.common.bridge.EntityBridge;
 import io.ampznetwork.lunararc.common.bridge.ItemStackBridge;
+import io.ampznetwork.lunararc.common.LunarArcServerAccess;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -18,6 +23,18 @@ import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(ItemStack.class)
 public abstract class ItemStackMixin implements ItemStackBridge {
+
+    @WrapMethod(
+            method = "save(Lnet/minecraft/core/HolderLookup$Provider;Lnet/minecraft/nbt/Tag;)Lnet/minecraft/nbt/Tag;",
+            require = 0)
+    private Tag lunararc$saveWithRegistry(
+            HolderLookup.Provider provider, Tag tag, Operation<Tag> original) {
+        if (provider == null) {
+            net.minecraft.server.MinecraftServer server = LunarArcServerAccess.getMinecraftServer();
+            if (server != null) provider = server.registryAccess();
+        }
+        return original.call(provider, tag);
+    }
 
     @Override
     public void lunararc$hurtAndBreak(int amount, LivingEntity owner, EquipmentSlot slot, boolean force) {

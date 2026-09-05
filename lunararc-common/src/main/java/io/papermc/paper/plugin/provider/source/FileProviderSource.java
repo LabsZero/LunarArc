@@ -17,10 +17,12 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.jar.JarFile;
+import java.util.logging.Logger;
 
 public class FileProviderSource implements ProviderSource<Path, Path> {
 
     private final Function<Path, String> contextChecker;
+    private static final Logger LOGGER = Logger.getLogger(FileProviderSource.class.getName());
 
     public FileProviderSource(Function<Path, String> contextChecker) {
         this.contextChecker = contextChecker;
@@ -54,20 +56,38 @@ public class FileProviderSource implements ProviderSource<Path, Path> {
     public void registerProviders(EntrypointHandler entrypointHandler, Path context) throws Exception {
         String source = this.contextChecker.apply(context);
 
-        JarFile file = new JarFile(context.toFile(), true, JarFile.OPEN_READ, JarFile.runtimeVersion());
-        PluginFileType<?, ?> type = PluginFileType.guessType(file);
-        if (type == null) {
+        try (JarFile file = new JarFile(context.toFile(), true, JarFile.OPEN_READ, JarFile.runtimeVersion())) {
+            PluginFileType<?, ?> type = PluginFileType.guessType(file);
+            if (type == null) {
 
-            if (file.getEntry("META-INF/versions.list") != null) {
-                throw new RuntimeException(new IllegalArgumentException(context + " appears to be a server jar! Server jars do not belong in the plugin folder."));
+                if (file.getEntry("META-INF/versions.list") != null) {
+                    throw new RuntimeException(new IllegalArgumentException(context + " appears to be a server jar! Server jars do not belong in the plugin folder."));
+                }
+
+                throw new RuntimeException(
+                    new IllegalArgumentException(source + " does not contain a " + String.join(" or ", PluginFileType.getConfigTypes()) + "! Could not determine plugin type, cannot load a plugin from it!")
+                );
             }
 
-            throw new RuntimeException(
-                new IllegalArgumentException(source + " does not contain a " + String.join(" or ", PluginFileType.getConfigTypes()) + "! Could not determine plugin type, cannot load a plugin from it!")
-            );
-        }
+            try {
+                type.register(entrypointHandler, file, context);
+            } catch (Throwable throwable) {
+                UnsupportedClassVersionError versionError = findUnsupportedClassVersionError(throwable);
+                if (versionError == null) throw throwable;
 
-        type.register(entrypointHandler, file, context);
+                LOGGER.warning(io.ampznetwork.lunararc.common.server.LunarArcPluginLoader
+                        .friendlyJavaVersionMessage(context.getFileName().toString(), versionError));
+            }
+        }
+    }
+
+    private static UnsupportedClassVersionError findUnsupportedClassVersionError(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof UnsupportedClassVersionError versionError) return versionError;
+            current = current.getCause();
+        }
+        return null;
     }
 
     private Path checkUpdate(Path file) throws InvalidPluginException {

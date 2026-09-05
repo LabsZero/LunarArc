@@ -14,17 +14,41 @@ public class TranslationManager {
     private static volatile String currentLocale = DEFAULT_LOCALE;
 
     static {
-
-        String lang = Locale.getDefault().getLanguage().toLowerCase();
-        String country = Locale.getDefault().getCountry().toLowerCase();
-        currentLocale = lang + "_" + country;
-
+        currentLocale = detectLocale(Locale.getDefault());
         loadLocale(DEFAULT_LOCALE);
+        loadLocale(currentLocale);
     }
 
     public static void setLocale(String locale) {
-        currentLocale = locale.toLowerCase();
+        currentLocale = normalizeLocale(locale);
         loadLocale(currentLocale);
+    }
+
+    public static String detectLocale(Locale locale) {
+        if (locale == null) return DEFAULT_LOCALE;
+        String language = locale.getLanguage().toLowerCase(Locale.ROOT);
+        String country = locale.getCountry().toLowerCase(Locale.ROOT);
+        if (language.isBlank()) return DEFAULT_LOCALE;
+        if (country.isBlank()) {
+            country = switch (language) {
+                case "en" -> "us";
+                case "pt" -> "br";
+                case "zh" -> "cn";
+                default -> language;
+            };
+        }
+        return language + "_" + country;
+    }
+
+    /** Accepts either Minecraft IDs such as {@code en_gb} or country aliases such as {@code gb}. */
+    private static String normalizeLocale(String locale) {
+        if (locale == null || locale.isBlank()) return DEFAULT_LOCALE;
+        String normalized = locale.trim().toLowerCase(Locale.ROOT).replace('-', '_');
+        return switch (normalized) {
+            case "gb" -> "en_gb";
+            case "us" -> "en_us";
+            default -> normalized;
+        };
     }
 
     private static void loadLocale(String locale) {
@@ -47,7 +71,7 @@ public class TranslationManager {
     }
 
     private static InputStream openLocale(String locale) {
-        String resource = "locale/" + locale + ".json";
+        String resource = "locale/" + normalizeLocale(locale) + ".json";
         ClassLoader own = TranslationManager.class.getClassLoader();
         if (own != null) {
             InputStream in = own.getResourceAsStream(resource);

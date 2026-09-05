@@ -1,11 +1,6 @@
 # LunarArc incompatibility list.
 #
-# Plugins and mods LunarArc knows do not work on it. This is not operator
-# configuration - it is the project stating what it knows - so it lives here,
-# beside libs.versions.toml, and is baked into the jar at build time. There is
-# no editable copy on a running server.
-#
-# Add an entry, rebuild, done.
+# Plugins and mods LunarArc knows do not work on it.
 #
 #   name     plugin name from plugin.yml / paper-plugin.yml, or the loader's
 #            mod ID. Matched case-insensitively.
@@ -25,10 +20,10 @@
 # names the mod and the reason, which at least turns "the server behaves
 # strangely" into a line naming the cause.
 
+[[plugins]]
+name = "ModdedIntegration"
+reason = "LunarArc gives Essentials a name for every modded item natively; this plugin's own items.json edits are redundant."
+
 # [[mods]]
 # name = "examplemod"
 # reason = "Replaces the chunk system; conflicts with LunarArc's chunk handling."
-
-[[plugins]]
-name = "ModdedIntegration"
-reason = "LunarArc gives Essentials a name for every modded item natively; this plugin's own items.json edits are redundant and its EssentialsX reload timing can race LunarArc's own."

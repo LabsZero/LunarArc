@@ -92,11 +92,10 @@ class LegacyPaperMeta {
 
 
                         DependencyConfiguration.LoadOrder loadOrder = DependencyConfiguration.LoadOrder.OMIT;
-                        // These meanings are now swapped
                         if (flags.contains(DependencyFlag.LOAD_BEFORE)) {
-                            loadOrder = DependencyConfiguration.LoadOrder.AFTER;
-                        } else if (flags.contains(DependencyFlag.LOAD_AFTER)) {
                             loadOrder = DependencyConfiguration.LoadOrder.BEFORE;
+                        } else if (flags.contains(DependencyFlag.LOAD_AFTER)) {
+                            loadOrder = DependencyConfiguration.LoadOrder.AFTER;
                         }
 
                         flagMap.put(entry.getKey(), new DependencyConfiguration(

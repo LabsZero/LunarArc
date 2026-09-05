@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.Locale;
 
 /**
  * Tracks wall-clock durations of named startup/shutdown phases and logs a ranked
@@ -51,7 +52,7 @@ public final class LunarArcTimings {
     }
 
     public static void recordStartup(String phase, String item, long startNanos) {
-        long ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+        long ms = elapsedMillis(startNanos);
         synchronized (LOCK) {
             startupEntries.add(new Entry(phase, item, ms));
         }
@@ -61,11 +62,11 @@ public final class LunarArcTimings {
     }
 
     public static void recordStartupPhase(String phase, long startNanos) {
-        long ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+        long ms = elapsedMillis(startNanos);
         synchronized (LOCK) {
             startupEntries.add(new Entry(phase, null, ms));
         }
-        LOGGER.info("[Startup] {} completed in {}ms", phase, ms);
+        LOGGER.info("[Startup] {} completed in {}", phase, formatDuration(ms));
         if (LunarArcDebug.TIMING) {
             LunarArcDebug.timing("[startup] {} completed in {}ms", phase, ms);
         }
@@ -83,27 +84,7 @@ public final class LunarArcTimings {
                     .toList();
         }
 
-        LOGGER.info("=== Startup Timing Summary (total: {}ms) ===", totalMs);
-        for (Entry phase : phases) {
-            LOGGER.info("  {} — {}ms", phase.phase, phase.durationMs);
-        }
-
-        if (!items.isEmpty()) {
-            int slowCount = Math.min(10, items.size());
-            long slowThreshold = 50;
-            List<Entry> slow = items.stream()
-                    .filter(e -> e.durationMs >= slowThreshold)
-                    .limit(slowCount)
-                    .toList();
-
-            if (!slow.isEmpty()) {
-                LOGGER.info("  Top {} slowest items (≥{}ms):", slow.size(), slowThreshold);
-                for (Entry entry : slow) {
-                    LOGGER.info("    {} / {} — {}ms", entry.phase, entry.item, entry.durationMs);
-                }
-            }
-        }
-        LOGGER.info("=============================================");
+        logSummary("STARTUP", totalMs, phases, items);
 
         if (LunarArcDebug.TIMING && !items.isEmpty()) {
             LunarArcDebug.timing("=== Full Startup Item Breakdown ===");
@@ -120,7 +101,7 @@ public final class LunarArcTimings {
     }
 
     public static void recordShutdown(String phase, String item, long startNanos) {
-        long ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+        long ms = elapsedMillis(startNanos);
         synchronized (LOCK) {
             shutdownEntries.add(new Entry(phase, item, ms));
         }
@@ -130,11 +111,11 @@ public final class LunarArcTimings {
     }
 
     public static void recordShutdownPhase(String phase, long startNanos) {
-        long ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+        long ms = elapsedMillis(startNanos);
         synchronized (LOCK) {
             shutdownEntries.add(new Entry(phase, null, ms));
         }
-        LOGGER.info("[Shutdown] {} completed in {}ms", phase, ms);
+        LOGGER.info("[Shutdown] {} completed in {}", phase, formatDuration(ms));
         if (LunarArcDebug.TIMING) {
             LunarArcDebug.timing("[shutdown] {} completed in {}ms", phase, ms);
         }
@@ -153,9 +134,15 @@ public final class LunarArcTimings {
                     .toList();
         }
 
-        LOGGER.info("=== Shutdown Timing Summary (total: {}ms) ===", totalMs);
+        logSummary("SHUTDOWN", totalMs, phases, items);
+    }
+
+    private static void logSummary(String label, long totalMs, List<Entry> phases, List<Entry> items) {
+        LOGGER.info("+------------------------------------------------------------+");
+        LOGGER.info("| LunarArc Timings | {} | total {}", label, formatDuration(totalMs));
+        LOGGER.info("+------------------------------------------------------------+");
         for (Entry phase : phases) {
-            LOGGER.info("  {} — {}ms", phase.phase, phase.durationMs);
+            LOGGER.info("{}", timingRow("PHASE", phase.phase, phase.durationMs));
         }
 
         if (!items.isEmpty()) {
@@ -167,13 +154,32 @@ public final class LunarArcTimings {
                     .toList();
 
             if (!slow.isEmpty()) {
-                LOGGER.info("  Top {} slowest items (≥{}ms):", slow.size(), slowThreshold);
+                LOGGER.info("| SLOWEST {} ITEMS (threshold {})", slow.size(), formatDuration(slowThreshold));
                 for (Entry entry : slow) {
-                    LOGGER.info("    {} / {} — {}ms", entry.phase, entry.item, entry.durationMs);
+                    String name = entry.phase + " / " + entry.item;
+                    LOGGER.info("{}", timingRow("ITEM", name, entry.durationMs));
                 }
             }
         }
-        LOGGER.info("=============================================");
+        LOGGER.info("+------------------------------------------------------------+");
+    }
+
+    private static String formatDuration(long durationMs) {
+        if (durationMs < 1000) return durationMs + "ms";
+        if (durationMs < 60_000) return String.format(Locale.ROOT, "%.3fs", durationMs / 1000.0d);
+        long minutes = durationMs / 60_000;
+        long seconds = (durationMs % 60_000) / 1000;
+        return minutes + "m " + seconds + "s";
+    }
+
+    private static long elapsedMillis(long startNanos) {
+        long elapsedNanos = Math.max(0L, System.nanoTime() - startNanos);
+        return Math.max(1L, TimeUnit.NANOSECONDS.toMillis(elapsedNanos));
+    }
+
+    private static String timingRow(String kind, String name, long durationMs) {
+        String displayName = name.length() > 42 ? name.substring(0, 39) + "..." : name;
+        return String.format(Locale.ROOT, "| %-6s %-42s %8s |", kind, displayName, formatDuration(durationMs));
     }
 
     /** Clears all recorded entries. Called at the end of shutdown. */

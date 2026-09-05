@@ -1,5 +1,5 @@
 {
-  "logo": "\u001b[36m\u001b[1m    __                              ___\n   / /   __  ______  ____ ______   /   |  __________\n  / /   / / / / __ \\/ __ `/ ___/  / /| | / ___/ ___/\n / /___/ /_/ / / / / /_/ / /     / ___ |/ /  / /__\n/_____/\\__,_/_/ /_/\\__,_/_/     /_/  |_/_/   \\___/\u001b[0m\n\u001b[35m        Minecraft v{0}\u001b[0m\n",
+  "logo": "\u001b[36m\u001b[1m    __                              ___\n   / /   __  ______  ____ ______   /   |  __________\n  / /   / / / / __ \\/ __ `/ ___/  / /| | / ___/ ___/\n / /___/ /_/ / / / / /_/ / /     / ___ |/ /  / /__\n/_____/\\__,_/_/ /_/\\__,_/_/     /_/  |_/_/   \\___\u001b[0m\n\u001b[35m        Minecraft v{0}\u001b[0m\n",
   "step.initializing": "Initializing system components...",
   "step.auto_selecting": "Auto-Selecting platform: {0} from {1}",
   "platform.select_header": "\u001b[35m\u001b[1mAvailable Platforms:\u001b[0m",

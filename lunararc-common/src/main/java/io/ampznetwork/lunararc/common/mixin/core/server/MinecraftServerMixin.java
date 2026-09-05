@@ -59,6 +59,10 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
     @Unique
     private long lunararc$bukkitStartupStartedNanos;
+    @Unique
+    private long lunararc$worldLoadStartedNanos;
+    @Unique
+    private long lunararc$worldShutdownStartedNanos;
 
     @Unique
     private boolean lunararc$serverLoadEventFired;
@@ -351,6 +355,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         long enableStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
         this.lunararc$enablePlugins(craftServer, PluginLoadOrder.STARTUP);
         io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartupPhase("Plugin Enable STARTUP", enableStart);
+        this.lunararc$worldLoadStartedNanos = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
     }
 
 
@@ -361,6 +366,9 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
         MinecraftServer minecraftServer = (MinecraftServer) (Object) this;
         CraftServer craftServer = this.lunararc$requireCraftServer();
+
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordStartupPhase(
+            "World Load", this.lunararc$worldLoadStartedNanos);
 
         long worldInitStart = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
         for (net.minecraft.server.level.ServerLevel level : minecraftServer.getAllLevels()) {
@@ -467,7 +475,13 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         org.bukkit.plugin.java.PluginClassLoader.shutdownSharedLoaders();
         io.ampznetwork.lunararc.common.server.LunarArcContext.clearServerReferences();
         io.ampznetwork.lunararc.common.server.LunarArcTimings.recordShutdownPhase("Server Cleanup", cleanupStart);
+        this.lunararc$worldShutdownStartedNanos = io.ampznetwork.lunararc.common.server.LunarArcTimings.phaseStart();
+    }
 
+    @Inject(method = "stopServer", at = @At("TAIL"))
+    private void lunararc$afterStop(CallbackInfo ci) {
+        io.ampznetwork.lunararc.common.server.LunarArcTimings.recordShutdownPhase(
+                "World Shutdown", this.lunararc$worldShutdownStartedNanos);
         io.ampznetwork.lunararc.common.server.LunarArcTimings.logShutdownSummary();
         io.ampznetwork.lunararc.common.server.LunarArcTimings.reset();
     }

@@ -22,7 +22,9 @@ public final class CraftTrimMaterial implements TrimMaterial, org.bukkit.craftbu
     @Override public @NotNull NamespacedKey getKey() { return this.key; }
     @Override public @NotNull String getTranslationKey() {
         if (this.handle.description().getContents() instanceof TranslatableContents translatable) return translatable.getKey();
-        throw new UnsupportedOperationException("Trim material description is not translatable: " + this.key);
+        return net.minecraft.Util.makeDescriptionId(
+                "trim_material",
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(key.getNamespace(), key.getKey()));
     }
     @Override public net.kyori.adventure.text.Component description() {
         return io.papermc.paper.adventure.PaperAdventure.asAdventure(this.handle.description());

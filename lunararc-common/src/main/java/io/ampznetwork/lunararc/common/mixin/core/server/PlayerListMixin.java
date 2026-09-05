@@ -362,39 +362,11 @@ public abstract class PlayerListMixin implements PlayerListBridge {
             this.broadcastSystemMessage(LunarArcComponentPipeline.fromAdventure(message), overlay);
         }
 
-        // LunarArc build-channel notice. All player-facing wording and the issue URL live
-        // in the lang resource; stable release builds remain silent.
-        String buildNoticePrefix = null;
-        if (io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.isPreReleaseBuild()) {
-            buildNoticePrefix = "build.prerelease.chat";
-        } else if (io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.isPreviewBuild()) {
-            buildNoticePrefix = "build.preview.chat";
-        }
-        if (buildNoticePrefix != null) {
-            String version = io.ampznetwork.lunararc.common.server.LunarArcVersionInfo.lunarArcVersion();
-            String issueUrl = io.ampznetwork.lunararc.i18n.TranslationManager.get("build.report.url");
-
-            net.kyori.adventure.text.Component title = net.kyori.adventure.text.Component.text(
-                            io.ampznetwork.lunararc.i18n.TranslationManager.get(buildNoticePrefix + ".title"))
-                    .color(net.kyori.adventure.text.format.NamedTextColor.GOLD)
-                    .decorate(net.kyori.adventure.text.format.TextDecoration.BOLD);
-            net.kyori.adventure.text.Component body = net.kyori.adventure.text.Component.text(
-                            io.ampznetwork.lunararc.i18n.TranslationManager.get(buildNoticePrefix + ".body", version))
-                    .color(net.kyori.adventure.text.format.NamedTextColor.YELLOW);
-            net.kyori.adventure.text.Component report = net.kyori.adventure.text.Component.text(
-                            io.ampznetwork.lunararc.i18n.TranslationManager.get("build.report.chat"),
-                            net.kyori.adventure.text.format.NamedTextColor.GRAY)
-                    .append(net.kyori.adventure.text.Component.text(issueUrl, net.kyori.adventure.text.format.NamedTextColor.AQUA)
-                            .decorate(net.kyori.adventure.text.format.TextDecoration.UNDERLINED)
-                            .clickEvent(net.kyori.adventure.text.event.ClickEvent.openUrl(issueUrl))
-                            .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(
-                                    net.kyori.adventure.text.Component.text(
-                                            io.ampznetwork.lunararc.i18n.TranslationManager.get("build.report.hover")))));
-
-            bukkitPlayer.sendMessage(title);
-            bukkitPlayer.sendMessage(body);
-            bukkitPlayer.sendMessage(report);
-        }
+        io.ampznetwork.lunararc.common.events.PlayerJoinListener.checkAndNotify(
+                bukkitPlayer,
+                player.getGameProfile(),
+                this.server,
+                this.server::execute);
     }
 
     @Inject(

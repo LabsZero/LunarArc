@@ -37,17 +37,6 @@ public final class LunarArcPluginFixManager {
         if (pluginName == null) return;
 
         if (pluginName.equals("WorldEdit")) {
-            // WorldEdit picks its NMS adapter through BukkitImplLoader, which identifies the
-            // server it is running on before choosing. On a hybrid that identification does not
-            // land, no adapter is selected, and WorldEdit disables itself during onEnable - after
-            // which every later reference to one of its classes throws NoClassDefFoundError from
-            // the closed plugin classloader, thousands of times, which looks like the fault
-            // rather than the aftermath of it.
-            //
-            // BukkitImplLoader consults this system property first and loads the named adapter
-            // directly, skipping detection. Same value and same only-if-unset guard as Youer, so
-            // FastAsyncWorldEdit - which sets its own fawe adapter under a different plugin name -
-            // keeps whatever it chose.
             if (System.getProperty("worldedit.bukkit.adapter") == null) {
                 System.setProperty("worldedit.bukkit.adapter",
                         "com.sk89q.worldedit.bukkit.adapter.impl.v1_21.PaperweightAdapter");
@@ -81,6 +70,10 @@ public final class LunarArcPluginFixManager {
                     node -> redirectMethodToGetNMSVersion(node, "getNMSVersion");
             case "com.earth2me.essentials.items.FlatItemDb" ->
                     LunarArcPluginFixManager::fixEssentialsModdedMaterials;
+                case "com.sk89q.worldguard.bukkit.util.Materials" ->
+                    LunarArcPluginFixManager::fixWorldGuardMaterials;
+                case "com.Acrobot.ChestShop.Listeners.Block.BlockPlace" ->
+                    LunarArcPluginFixManager::guardChestShopMaterialSwitch;
             default -> null;
         };
         return patcher == null ? clazz : patch(clazz, patcher);
@@ -127,6 +120,88 @@ public final class LunarArcPluginFixManager {
         }
     }
 
+    private static void fixWorldGuardMaterials(ClassNode node) {
+        for (MethodNode method : node.methods) {
+            if (!method.name.equals("getEntitySpawnEgg")
+                    || !method.desc.equals("(Lorg/bukkit/Material;)Lorg/bukkit/entity/EntityType;")) {
+                continue;
+            }
+
+            InsnList replacement = new InsnList();
+            replacement.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            replacement.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    Type.getInternalName(LunarArcPluginFixManager.class),
+                    "worldGuardSpawnEgg",
+                    "(Lorg/bukkit/Material;)Lorg/bukkit/entity/EntityType;",
+                    false));
+            replacement.add(new InsnNode(Opcodes.ARETURN));
+            method.instructions = replacement;
+            method.tryCatchBlocks.clear();
+            return;
+        }
+    }
+
+    private static void guardChestShopMaterialSwitch(ClassNode node) {
+        for (MethodNode method : node.methods) {
+            if (!method.name.equals("onHopperDropperPlace")
+                    || !method.desc.equals("(Lorg/bukkit/event/block/BlockPlaceEvent;)V")) {
+                continue;
+            }
+
+            InsnList guard = new InsnList();
+            org.objectweb.asm.tree.LabelNode vanillaMaterial = new org.objectweb.asm.tree.LabelNode();
+            guard.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            guard.add(new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL,
+                    "org/bukkit/event/block/BlockPlaceEvent",
+                    "getBlockPlaced",
+                    "()Lorg/bukkit/block/Block;",
+                    false));
+            guard.add(new MethodInsnNode(
+                    Opcodes.INVOKEINTERFACE,
+                    "org/bukkit/block/Block",
+                    "getType",
+                    "()Lorg/bukkit/Material;",
+                    true));
+            guard.add(new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL,
+                    "org/bukkit/Material",
+                    "getKey",
+                    "()Lorg/bukkit/NamespacedKey;",
+                    false));
+            guard.add(new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL,
+                    "org/bukkit/NamespacedKey",
+                    "getNamespace",
+                    "()Ljava/lang/String;",
+                    false));
+            guard.add(new LdcInsnNode("minecraft"));
+            guard.add(new MethodInsnNode(
+                    Opcodes.INVOKEVIRTUAL,
+                    "java/lang/String",
+                    "equals",
+                    "(Ljava/lang/Object;)Z",
+                    false));
+            guard.add(new org.objectweb.asm.tree.JumpInsnNode(Opcodes.IFNE, vanillaMaterial));
+            guard.add(new InsnNode(Opcodes.RETURN));
+            guard.add(vanillaMaterial);
+            method.instructions.insert(guard);
+            method.maxStack = Math.max(method.maxStack, 2);
+            return;
+        }
+    }
+
+    public static org.bukkit.entity.EntityType worldGuardSpawnEgg(org.bukkit.Material material) {
+        if (material == null || material.getKey() == null
+                || !"minecraft".equals(material.getKey().getNamespace())) {
+            return null;
+        }
+        String name = material.name();
+        if (!name.endsWith("_SPAWN_EGG")) return null;
+        return org.bukkit.entity.EntityType.fromName(name.substring(0, name.length() - "_SPAWN_EGG".length()));
+    }
+
     public static String normalizeEssentialsItemName(String itemName) {
         if (itemName == null) return null;
 
@@ -145,17 +220,7 @@ public final class LunarArcPluginFixManager {
 
         String requested = itemName.trim().toLowerCase(Locale.ROOT);
         if (requested.isEmpty()) return null;
-
-        for (Map.Entry<net.minecraft.resources.ResourceLocation, org.bukkit.Material> entry
-                : LunarArcDynamicBukkitEnums.materialsById().entrySet()) {
-            net.minecraft.resources.ResourceLocation id = entry.getKey();
-            if (id == null || "minecraft".equals(id.getNamespace())) continue;
-
-            String alias = (id.getNamespace() + "_" + id.getPath()).toLowerCase(Locale.ROOT);
-            if (alias.equals(requested)) return entry.getValue();
-        }
-
-        return null;
+        return LunarArcEssentialsItemBridge.resolveAlias(requested);
     }
 
     private static void removePaper0(ClassNode node) {

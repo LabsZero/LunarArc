@@ -130,6 +130,10 @@ public final class LunarArcPluginProvider implements AutoCloseable {
             rollback(error);
             Throwable cause = error instanceof java.lang.reflect.InvocationTargetException ite && ite.getCause() != null
                     ? ite.getCause() : error;
+            if (cause instanceof UnsupportedClassVersionError versionError) {
+                throw new InvalidPluginException(LunarArcPluginLoader.friendlyJavaVersionMessage(
+                        description.getName(), versionError), versionError);
+            }
             if (cause instanceof Error fatal) throw fatal;
             if (cause instanceof InvalidPluginException invalid) throw invalid;
             throw new InvalidPluginException(cause);
@@ -191,6 +195,10 @@ public final class LunarArcPluginProvider implements AutoCloseable {
     private static void rethrow(Throwable error) throws InvalidPluginException {
         Throwable cause = error instanceof java.lang.reflect.InvocationTargetException ite && ite.getCause() != null
                 ? ite.getCause() : error;
+        if (cause instanceof UnsupportedClassVersionError versionError) {
+            throw new InvalidPluginException(LunarArcPluginLoader.friendlyJavaVersionMessage(
+                    "plugin", versionError), versionError);
+        }
         if (cause instanceof Error fatal) throw fatal;
         if (cause instanceof InvalidPluginException invalid) throw invalid;
         if (cause instanceof RuntimeException runtime) throw runtime;

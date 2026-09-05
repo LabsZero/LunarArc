@@ -21,7 +21,9 @@ public final class CraftJukeboxSong implements JukeboxSong, org.bukkit.craftbukk
     @Override public @NotNull NamespacedKey getKey() { return this.key; }
     @Override public @NotNull String getTranslationKey() {
         if (this.handle.description().getContents() instanceof TranslatableContents translatable) return translatable.getKey();
-        throw new UnsupportedOperationException("Jukebox song description is not translatable: " + this.key);
+        return net.minecraft.Util.makeDescriptionId(
+                "jukebox_song",
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(key.getNamespace(), key.getKey()));
     }
     @Override public String toString() { return "CraftJukeboxSong[" + this.key + "]"; }
 

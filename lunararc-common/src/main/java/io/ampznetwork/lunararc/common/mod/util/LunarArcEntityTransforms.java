@@ -66,9 +66,15 @@ public final class LunarArcEntityTransforms {
         org.bukkit.entity.Entity targetBukkit = ((EntityBridge) target).lunararc$getBukkitEntity();
         EntityTransformEvent transformEvent = new EntityTransformEvent(sourceBukkit, List.of(targetBukkit), transformReason);
         Bukkit.getPluginManager().callEvent(transformEvent);
-        if (transformEvent.isCancelled()) return null;
+        if (transformEvent.isCancelled()) {
+            target.discard();
+            return null;
+        }
 
-        if (!((ServerLevelBridge) level).lunararc$addFreshEntity(target, spawnReason)) return null;
+        if (!((ServerLevelBridge) level).lunararc$addFreshEntity(target, spawnReason)) {
+            target.discard();
+            return null;
+        }
 
         if (keepEquipment) {
             for (EquipmentSlot slot : EquipmentSlot.values()) {

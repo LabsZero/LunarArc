@@ -54,7 +54,7 @@ public class PaperPluginMeta implements PluginMeta {
     private boolean hasOpenClassloader = false;
     @Required
     private String version;
-    private String description;
+    private String description = "";
     private List<String> authors = List.of();
     private List<String> contributors = List.of();
     private String website;

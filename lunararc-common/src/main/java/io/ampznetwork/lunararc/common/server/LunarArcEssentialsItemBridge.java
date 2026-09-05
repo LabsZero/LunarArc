@@ -14,16 +14,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Exposes loader-owned items to EssentialsX as both namespace_path and namespace:path. */
 public final class LunarArcEssentialsItemBridge {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc");
     private static final String ESSENTIALS_CLASS = "com.earth2me.essentials.Essentials";
+    private static final Map<String, Material> MODDED_ITEM_ALIASES = new ConcurrentHashMap<>();
 
     private LunarArcEssentialsItemBridge() {}
 
     public static void populateModdedItems(CraftServer craftServer) {
+        rebuildAliasIndex();
         Plugin essentials = findEssentials(craftServer);
         if (essentials == null) return;
 
@@ -41,6 +44,27 @@ public final class LunarArcEssentialsItemBridge {
             reloadEssentialsItemDb(essentials);
         } catch (Exception e) {
             LOGGER.warn("[LunarArc] Could not add modded items to Essentials' items.json: {}", e.toString());
+        }
+    }
+
+    /** Resolves Essentials' namespace_path form without scanning every registered item. */
+    public static Material resolveAlias(String alias) {
+        if (alias == null || alias.isBlank()) return null;
+        String normalized = alias.trim().toLowerCase(Locale.ROOT);
+        Material material = MODDED_ITEM_ALIASES.get(normalized);
+        if (material != null) return material;
+
+        rebuildAliasIndex();
+        return MODDED_ITEM_ALIASES.get(normalized);
+    }
+
+    private static void rebuildAliasIndex() {
+        for (Map.Entry<ResourceLocation, Material> entry : LunarArcDynamicBukkitEnums.materialsById().entrySet()) {
+            ResourceLocation id = entry.getKey();
+            Material material = entry.getValue();
+            if (id == null || material == null || "minecraft".equals(id.getNamespace()) || !material.isItem()) continue;
+            MODDED_ITEM_ALIASES.putIfAbsent(
+                    (id.getNamespace() + "_" + id.getPath()).toLowerCase(Locale.ROOT), material);
         }
     }
 

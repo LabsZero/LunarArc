@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.ampznetwork.lunararc.i18n.TranslationManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
@@ -14,6 +15,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 public final class LunarArcVersionFetcher implements VersionFetcher {
@@ -22,6 +24,9 @@ public final class LunarArcVersionFetcher implements VersionFetcher {
     private static final int CONNECT_TIMEOUT_MILLIS = 3000;
     private static final int READ_TIMEOUT_MILLIS = 3000;
 
+    public record Release(String version, String downloadUrl) {
+    }
+
     @Override
     public long getCacheTime() {
         return TimeUnit.HOURS.toMillis(1);
@@ -29,6 +34,28 @@ public final class LunarArcVersionFetcher implements VersionFetcher {
 
     @Override
     public Component getVersionMessage(String serverVersion) {
+        try {
+            Optional<Release> latest = fetchLatestRelease();
+            if (latest.isEmpty()) {
+                return latestVersionMessage(LunarArcVersionInfo.lunarArcVersion());
+            }
+
+            Release release = latest.get();
+            if (isSameVersion(serverVersion, release.version())) {
+                return latestVersionMessage(serverVersion);
+            }
+
+            return Component.text(TranslationManager.get(
+                    "version.update.available", release.version(), serverVersion), NamedTextColor.YELLOW)
+                    .append(Component.newline())
+                    .append(Component.text(TranslationManager.get(
+                            "version.update.download", release.downloadUrl()), NamedTextColor.YELLOW));
+        } catch (Exception e) {
+            return Component.text("Could not check for updates: " + e.getMessage(), NamedTextColor.RED);
+        }
+    }
+
+    public static Optional<Release> fetchLatestRelease() {
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) URI.create(API_URL).toURL().openConnection();
@@ -38,36 +65,26 @@ public final class LunarArcVersionFetcher implements VersionFetcher {
             connection.setRequestProperty("Accept", "application/vnd.github+json");
 
             if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
-                return Component.text("Could not check for updates (GitHub returned "
-                        + connection.getResponseCode() + ").", NamedTextColor.RED);
+                return Optional.empty();
             }
 
-            JsonArray releases;
             try (InputStream input = connection.getInputStream();
                  InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
-                releases = JsonParser.parseReader(reader).getAsJsonArray();
-            }
+                JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
+                for (JsonElement element : releases) {
+                    JsonObject release = element.getAsJsonObject();
+                    if (release.has("draft") && release.get("draft").getAsBoolean()) continue;
 
-            for (JsonElement element : releases) {
-                JsonObject release = element.getAsJsonObject();
-                if (release.has("draft") && release.get("draft").getAsBoolean()) continue;
-
-                String tagName = stringValue(release, "tag_name");
-                String htmlUrl = stringValue(release, "html_url");
-                if (tagName.isBlank() || htmlUrl.isBlank()) continue;
-
-                if (isSameVersion(serverVersion, tagName)) {
-                    return Component.text("You are running the latest version of LunarArc ("
-                            + serverVersion + ").", NamedTextColor.GREEN);
+                    String tagName = stringValue(release, "tag_name");
+                    String htmlUrl = stringValue(release, "html_url");
+                    if (!tagName.isBlank() && !htmlUrl.isBlank()) {
+                        return Optional.of(new Release(tagName, htmlUrl));
+                    }
                 }
-
-                return Component.text("A new version of LunarArc is available: " + tagName
-                        + " (you are running " + serverVersion + "). Download: " + htmlUrl, NamedTextColor.YELLOW);
             }
-
-            return Component.text("No LunarArc releases found to compare against.", NamedTextColor.GRAY);
-        } catch (Exception e) {
-            return Component.text("Could not check for updates: " + e.getMessage(), NamedTextColor.RED);
+            return Optional.empty();
+        } catch (Exception ignored) {
+            return Optional.empty();
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -78,10 +95,33 @@ public final class LunarArcVersionFetcher implements VersionFetcher {
         return value == null || value.isJsonNull() ? "" : value.getAsString();
     }
 
-    private static boolean isSameVersion(String serverVersion, String tagName) {
+    public static boolean isSameVersion(String serverVersion, String tagName) {
         String current = normalize(serverVersion);
         String tag = normalize(tagName);
         return !current.isBlank() && (current.equals(tag) || tag.endsWith(current) || current.endsWith(tag));
+    }
+
+    private static boolean hasPreviousBuild(String buildNumber) {
+        if (buildNumber == null || buildNumber.isBlank()
+                || "local".equalsIgnoreCase(buildNumber)
+                || "unknown".equalsIgnoreCase(buildNumber)) {
+            return false;
+        }
+        try {
+            return Integer.parseInt(buildNumber) > 0;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+    }
+
+    private static Component latestVersionMessage(String version) {
+        Component message = Component.text(TranslationManager.get("version.latest", version), NamedTextColor.GREEN);
+        String buildNumber = LunarArcVersionInfo.buildNumber();
+        if (hasPreviousBuild(buildNumber)) {
+            message = message.append(Component.newline())
+                    .append(Component.text(TranslationManager.get("version.previous", buildNumber), NamedTextColor.GRAY));
+        }
+        return message;
     }
 
     private static String normalize(String value) {

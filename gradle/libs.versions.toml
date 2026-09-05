@@ -9,31 +9,36 @@ build-name = "Trial Zenith"
 minecraft = "1.21.1"
 java-runtime = "21"
 craftbukkit-package = "v1_21_R1"
-neoforge = "21.1.249"
-forge = "52.1.16"
+
+# platform loaders
 fabric-loader = "0.19.5"
 fabric-api = "0.116.17+1.21.1"
 fabric-installer = "0.11.2"
+forge = "52.1.16"
+neoforge = "21.1.219"
 quilt-loader = "0.30.1"
 quilt-installer = "0.15.1"
 
-# loader
+# Bukkit / Paper
 bungeecord-chat-api = "1.21-R0.4"
 paper-api = "1.21.1-R0.1-SNAPSHOT"
 # Find latest build at https://papermc.io/downloads/paper
 paper-build = "133"
 spigot-builddata-ref = "533b02cd6ba8dbf8c8607250b02bf2d8c36421e8"
 data-version = "3955"
-mixin = "0.8.5"
-sqlite = "3.46.0.0"
+
+# mappings / bytecode
 parchment = "2024.11.17"
 asm = "9.7"
+mixin = "0.8.5"
+mixinextras = "0.4.1"
+
+# shared runtime libraries
 adventure = "4.17.0"
 snakeyaml = "2.2"
 fastutil = "8.5.12"
 joml = "1.10.5"
 slf4j = "2.0.9"
-mixinextras = "0.4.1"
 jetbrains-annotations = "24.1.0"
 commons-lang = "2.6"
 
@@ -44,6 +49,7 @@ terminal-console-appender = "1.3.0"
 
 # database
 mysql-connector-j = "9.1.0"
+sqlite = "3.46.0.0"
 
 [libraries]
 neoforge = { group = "net.neoforged", name = "neoforge", version.ref = "neoforge" }

@@ -1,62 +1,54 @@
 package io.ampznetwork.lunararc.common.events;
 
-import io.ampznetwork.lunararc.i18n.TranslationManager;
+import io.ampznetwork.lunararc.common.server.LunarArcVersionFetcher;
+import io.ampznetwork.lunararc.common.server.LunarArcVersionInfo;
+import com.mojang.authlib.GameProfile;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerJoinEvent;
 
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
+public final class PlayerJoinListener {
+    private PlayerJoinListener() {
+    }
 
-public class PlayerJoinListener implements Listener {
+    public static void checkAndNotify(Player player, GameProfile profile, net.minecraft.server.MinecraftServer server,
+                                      Consumer<Runnable> serverExecutor) {
+        if (!hasLevelFourOperatorAccess(profile, server)) return;
 
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        if (player.isOp()) {
-            checkAndNotify(player);
+        CompletableFuture
+                .supplyAsync(LunarArcVersionFetcher::fetchLatestRelease)
+                .thenAccept(release -> release.ifPresent(latest -> {
+                    if (!isCurrentVersion(latest.version())) {
+                        serverExecutor.accept(() -> notifyPlayer(player, latest));
+                    }
+                }));
+    }
+
+    private static boolean hasLevelFourOperatorAccess(GameProfile profile, net.minecraft.server.MinecraftServer server) {
+        try {
+            Object opList = server.getPlayerList().getOps();
+            Object entry = opList.getClass().getMethod("get", GameProfile.class).invoke(opList, profile);
+            return entry != null && ((Number) entry.getClass().getMethod("getLevel").invoke(entry)).intValue() >= 4;
+        } catch (ReflectiveOperationException ignored) {
+            return false;
         }
     }
 
-    private void checkAndNotify(Player player) {
-        Path configPath = Paths.get("lunararc.conf");
-        if (!Files.exists(configPath))
-            return;
+    private static boolean isCurrentVersion(String latestVersion) {
+        return LunarArcVersionFetcher.isSameVersion(LunarArcVersionInfo.lunarArcVersion(), latestVersion);
+    }
 
-        try (InputStream in = Files.newInputStream(configPath)) {
-            Properties props = new Properties();
-            props.load(in);
-
-            String current = props.getProperty("update.current");
-            String latest = props.getProperty("update.latest");
-            String url = props.getProperty("update.url");
-
-            if (current != null && latest != null && !current.equals(latest)) {
-                player.sendMessage(Component.text("----------------------------------------", NamedTextColor.GRAY));
-                player.sendMessage(
-                        Component.text("LunarArc Update Available!", NamedTextColor.AQUA, TextDecoration.BOLD));
-                player.sendMessage(Component.text("Current: ", NamedTextColor.WHITE)
-                        .append(Component.text(current, NamedTextColor.YELLOW)));
-                player.sendMessage(Component.text("Latest:  ", NamedTextColor.WHITE)
-                        .append(Component.text(latest, NamedTextColor.GREEN)));
-
-                if (url != null && !url.isEmpty()) {
-                    player.sendMessage(Component
-                            .text("Click here to download the update", NamedTextColor.GOLD, TextDecoration.UNDERLINED)
-                            .clickEvent(ClickEvent.openUrl(url)));
-                }
-                player.sendMessage(Component.text("----------------------------------------", NamedTextColor.GRAY));
-            }
-        } catch (Exception ignored) {
-        }
+    private static void notifyPlayer(Player player, LunarArcVersionFetcher.Release release) {
+        if (!player.isOnline()) return;
+        player.sendMessage(Component.text("LunarArc update available", NamedTextColor.AQUA, TextDecoration.BOLD));
+        player.sendMessage(Component.text("Latest: ", NamedTextColor.WHITE)
+                .append(Component.text(release.version(), NamedTextColor.GREEN)));
+        player.sendMessage(Component.text("Click here to download the update", NamedTextColor.GOLD, TextDecoration.UNDERLINED)
+                .clickEvent(ClickEvent.openUrl(release.downloadUrl())));
     }
 }
