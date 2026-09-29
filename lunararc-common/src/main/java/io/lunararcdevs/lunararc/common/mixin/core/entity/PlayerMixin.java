@@ -3,6 +3,8 @@ package io.lunararcdevs.lunararc.common.mixin.core.entity;
 import io.lunararcdevs.lunararc.common.LunarArcServerAccess;
 import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
 import io.lunararcdevs.lunararc.common.bridge.PlayerAffectsSpawningBridge;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -15,6 +17,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Player.class)
 public abstract class PlayerMixin implements PlayerAffectsSpawningBridge, io.lunararcdevs.lunararc.common.bridge.PlayerExhaustionBridge {
+    public org.bukkit.craftbukkit.entity.CraftHumanEntity getBukkitEntity() {
+        return (org.bukkit.craftbukkit.entity.CraftHumanEntity) ((EntityBridge) (Object) this).lunararc$getBukkitEntity();
+    }
+
     @Unique
     private boolean lunararc$affectsSpawning = true;
     @Unique private org.bukkit.event.entity.EntityExhaustionEvent.ExhaustionReason lunararc$exhaustionReason = org.bukkit.event.entity.EntityExhaustionEvent.ExhaustionReason.UNKNOWN;
@@ -148,4 +154,12 @@ public abstract class PlayerMixin implements PlayerAffectsSpawningBridge, io.lun
                 .lunararc$pushEffectCause(org.bukkit.event.entity.EntityPotionEffectEvent.Cause.TURTLE_HELMET);
     }
 
+
+    @WrapOperation(method = "tryToStartFallFlying", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/player/Player;startFallFlying()V"))
+    private void lunararc$startGlide(Player self, Operation<Void> original) {
+        if (!org.bukkit.craftbukkit.event.CraftEventFactory.callToggleGlideEvent(self, true).isCancelled()) {
+            original.call(self);
+        }
+    }
 }

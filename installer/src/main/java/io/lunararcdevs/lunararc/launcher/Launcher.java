@@ -60,7 +60,7 @@ public class Launcher {
             UpdateChecker.Handle updates = UpdateChecker.begin(projectVersion, buildName);
 
             ConsoleUI.printStep("step.initializing");
-            StartupTimer.phase("libraries", LibraryExtractor::extractLibraries);
+            LibraryExtractor.extractLibraries();
 
             Path workingDir = Paths.get("").toAbsolutePath();
             Path configPath = workingDir.resolve("lunararc.conf");
@@ -104,12 +104,10 @@ public class Launcher {
                 default -> "unknown";
             };
             LunarArcRuntime.Layout[] prepared = new LunarArcRuntime.Layout[1];
-            StartupTimer.phase("runtime", () ->
-                    prepared[0] = LunarArcRuntime.prepare(workingDir, selfPath, versions, platformName));
+            prepared[0] = LunarArcRuntime.prepare(workingDir, selfPath, versions, platformName);
             LunarArcRuntime.Layout runtime = prepared[0];
 
             updates.finish();
-            StartupTimer.report();
 
             switch (choice) {
                 case "1":

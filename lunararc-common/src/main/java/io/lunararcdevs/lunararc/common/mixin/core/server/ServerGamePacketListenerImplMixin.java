@@ -3,7 +3,6 @@ package io.lunararcdevs.lunararc.common.mixin.core.server;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 
-import io.lunararcdevs.lunararc.common.LunarArcDebug;
 import io.lunararcdevs.lunararc.common.LunarArcServerAccess;
 import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
 import io.lunararcdevs.lunararc.common.server.LunarArcCommandLogger;
@@ -41,40 +40,107 @@ public abstract class ServerGamePacketListenerImplMixin {
     public ServerPlayer player;
 
     @Unique private boolean lunararc$resyncAfterSpecialInventoryClick;
-    @Unique private InteractTraceContext lunararc$interactTrace;
+
+    @Shadow
+    public abstract void teleport(double x, double y, double z, float yaw, float pitch);
+
+    // Paper's PlayerMoveEvent state (lastPosX..lastPitch, hasMoved, justTeleported).
+    @Unique private double lunararc$lastPosX;
+    @Unique private double lunararc$lastPosY;
+    @Unique private double lunararc$lastPosZ;
+    @Unique private float lunararc$lastYaw;
+    @Unique private float lunararc$lastPitch;
+    @Unique private boolean lunararc$hasMoved;
+    @Unique private boolean lunararc$justTeleported;
+
+    // Paper's internalTeleport: every server-side teleport resets the move baseline.
+    @Inject(method = "teleport(DDDFFLjava/util/Set;)V", at = @At("TAIL"))
+    private void lunararc$trackTeleport(double x, double y, double z, float yaw, float pitch,
+            Set<net.minecraft.world.entity.RelativeMovement> relative, CallbackInfo ci) {
+        this.lunararc$justTeleported = true;
+        this.lunararc$lastPosX = this.player.getX();
+        this.lunararc$lastPosY = this.player.getY();
+        this.lunararc$lastPosZ = this.player.getZ();
+        this.lunararc$lastYaw = this.player.getYRot();
+        this.lunararc$lastPitch = this.player.getXRot();
+        this.lunararc$hasMoved = true;
+    }
+
+    // Paper fires PlayerMoveEvent right before the accepted-movement absMoveTo (ordinal 1 on
+    // vanilla, Forge and NeoForge alike; ordinal 0 is the passenger branch).
+    @Inject(method = "handleMovePlayer", cancellable = true,
+            at = @At(value = "INVOKE", ordinal = 1,
+                    target = "Lnet/minecraft/server/level/ServerPlayer;absMoveTo(DDDFF)V"))
+    private void lunararc$firePlayerMove(net.minecraft.network.protocol.game.ServerboundMovePlayerPacket packet,
+            CallbackInfo ci) {
+        ServerPlayer player = this.player;
+        if (lunararc$playerMoveCancelled(packet.getX(player.getX()), packet.getY(player.getY()), packet.getZ(player.getZ()),
+                packet.getYRot(player.getYRot()), packet.getXRot(player.getXRot()))) {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "handleMoveVehicle", cancellable = true, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/server/level/ServerChunkCache;move(Lnet/minecraft/server/level/ServerPlayer;)V"))
+    private void lunararc$fireVehiclePlayerMove(net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket packet, CallbackInfo ci) {
+        if (lunararc$playerMoveCancelled(packet.getX(), packet.getY(), packet.getZ(), packet.getYRot(), packet.getXRot())) {
+            ci.cancel();
+        }
+    }
 
     @Unique
-    private static final class InteractTraceContext {
-        final String packetType;
-        final String hand;
-        final String itemId;
-        final String hitResult;
-        final String action;
-        final boolean eventCancelled;
-        final String useItemInHand;
-        final boolean firedInteract;
-        final boolean handleUseItemContinues;
+    private boolean lunararc$playerMoveCancelled(double x, double y, double z, float yaw, float pitch) {
+        ServerPlayer player = this.player;
+        if (!(((EntityBridge) (Object) player).lunararc$getBukkitEntity() instanceof Player bukkit)) return false;
 
-        InteractTraceContext(String packetType, String hand, String itemId, String hitResult,
-                             String action, boolean eventCancelled, String useItemInHand,
-                             boolean firedInteract, boolean handleUseItemContinues) {
-            this.packetType = packetType;
-            this.hand = hand;
-            this.itemId = itemId;
-            this.hitResult = hitResult;
-            this.action = action;
-            this.eventCancelled = eventCancelled;
-            this.useItemInHand = useItemInHand;
-            this.firedInteract = firedInteract;
-            this.handleUseItemContinues = handleUseItemContinues;
+        if (!this.lunararc$hasMoved) {
+            this.lunararc$lastPosX = player.getX();
+            this.lunararc$lastPosY = player.getY();
+            this.lunararc$lastPosZ = player.getZ();
+            this.lunararc$lastYaw = player.getYRot();
+            this.lunararc$lastPitch = player.getXRot();
+            this.lunararc$hasMoved = true;
         }
 
-        void log(boolean useItemCalled, String interactionResult, boolean usingBefore, boolean usingAfter) {
-            LunarArcDebug.interact("packet={} hand={} item={} hitResult={} action={} cancelled={} useItemInHand={} firedInteract={} continues={} useItemCalled={} result={} isUsingItem(before={}, after={})",
-                    packetType, hand, itemId, hitResult, action, eventCancelled, useItemInHand,
-                    firedInteract, handleUseItemContinues, useItemCalled, interactionResult,
-                    usingBefore, usingAfter);
+        org.bukkit.World world = bukkit.getWorld();
+        org.bukkit.Location from = new org.bukkit.Location(world, this.lunararc$lastPosX, this.lunararc$lastPosY,
+                this.lunararc$lastPosZ, this.lunararc$lastYaw, this.lunararc$lastPitch);
+        org.bukkit.Location to = new org.bukkit.Location(world, x, y, z, yaw, pitch);
+
+        double delta = Math.pow(this.lunararc$lastPosX - to.getX(), 2)
+                + Math.pow(this.lunararc$lastPosY - to.getY(), 2)
+                + Math.pow(this.lunararc$lastPosZ - to.getZ(), 2);
+        float deltaAngle = Math.abs(this.lunararc$lastYaw - to.getYaw())
+                + Math.abs(this.lunararc$lastPitch - to.getPitch());
+        if (!(delta > 1f / 256 || deltaAngle > 10f)
+                || ((io.lunararcdevs.lunararc.common.mixin.core.entity.LivingEntityAccessor) player).lunararc$invokeIsImmobile()) {
+            return false;
         }
+
+        this.lunararc$lastPosX = to.getX();
+        this.lunararc$lastPosY = to.getY();
+        this.lunararc$lastPosZ = to.getZ();
+        this.lunararc$lastYaw = to.getYaw();
+        this.lunararc$lastPitch = to.getPitch();
+
+        org.bukkit.Location oldTo = to.clone();
+        org.bukkit.event.player.PlayerMoveEvent event = new org.bukkit.event.player.PlayerMoveEvent(bukkit, from, to);
+        bukkit.getServer().getPluginManager().callEvent(event);
+
+        if (event.isCancelled()) {
+            this.teleport(from.getX(), from.getY(), from.getZ(), from.getYaw(), from.getPitch());
+            return true;
+        }
+        if (!oldTo.equals(event.getTo())) {
+            bukkit.teleport(event.getTo(), org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN);
+            return true;
+        }
+        // A plugin teleported the player itself during the event rather than using setTo().
+        if (!from.equals(bukkit.getLocation()) && this.lunararc$justTeleported) {
+            this.lunararc$justTeleported = false;
+            return true;
+        }
+        return false;
     }
 
     @Inject(
@@ -392,13 +458,6 @@ public abstract class ServerGamePacketListenerImplMixin {
         boolean firedInteractBefore = gameMode.lunararc$firedInteract();
 
         if (stack.isEmpty() || !stack.isItemEnabled(this.player.serverLevel().enabledFeatures())) {
-            if (LunarArcDebug.INTERACT) {
-                String hitResult = lunararc$determineHitResult();
-                String itemId = stack.isEmpty() ? "minecraft:air" : net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-                boolean isUsing = this.player.isUsingItem();
-                LunarArcDebug.interact("packet=ServerboundUseItemPacket hand={} item={} hitResult={} action=RIGHT_CLICK_AIR cancelled=false useItemInHand=DEFAULT firedInteract={} continues=false useItemCalled=false result=N/A isUsingItem(before={}, after={})",
-                        hand.name(), itemId, hitResult, firedInteractBefore, isUsing, isUsing);
-            }
             return;
         }
 
@@ -450,26 +509,6 @@ public abstract class ServerGamePacketListenerImplMixin {
 
         boolean continues = !cancelled && !this.player.getItemInHand(hand).isEmpty();
 
-        if (LunarArcDebug.INTERACT) {
-            String packetType = "ServerboundUseItemPacket";
-            String handName = hand.name();
-            String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-            String hitResult = lunararc$determineHitResult();
-            String actionName = action.name();
-            String useItemInHandStr = useItemInHandResult.name();
-
-            if (!continues) {
-                this.lunararc$interactTrace = null;
-                boolean isUsing = this.player.isUsingItem();
-                LunarArcDebug.interact("packet={} hand={} item={} hitResult={} action={} cancelled={} useItemInHand={} firedInteract={} continues={} useItemCalled={} result={} isUsingItem(before={}, after={})",
-                        packetType, handName, itemId, hitResult, actionName, eventCancelled, useItemInHandStr,
-                        firedInteractBefore, false, false, "N/A", isUsing, isUsing);
-            } else {
-                this.lunararc$interactTrace = new InteractTraceContext(
-                        packetType, handName, itemId, hitResult, actionName, eventCancelled,
-                        useItemInHandStr, firedInteractBefore, true);
-            }
-        }
 
         if (cancelled) {
             // Cancel only the Bukkit-visible use. The original loader-owned
@@ -483,37 +522,6 @@ public abstract class ServerGamePacketListenerImplMixin {
         // the loader's own useItem() call with an item that is no longer actually there.
         if (this.player.getItemInHand(hand).isEmpty()) {
             ci.cancel();
-        }
-    }
-
-    @WrapOperation(
-            method = "handleUseItem",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerPlayerGameMode;useItem(Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/InteractionHand;)Lnet/minecraft/world/InteractionResult;"),
-            require = 0)
-    private net.minecraft.world.InteractionResult lunararc$wrapUseItemInHandleUseItem(
-            net.minecraft.server.level.ServerPlayerGameMode gameMode,
-            net.minecraft.server.level.ServerPlayer player,
-            net.minecraft.world.level.Level level,
-            net.minecraft.world.item.ItemStack stack,
-            net.minecraft.world.InteractionHand hand,
-            Operation<net.minecraft.world.InteractionResult> original) {
-        boolean usingBefore = player.isUsingItem();
-        net.minecraft.world.InteractionResult result = original.call(gameMode, player, level, stack, hand);
-        boolean usingAfter = player.isUsingItem();
-
-        if (this.lunararc$interactTrace != null) {
-            this.lunararc$interactTrace.log(true, result.name(), usingBefore, usingAfter);
-            this.lunararc$interactTrace = null;
-        }
-        return result;
-    }
-
-    @Inject(method = "handleUseItem", at = @At("RETURN"), require = 0)
-    private void lunararc$afterHandleUseItem(ServerboundUseItemPacket packet, CallbackInfo ci) {
-        if (this.lunararc$interactTrace != null) {
-            boolean isUsing = this.player.isUsingItem();
-            this.lunararc$interactTrace.log(false, "N/A", isUsing, isUsing);
-            this.lunararc$interactTrace = null;
         }
     }
 

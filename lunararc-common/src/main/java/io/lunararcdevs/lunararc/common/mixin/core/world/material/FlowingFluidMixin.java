@@ -2,7 +2,6 @@ package io.lunararcdevs.lunararc.common.mixin.core.world.material;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import io.lunararcdevs.lunararc.common.LunarArcDebug;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -22,32 +21,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(FlowingFluid.class)
 public abstract class FlowingFluidMixin {
 
-    @Inject(method = "tick", at = @At("HEAD"), require = 0)
-    private void lunararc$traceTick(Level level, BlockPos pos, FluidState fluidState, CallbackInfo ci) {
-        if (!LunarArcDebug.FLUID) return;
-        LunarArcDebug.fluid("tick {} at {} amount={} source={} level={}",
-                fluidState.getType(), pos, fluidState.getAmount(), fluidState.isSource(),
-                level.getClass().getName());
-    }
-
-    @Inject(method = "spread", at = @At("HEAD"), require = 0)
-    private void lunararc$traceSpread(Level level, BlockPos pos, FluidState fluidState, CallbackInfo ci) {
-        if (!LunarArcDebug.FLUID) return;
-        LunarArcDebug.fluid("spread {} at {} source={} logicWorld={} listeners={}",
-                fluidState.getType(), pos, fluidState.isSource(),
-                io.lunararcdevs.lunararc.common.mod.util.LunarArcLogicWorlds.isLogicWorld(level),
-                BlockFromToEvent.getHandlerList().getRegisteredListeners().length);
-    }
-
     @Inject(
             method = "spread",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/material/FlowingFluid;spreadTo(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/material/FluidState;)V"),
             cancellable = true)
     private void lunararc$blockFromToDown(Level level, BlockPos pos, FluidState fluidState, CallbackInfo ci) {
         boolean cancelled = lunararc$flowCancelled(level, pos, Direction.DOWN);
-        if (LunarArcDebug.FLUID) {
-            LunarArcDebug.fluid("spread down from {} cancelled={}", pos, cancelled);
-        }
         if (cancelled) {
             ci.cancel();
         }
@@ -70,10 +49,6 @@ public abstract class FlowingFluidMixin {
             Operation<Boolean> original) {
         boolean vanilla = original.call(self, reader, fromPos, fromState, direction, toPos, toState, toFluid, fluid);
         boolean cancelled = vanilla && reader instanceof Level level && lunararc$flowCancelled(level, fromPos, direction);
-        if (LunarArcDebug.FLUID) {
-            LunarArcDebug.fluid("spread {} from {} vanillaAllows={} cancelled={}",
-                    direction, fromPos, vanilla, cancelled);
-        }
         return vanilla && !cancelled;
     }
 

@@ -95,7 +95,7 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
         String entryOwner = io.lunararcdevs.lunararc.common.mod.LunarArcRemapper
                 .currentRuntimeClassName(PLAYER_INFO_ENTRY_MOJANG);
         String ctorDesc = "(Ljava/util/EnumSet;L" + entryOwner + ";)V";
-        String factoryDesc = "(Ljava/util/EnumSet;L" + entryOwner + ";)L" + packetOwner + ";";
+        String vanillaCtorDesc = "(Ljava/util/EnumSet;Ljava/util/Collection;)V";
 
         for (MethodNode method : node.methods) {
             for (AbstractInsnNode insn : method.instructions) {
@@ -103,15 +103,12 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
                 if (call.getOpcode() != Opcodes.INVOKESPECIAL || !"<init>".equals(call.name)) continue;
                 if (!packetOwner.equals(call.owner) || !ctorDesc.equals(call.desc)) continue;
 
-                TypeInsnNode newInsn = findMatchingNew(call);
-                if (newInsn == null) continue;
-                AbstractInsnNode dup = newInsn.getNext();
-                if (dup == null || dup.getOpcode() != Opcodes.DUP) continue;
-
-                method.instructions.remove(newInsn);
-                method.instructions.remove(dup);
-                method.instructions.set(call, new MethodInsnNode(
-                        Opcodes.INVOKESTATIC, PLAYER_INFO_COMPAT, "create", factoryDesc, false));
+                // NEW/DUP stay in place so existing stack map frames remain valid.
+                method.instructions.insertBefore(call, new MethodInsnNode(Opcodes.INVOKESTATIC, PLAYER_INFO_COMPAT,
+                        "stash", "(L" + entryOwner + ";)Ljava/util/Collection;", false));
+                call.desc = vanillaCtorDesc;
+                method.instructions.insert(call, new MethodInsnNode(Opcodes.INVOKESTATIC, PLAYER_INFO_COMPAT,
+                        "apply", "(L" + packetOwner + ";)L" + packetOwner + ";", false));
             }
         }
     }

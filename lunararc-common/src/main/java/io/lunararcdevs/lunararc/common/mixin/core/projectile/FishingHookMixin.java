@@ -58,6 +58,89 @@ public abstract class FishingHookMixin implements FishingHookBridge {
     @Redirect(method="catchingFish", at=@At(value="INVOKE", target="Lnet/minecraft/util/Mth;nextFloat(Lnet/minecraft/util/RandomSource;FF)F", ordinal=2), require=0)
     private float lunararc$lureAngle(RandomSource random, float min, float max) { return Mth.nextFloat(random, this.lunararc$minLureAngle, this.lunararc$maxLureAngle); }
 
+    @Unique private int lunararc$fishExp;
+
+    @Unique
+    private org.bukkit.event.player.PlayerFishEvent lunararc$fireFish(net.minecraft.world.entity.player.Player player, Entity caught,
+            net.minecraft.world.item.ItemStack rod, org.bukkit.event.player.PlayerFishEvent.State state, int exp) {
+        if (!(((io.lunararcdevs.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Player bukkitPlayer)
+                || !(((io.lunararcdevs.lunararc.common.bridge.EntityBridge) this).lunararc$getBukkitEntity() instanceof org.bukkit.entity.FishHook hook)) {
+            return null;
+        }
+        net.minecraft.world.InteractionHand hand = rod != null && player.getOffhandItem() == rod
+                ? net.minecraft.world.InteractionHand.OFF_HAND : net.minecraft.world.InteractionHand.MAIN_HAND;
+        var event = new org.bukkit.event.player.PlayerFishEvent(bukkitPlayer,
+                caught == null ? null : ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) caught).lunararc$getBukkitEntity(),
+                hook, org.bukkit.craftbukkit.CraftEquipmentSlot.getHand(hand), state);
+        if (exp >= 0) event.setExpToDrop(exp);
+        org.bukkit.Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "retrieve", cancellable = true, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/projectile/FishingHook;pullEntity(Lnet/minecraft/world/entity/Entity;)V"))
+    private void lunararc$caughtEntity(net.minecraft.world.item.ItemStack rod,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Integer> cir) {
+        FishingHook hook = (FishingHook) (Object) this;
+        var event = lunararc$fireFish(hook.getPlayerOwner(), this.hookedIn, rod, org.bukkit.event.player.PlayerFishEvent.State.CAUGHT_ENTITY, -1);
+        if (event != null && event.isCancelled()) cir.setReturnValue(0);
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "retrieve", cancellable = true, at = @At(value = "INVOKE", ordinal = 0,
+            target = "Lnet/minecraft/world/level/Level;addFreshEntity(Lnet/minecraft/world/entity/Entity;)Z"))
+    private void lunararc$caughtFish(net.minecraft.world.item.ItemStack rod,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Integer> cir,
+            @com.llamalad7.mixinextras.sugar.Local net.minecraft.world.entity.item.ItemEntity item) {
+        FishingHook hook = (FishingHook) (Object) this;
+        int exp = hook.getRandom().nextInt(6) + 1;
+        var event = lunararc$fireFish(hook.getPlayerOwner(), item, rod, org.bukkit.event.player.PlayerFishEvent.State.CAUGHT_FISH, exp);
+        this.lunararc$fishExp = event == null ? exp : event.getExpToDrop();
+        if (event != null && event.isCancelled()) cir.setReturnValue(0);
+    }
+
+    @org.spongepowered.asm.mixin.injection.ModifyArg(method = "retrieve", index = 4, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/ExperienceOrb;<init>(Lnet/minecraft/world/level/Level;DDDI)V"))
+    private int lunararc$fishExpValue(int value) {
+        return this.lunararc$fishExp;
+    }
+
+    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "retrieve", at = @At(value = "INVOKE", ordinal = 1,
+            target = "Lnet/minecraft/world/level/Level;addFreshEntity(Lnet/minecraft/world/entity/Entity;)Z"))
+    private boolean lunararc$fishExpOrb(Level level, Entity orb, com.llamalad7.mixinextras.injector.wrapoperation.Operation<Boolean> original) {
+        return this.lunararc$fishExp > 0 && original.call(level, orb);
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "retrieve", cancellable = true, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/projectile/FishingHook;discard()V"))
+    private void lunararc$reelIn(net.minecraft.world.item.ItemStack rod,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Integer> cir,
+            @com.llamalad7.mixinextras.sugar.Local(ordinal = 0) int result) {
+        FishingHook hook = (FishingHook) (Object) this;
+        org.bukkit.event.player.PlayerFishEvent.State state = hook.onGround() ? org.bukkit.event.player.PlayerFishEvent.State.IN_GROUND
+                : result == 0 ? org.bukkit.event.player.PlayerFishEvent.State.REEL_IN : null;
+        if (state == null) return;
+        var event = lunararc$fireFish(hook.getPlayerOwner(), null, rod, state, -1);
+        if (event != null && event.isCancelled()) cir.setReturnValue(0);
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "catchingFish", at = @At(value = "INVOKE", ordinal = 0, shift = At.Shift.AFTER,
+            target = "Lnet/minecraft/network/syncher/SynchedEntityData;set(Lnet/minecraft/network/syncher/EntityDataAccessor;Ljava/lang/Object;)V"))
+    private void lunararc$failedAttempt(BlockPos pos, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        FishingHook hook = (FishingHook) (Object) this;
+        if (hook.getPlayerOwner() != null) {
+            lunararc$fireFish(hook.getPlayerOwner(), null, null, org.bukkit.event.player.PlayerFishEvent.State.FAILED_ATTEMPT, 0);
+        }
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "catchingFish", cancellable = true, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/projectile/FishingHook;playSound(Lnet/minecraft/sounds/SoundEvent;FF)V"))
+    private void lunararc$bite(BlockPos pos, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        FishingHook hook = (FishingHook) (Object) this;
+        if (hook.getPlayerOwner() == null) return;
+        var event = lunararc$fireFish(hook.getPlayerOwner(), null, null, org.bukkit.event.player.PlayerFishEvent.State.BITE, -1);
+        if (event != null && event.isCancelled()) ci.cancel();
+    }
+
     @Override public int lunararc$getMinWaitTime(){return lunararc$minWaitTime;} @Override public void lunararc$setMinWaitTime(int v){lunararc$minWaitTime=v;}
     @Override public int lunararc$getMaxWaitTime(){return lunararc$maxWaitTime;} @Override public void lunararc$setMaxWaitTime(int v){lunararc$maxWaitTime=v;}
     @Override public int lunararc$getMinLureTime(){return lunararc$minLureTime;} @Override public void lunararc$setMinLureTime(int v){lunararc$minLureTime=v;}

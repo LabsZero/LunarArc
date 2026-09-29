@@ -28,31 +28,14 @@ public final class LunarArcReflectionBridge {
         if (callerLoader == null) callerLoader = LunarArcReflectionBridge.class.getClassLoader();
         try {
             Class<?> resolved = Class.forName(mapped, true, callerLoader);
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.REFLECT) {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.reflect("forName {} -> {} resolved via {} (from {})",
-                        name, mapped, callerLoader, io.lunararcdevs.lunararc.common.LunarArcDebug.caller());
-            }
             return resolved;
         } catch (ClassNotFoundException first) {
             if (!mapped.equals(name)) {
                 try {
                     return Class.forName(name, true, callerLoader);
                 } catch (ClassNotFoundException second) {
-                    if (io.lunararcdevs.lunararc.common.LunarArcDebug.REFLECT) {
-                        LOGGER.warn("Class.forName failed for both mapped name '{}' and original name '{}' "
-                                        + "using classloader {} (caller {})", mapped, name, callerLoader,
-                                io.lunararcdevs.lunararc.common.LunarArcDebug.caller());
-                    } else {
-                        io.lunararcdevs.lunararc.common.LunarArcDebug.hiddenLookupFailure(LOGGER);
-                    }
                     throw second;
                 }
-            }
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.REFLECT) {
-                LOGGER.warn("Class.forName failed for '{}' (unmapped == input) using classloader {} (caller {})",
-                        name, callerLoader, io.lunararcdevs.lunararc.common.LunarArcDebug.caller());
-            } else {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.hiddenLookupFailure(LOGGER);
             }
             throw first;
         }
@@ -94,11 +77,6 @@ public final class LunarArcReflectionBridge {
 
     public static Field getField(Class<?> owner, String name) throws NoSuchFieldException {
         String mapped = REMAPPER.mapRuntimeFieldName(owner, name);
-        if (io.lunararcdevs.lunararc.common.LunarArcDebug.REFLECT) {
-            io.lunararcdevs.lunararc.common.LunarArcDebug.reflect("getField {}#{} -> {} (from {})",
-                    owner.getName(), name, mapped,
-                    io.lunararcdevs.lunararc.common.LunarArcDebug.caller());
-        }
         try {
             return owner.getField(mapped);
         } catch (NoSuchFieldException first) {
@@ -127,11 +105,6 @@ public final class LunarArcReflectionBridge {
 
     public static Field getDeclaredField(Class<?> owner, String name) throws NoSuchFieldException {
         String mapped = REMAPPER.mapRuntimeFieldName(owner, name);
-        if (io.lunararcdevs.lunararc.common.LunarArcDebug.REFLECT) {
-            io.lunararcdevs.lunararc.common.LunarArcDebug.reflect("getDeclaredField {}#{} -> {} (from {})",
-                    owner.getName(), name, mapped,
-                    io.lunararcdevs.lunararc.common.LunarArcDebug.caller());
-        }
         try {
             return owner.getDeclaredField(mapped);
         } catch (NoSuchFieldException first) {
@@ -151,11 +124,6 @@ public final class LunarArcReflectionBridge {
             return org.bukkit.craftbukkit.CraftRegistry.class.getMethod("getMinecraftRegistry");
         }
         String mapped = REMAPPER.mapRuntimeMethodName(owner, name, parameterTypes);
-        if (io.lunararcdevs.lunararc.common.LunarArcDebug.REFLECT) {
-            io.lunararcdevs.lunararc.common.LunarArcDebug.reflect("getMethod {}#{}({} args) -> {} (from {})",
-                    owner.getName(), name, parameterTypes == null ? 0 : parameterTypes.length, mapped,
-                    io.lunararcdevs.lunararc.common.LunarArcDebug.caller());
-        }
         try {
             return owner.getMethod(mapped, parameterTypes);
         } catch (NoSuchMethodException first) {
@@ -175,11 +143,6 @@ public final class LunarArcReflectionBridge {
 
     public static Method getDeclaredMethod(Class<?> owner, String name, Class<?>[] parameterTypes) throws NoSuchMethodException {
         String mapped = REMAPPER.mapRuntimeMethodName(owner, name, parameterTypes);
-        if (io.lunararcdevs.lunararc.common.LunarArcDebug.REFLECT) {
-            io.lunararcdevs.lunararc.common.LunarArcDebug.reflect("getDeclaredMethod {}#{}({} args) -> {} (from {})",
-                    owner.getName(), name, parameterTypes == null ? 0 : parameterTypes.length, mapped,
-                    io.lunararcdevs.lunararc.common.LunarArcDebug.caller());
-        }
         try {
             return owner.getDeclaredMethod(mapped, parameterTypes);
         } catch (NoSuchMethodException first) {

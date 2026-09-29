@@ -149,12 +149,7 @@ def createFatJar(String platform) {
         manifest {
             attributes('Implementation-Version': project.version)
             if (platform == 'forge') {
-                // Mixin's default platform agent reads this manifest attribute directly off the
-                // jar our IModLocator hands it (mods.toml's [[mixins]] is not what applies these
-                // on this Forge version) - without it every mixin in both configs silently never applies.
                 attributes('MixinConfigs': 'mixins.lunararc.common.json,mixins.lunararc.forge.json')
-                // Same mechanism, for bootstrapping MixinExtras (Forge doesn't bundle it, unlike
-                // NeoForge/Fabric/Quilt) - see LunarArcMixinExtrasConnector_Forge.
                 attributes('MixinConnector': 'io.lunararcdevs.lunararc.forge.mixin.LunarArcMixinExtrasConnector_Forge')
             }
         }
@@ -231,17 +226,6 @@ def createFatJar(String platform) {
             }
         }
 
-        // Bundling MixinExtras' classes under their real package name - whether as their own jar
-        // or merged straight into common.jar - always risks a module-resolution crash the moment
-        // another installed mod brings its own copy: same package name under two differently-named
-        // modules is a split-package ResolutionException, and matching the module name instead
-        // ("Automatic-Module-Name: MixinExtras") was tried and still crashed real servers, because
-        // a mod bundling MixinExtras via Forge's own jar-in-jar mechanism gets resolved through a
-        // different ModuleFinder than the one scanning our classpath entries, so the two same-named
-        // modules never get deduped the way guava/asm do and JPMS refuses to let one module read two
-        // different module references sharing one name. Relocating our copy's package below sidesteps
-        // this entirely: it can no longer collide by name or by package with anyone else's copy, no
-        // matter how they deliver theirs.
         tasks.named('forgeCommonJar').configure {
             dependsOn project.configurations.mixinextrasJar
             doLast {
@@ -345,10 +329,8 @@ def createFatJar(String platform) {
         }
 
         relocate('org.apache.maven', 'io.lunararcdevs.lunararc.libs.maven.core') {
-            exclude 'org/apache/maven/artifact/versioning/**'
-        }
-        if (platform == 'forge') {
-            exclude 'org/apache/maven/artifact/versioning/**'
+            // Paper exposes maven-artifact to plugins; Forge/NeoForge already ship their own copy.
+            if (platform == 'fabric' || platform == 'quilt') exclude 'org/apache/maven/artifact/**'
         }
         relocate 'org.codehaus.plexus',      'io.lunararcdevs.lunararc.libs.maven.plexus'
         relocate 'org.eclipse.sisu',         'io.lunararcdevs.lunararc.libs.maven.sisu'
@@ -415,6 +397,10 @@ def createFatJar(String platform) {
                 exclude 'mixins.lunararc.common.refmap.json'
                 exclude "mixins.lunararc.${platform}.json"
                 exclude "META-INF/${platform == 'neoforge' ? 'neoforge.mods.toml' : 'mods.toml'}"
+                if (platform == 'forge') {
+                    exclude 'META-INF/services/net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer$Provider'
+                    exclude 'META-INF/services/net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer$Provider'
+                }
                 exclude 'META-INF/MANIFEST.MF'
                 exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
                 exclude { FileTreeElement fte -> !fte.directory && isCommonJarPackage(fte.relativePath.pathString) }

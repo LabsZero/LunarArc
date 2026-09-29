@@ -32,4 +32,6 @@ public interface EntityBridge {
     void lunararc$setPersistent(boolean persistent);
     void lunararc$setLevel(Level level);
     boolean lunararc$saveAsPassenger(CompoundTag tag);
+    org.bukkit.projectiles.@Nullable ProjectileSource lunararc$getProjectileSource();
+    void lunararc$setProjectileSource(org.bukkit.projectiles.@Nullable ProjectileSource source);
 }

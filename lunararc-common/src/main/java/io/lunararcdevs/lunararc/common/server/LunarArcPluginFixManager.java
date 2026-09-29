@@ -212,10 +212,6 @@ public final class LunarArcPluginFixManager {
         try {
             return normalizeEssentialsItemName0(itemName);
         } finally {
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.TIMING) {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.timing(
-                        "normalizeEssentialsItemName({}) took {}ns", itemName, System.nanoTime() - start);
-            }
         }
     }
 
@@ -237,10 +233,6 @@ public final class LunarArcPluginFixManager {
         try {
             return resolveEssentialsMaterial0(material, itemName);
         } finally {
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.TIMING) {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.timing(
-                        "resolveEssentialsMaterial({}) took {}ns", itemName, System.nanoTime() - start);
-            }
         }
     }
 

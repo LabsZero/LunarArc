@@ -92,11 +92,6 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
                 .getCraftServer(self.server).getCraftWorldIfPresent(before);
         if (from == null) return;
 
-        if (io.lunararcdevs.lunararc.common.LunarArcDebug.ENTITY) {
-            io.lunararcdevs.lunararc.common.LunarArcDebug.entity(
-                    "changeDimension: {} moved {} -> {}, firing PlayerChangedWorldEvent",
-                    player.getName(), before.dimension().location(), after.dimension().location());
-        }
         org.bukkit.Bukkit.getPluginManager().callEvent(
                 new org.bukkit.event.player.PlayerChangedWorldEvent(player, from));
     }

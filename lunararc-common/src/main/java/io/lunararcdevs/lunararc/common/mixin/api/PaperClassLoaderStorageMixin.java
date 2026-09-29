@@ -15,6 +15,10 @@ import org.spongepowered.asm.mixin.Overwrite;
 @Mixin(value = PaperClassLoaderStorage.class, remap = false)
 public interface PaperClassLoaderStorageMixin {
 
+    /**
+     * @author LunarArc
+     * @reason Bypasses the fragile ServiceLoader-backed field entirely.
+     */
     @Overwrite
     static PaperClassLoaderStorage instance() {
         return io.lunararcdevs.lunararc.common.server.LunarArcPaperClassLoaderStorageHolder.INSTANCE;

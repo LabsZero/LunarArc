@@ -1944,6 +1944,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             return new org.bukkit.craftbukkit.inventory.CraftMerchantView(
                     this, merchantMenu, net.kyori.adventure.text.Component.translatable("merchant.trades"));
         }
+        if (menu instanceof net.minecraft.world.inventory.EnchantmentMenu enchantmentMenu) {
+            return new org.bukkit.craftbukkit.inventory.CraftEnchantmentView(
+                    this, enchantmentMenu, net.kyori.adventure.text.Component.translatable("container.enchant"));
+        }
         if (menu instanceof net.minecraft.world.inventory.AnvilMenu anvilMenu) {
             return new org.bukkit.craftbukkit.inventory.CraftAnvilView(
                     this, anvilMenu, net.kyori.adventure.text.Component.translatable("container.repair"));

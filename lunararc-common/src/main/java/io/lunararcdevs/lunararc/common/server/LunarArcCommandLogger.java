@@ -1,6 +1,5 @@
 package io.lunararcdevs.lunararc.common.server;
 
-import io.lunararcdevs.lunararc.common.LunarArcDebug;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -108,9 +107,6 @@ public final class LunarArcCommandLogger {
 
         LOGGER.info("[Command] {}", logMessage);
 
-        if (LunarArcDebug.COMMAND) {
-            LunarArcDebug.command("{}", logMessage);
-        }
 
         long elapsedNanos = System.nanoTime() - session.startNanos;
         if (elapsedNanos >= SLOW_COMMAND_THRESHOLD_NANOS) {

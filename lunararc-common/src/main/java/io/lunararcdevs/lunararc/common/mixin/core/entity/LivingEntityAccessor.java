@@ -74,4 +74,9 @@ public interface LivingEntityAccessor extends io.lunararcdevs.lunararc.common.br
     @Invoker("getFallDamageSound")
     net.minecraft.sounds.SoundEvent lunararc$invokeGetFallDamageSound(int fallHeight);
 
+    @Accessor("dead") void lunararc$setDead(boolean dead);
+
+    @Invoker("isImmobile")
+    boolean lunararc$invokeIsImmobile();
+
 }

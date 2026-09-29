@@ -72,6 +72,30 @@ public abstract class PrimedTntMixin {
         }
     }
 
+    public float yield = 4.0F;
+    public boolean isIncendiary = false;
+    @Unique private org.bukkit.event.entity.ExplosionPrimeEvent lunararc$primeEvent;
+
+    @Inject(method = "explode", at = @At("HEAD"), cancellable = true)
+    private void lunararc$explosionPrime(CallbackInfo ci) {
+        PrimedTnt self = (PrimedTnt) (Object) this;
+        if (self.level().isClientSide) return;
+        this.lunararc$primeEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callExplosionPrimeEvent(self, this.yield, this.isIncendiary);
+        if (this.lunararc$primeEvent.isCancelled()) ci.cancel();
+    }
+
+    @org.spongepowered.asm.mixin.injection.ModifyArg(method = "explode", index = 6, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/Level;explode(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/damagesource/DamageSource;Lnet/minecraft/world/level/ExplosionDamageCalculator;DDDFZLnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion;"))
+    private float lunararc$primeRadius(float radius) {
+        return this.lunararc$primeEvent == null ? radius : this.lunararc$primeEvent.getRadius();
+    }
+
+    @org.spongepowered.asm.mixin.injection.ModifyArg(method = "explode", index = 7, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/Level;explode(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/damagesource/DamageSource;Lnet/minecraft/world/level/ExplosionDamageCalculator;DDDFZLnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion;"))
+    private boolean lunararc$primeFire(boolean fire) {
+        return this.lunararc$primeEvent == null ? fire : this.lunararc$primeEvent.getFire();
+    }
+
     @Unique
     private static boolean lunararc$tryConsume(Level level) {
         org.bukkit.World world;

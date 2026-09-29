@@ -11,6 +11,10 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 /** Paper/Bukkit XP pickup event without replacing orb pickup or mending logic. */
 @Mixin(ExperienceOrb.class)
 public abstract class ExperienceOrbMixin {
+    public java.util.UUID sourceEntityId;
+    public java.util.UUID triggerEntityId;
+    public org.bukkit.entity.ExperienceOrb.SpawnReason spawnReason = org.bukkit.entity.ExperienceOrb.SpawnReason.UNKNOWN;
+
 
     @Redirect(
             method = "playerTouch",

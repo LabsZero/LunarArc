@@ -6,6 +6,10 @@ import org.spongepowered.asm.mixin.Overwrite;
 
 @Mixin(value = ClassloaderBytecodeModifier.class, remap = false)
 public interface ClassloaderBytecodeModifierMixin {
+    /**
+     * @author LunarArc
+     * @reason Bypasses the fragile ServiceLoader-backed Provider field entirely.
+     */
     @Overwrite
     static ClassloaderBytecodeModifier bytecodeModifier() {
         return io.lunararcdevs.lunararc.common.server.LunarArcClassloaderBytecodeModifierHolder.INSTANCE;

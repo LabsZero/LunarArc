@@ -1,5 +1,6 @@
 package io.lunararcdevs.lunararc.common.mixin.core.alchemy;
 
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import io.lunararcdevs.lunararc.common.bridge.alchemy.BrewingStandBridge;
@@ -28,12 +29,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(BrewingStandBlockEntity.class)
 public abstract class BrewingStandBlockEntityMixin implements BrewingStandBridge {
     @Shadow int brewTime;
+    public int recipeBrewTime = 400;
     @Shadow int fuel;
 
     @Unique private static final ThreadLocal<ArrayDeque<ItemStack>> lunararc$brewResults = new ThreadLocal<>();
 
     @Override public int lunararc$getBrewTime() { return brewTime; }
     @Override public void lunararc$setBrewTime(int ticks) { brewTime = ticks; }
+    @Override public int lunararc$getRecipeBrewTime() { return recipeBrewTime; }
+
+    @ModifyExpressionValue(method = "serverTick", at = @At(value = "CONSTANT", args = "intValue=400"))
+    private static int lunararc$recipeBrewTime(int original, Level level, BlockPos pos, BlockState state, BrewingStandBlockEntity stand) {
+        return ((BrewingStandBridge) stand).lunararc$getRecipeBrewTime();
+    }
+
     @Override public int lunararc$getFuel() { return fuel; }
     @Override public void lunararc$setFuel(int fuel) { this.fuel = fuel; }
 

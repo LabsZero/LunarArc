@@ -31,6 +31,26 @@ public abstract class ProjectileMixin implements ProjectileBridge {
     // WorldGuard's damage-cause lookup crashed calling getShooter() on a plain arrow). leftOwner/
     // hasBeenShot/ownerUUID already exist as real vanilla Projectile fields - shadow those instead
     // of duplicating them; only bounce/projectileSource are genuinely new Bukkit-side state.
+    @Shadow private net.minecraft.world.entity.Entity cachedOwner;
+    @Shadow public abstract net.minecraft.world.entity.Entity getOwner();
+    @Shadow protected abstract net.minecraft.world.entity.projectile.ProjectileDeflection hitTargetOrDeflectSelf(net.minecraft.world.phys.HitResult hitResult);
+
+    public net.minecraft.world.entity.projectile.ProjectileDeflection preHitTargetOrDeflectSelf(net.minecraft.world.phys.HitResult hitResult) {
+        return this.hitTargetOrDeflectSelf(hitResult);
+    }
+
+    public void refreshProjectileSource(boolean fillCache) {
+        if (fillCache) {
+            this.getOwner();
+        }
+        net.minecraft.world.entity.Entity owner = this.cachedOwner;
+        io.lunararcdevs.lunararc.common.bridge.EntityBridge self = (io.lunararcdevs.lunararc.common.bridge.EntityBridge) (Object) this;
+        if (owner != null && !owner.isRemoved() && self.lunararc$getProjectileSource() == null
+                && ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) owner).lunararc$getBukkitEntity() instanceof org.bukkit.projectiles.ProjectileSource source) {
+            self.lunararc$setProjectileSource(source);
+        }
+    }
+
     @Shadow private java.util.UUID ownerUUID;
     @Shadow private boolean leftOwner;
     @Shadow private boolean hasBeenShot;

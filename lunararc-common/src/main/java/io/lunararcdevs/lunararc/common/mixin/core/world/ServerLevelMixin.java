@@ -18,6 +18,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(ServerLevel.class)
 public abstract class ServerLevelMixin implements ServerLevelBridge {
 
+    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "tickPrecipitation", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/server/level/ServerLevel;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$weatherForm(ServerLevel level, net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.state.BlockState state,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<Boolean> original) {
+        return org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockFormEvent(level, pos, state, 3, null,
+                (p, s, f) -> original.call(level, p, s));
+    }
+
     @Shadow
     public abstract boolean addFreshEntity(Entity entity);
 
@@ -84,7 +92,6 @@ public abstract class ServerLevelMixin implements ServerLevelBridge {
         try {
             boolean added = this.addFreshEntity(entity);
             if (added) {
-                bridge.lunararc$setInWorld(true);
                 this.lunararc$ensureOrigin(entity);
             }
             return added;
@@ -149,7 +156,6 @@ public abstract class ServerLevelMixin implements ServerLevelBridge {
     @Inject(method = "addEntity", at = @At("RETURN"), require = 0)
     private void lunararc$afterNativeEntityAdd(Entity entity, CallbackInfoReturnable<Boolean> cir) {
         if (Boolean.TRUE.equals(cir.getReturnValue())) {
-            ((EntityBridge) entity).lunararc$setInWorld(true);
             this.lunararc$ensureOrigin(entity);
         }
     }

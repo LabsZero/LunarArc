@@ -12,7 +12,6 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -26,7 +25,7 @@ public abstract class CreeperMixin implements CreeperBridge {
     @Shadow @Final private static EntityDataAccessor<Boolean> DATA_IS_POWERED;
     @Shadow @Final private static EntityDataAccessor<Boolean> DATA_IS_IGNITED;
     @Shadow public abstract boolean isIgnited();
-    @Invoker("explodeCreeper") public abstract void lunararc$invokeExplode();
+    @Shadow private void explodeCreeper() { throw new AssertionError(); }
 
     @Unique private Entity lunararc$igniter;
     @Unique private boolean lunararc$directIgnite;
@@ -43,7 +42,7 @@ public abstract class CreeperMixin implements CreeperBridge {
         try { ((Creeper) (Object) this).getEntityData().set(DATA_IS_IGNITED, ignited); }
         finally { this.lunararc$directIgnite = false; }
     }
-    @Override public void lunararc$explode() { this.lunararc$invokeExplode(); }
+    @Override public void lunararc$explode() { this.explodeCreeper(); }
     @Override public Entity lunararc$getIgniter() { return this.lunararc$igniter; }
     @Override public void lunararc$setIgniter(Entity entity) { this.lunararc$igniter = entity; }
 
@@ -53,6 +52,35 @@ public abstract class CreeperMixin implements CreeperBridge {
         Creeper self = (Creeper) (Object) this;
         CreeperIgniteEvent event = new CreeperIgniteEvent((org.bukkit.entity.Creeper) ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) self).lunararc$getBukkitEntity(), true);
         if (!event.callEvent() || !event.isIgnited()) ci.cancel();
+    }
+
+    @Unique private org.bukkit.event.entity.ExplosionPrimeEvent lunararc$primeEvent;
+
+    @Inject(method = "explodeCreeper", cancellable = true, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/Level;explode(Lnet/minecraft/world/entity/Entity;DDDFLnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion;"))
+    private void lunararc$explosionPrime(CallbackInfo ci) {
+        Creeper self = (Creeper) (Object) this;
+        float radius = this.explosionRadius * (self.isPowered() ? 2.0F : 1.0F);
+        this.lunararc$primeEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callExplosionPrimeEvent(self, radius, false);
+        if (this.lunararc$primeEvent.isCancelled()) {
+            this.lunararc$primeEvent = null;
+            ((LivingEntityAccessor) self).lunararc$setDead(false);
+            this.swell = 0;
+            this.lunararc$setIgnitedDirect(false);
+            ci.cancel();
+        }
+    }
+
+    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "explodeCreeper", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/Level;explode(Lnet/minecraft/world/entity/Entity;DDDFLnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion;"))
+    private net.minecraft.world.level.Explosion lunararc$primedExplode(net.minecraft.world.level.Level level, Entity source, double x, double y, double z,
+            float radius, net.minecraft.world.level.Level.ExplosionInteraction interaction,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<net.minecraft.world.level.Explosion> original) {
+        org.bukkit.event.entity.ExplosionPrimeEvent event = this.lunararc$primeEvent;
+        this.lunararc$primeEvent = null;
+        if (event == null) return original.call(level, source, x, y, z, radius, interaction);
+        if (!event.getFire()) return original.call(level, source, x, y, z, event.getRadius(), interaction);
+        return level.explode(source, x, y, z, event.getRadius(), true, interaction);
     }
 
     @Inject(method = "mobInteract", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/monster/Creeper;ignite()V"))

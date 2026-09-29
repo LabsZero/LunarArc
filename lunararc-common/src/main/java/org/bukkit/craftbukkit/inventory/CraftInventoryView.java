@@ -121,15 +121,25 @@ public class CraftInventoryView implements InventoryView {
     @Override
     public InventoryType.@NotNull SlotType getSlotType(int slot) {
         if (slot < 0 || slot >= handle.slots.size()) return InventoryType.SlotType.OUTSIDE;
-        if (slot >= top.getSize()) return InventoryType.SlotType.CONTAINER;
-        return switch (type) {
-            case FURNACE, BLAST_FURNACE, SMOKER -> slot == 2 ? InventoryType.SlotType.RESULT : (slot == 1 ? InventoryType.SlotType.FUEL : InventoryType.SlotType.CRAFTING);
-            case CRAFTING, WORKBENCH -> slot == 0 ? InventoryType.SlotType.RESULT : InventoryType.SlotType.CRAFTING;
-            case MERCHANT -> slot == 2 ? InventoryType.SlotType.RESULT : InventoryType.SlotType.CRAFTING;
-            case ANVIL, SMITHING -> slot == top.getSize() - 1 ? InventoryType.SlotType.RESULT : InventoryType.SlotType.CRAFTING;
-            case GRINDSTONE -> slot == 2 ? InventoryType.SlotType.RESULT : InventoryType.SlotType.CRAFTING;
-            default -> InventoryType.SlotType.CONTAINER;
-        };
+        if (slot < top.getSize()) {
+            return switch (type) {
+                case FURNACE, BLAST_FURNACE, SMOKER -> slot == 2 ? InventoryType.SlotType.RESULT : (slot == 1 ? InventoryType.SlotType.FUEL : InventoryType.SlotType.CRAFTING);
+                case BREWING -> slot == 3 ? InventoryType.SlotType.FUEL : InventoryType.SlotType.CRAFTING;
+                case ENCHANTING, BEACON -> InventoryType.SlotType.CRAFTING;
+                case CRAFTING, WORKBENCH -> slot == 0 ? InventoryType.SlotType.RESULT : InventoryType.SlotType.CRAFTING;
+                case MERCHANT, CARTOGRAPHY, GRINDSTONE -> slot == 2 ? InventoryType.SlotType.RESULT : InventoryType.SlotType.CRAFTING;
+                case ANVIL, SMITHING -> slot == top.getSize() - 1 ? InventoryType.SlotType.RESULT : InventoryType.SlotType.CRAFTING;
+                case LOOM -> slot == 3 ? InventoryType.SlotType.RESULT : InventoryType.SlotType.CRAFTING;
+                case STONECUTTER -> slot == 1 ? InventoryType.SlotType.RESULT : InventoryType.SlotType.CRAFTING;
+                default -> InventoryType.SlotType.CONTAINER;
+            };
+        }
+        if (type == InventoryType.CRAFTING) {
+            if (slot < 9) return InventoryType.SlotType.ARMOR;
+            if (slot > 35) return InventoryType.SlotType.QUICKBAR;
+            return InventoryType.SlotType.CONTAINER;
+        }
+        return slot >= handle.slots.size() - 9 ? InventoryType.SlotType.QUICKBAR : InventoryType.SlotType.CONTAINER;
     }
 
     @Override public void close() { player.closeInventory(); }

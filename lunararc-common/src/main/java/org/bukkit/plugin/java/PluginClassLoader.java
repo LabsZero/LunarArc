@@ -189,12 +189,6 @@ public final class PluginClassLoader extends URLClassLoader
     }
 
     private static Class<?> lunararc$traceSource(String name, String source, Class<?> resolved) {
-        if (io.lunararcdevs.lunararc.common.LunarArcDebug.CLASSLOAD && resolved != null) {
-            ClassLoader definer = resolved.getClassLoader();
-            io.lunararcdevs.lunararc.common.LunarArcDebug.classload("{}: answered by {}, defined by {}",
-                    name, source, definer == null ? "the bootstrap loader" : definer.getClass().getName()
-                            + "@" + Integer.toHexString(System.identityHashCode(definer)));
-        }
         return resolved;
     }
 
@@ -311,9 +305,6 @@ public final class PluginClassLoader extends URLClassLoader
     private Class<?> loadPlatformClass(String name) throws ClassNotFoundException {
         try {
             Class<?> found = getParent().loadClass(name);
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.CLASSLOAD) {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.classload("{}: parent resolved as requested", name);
-            }
             return found;
         } catch (ClassNotFoundException notUnderRequestedName) {
             if (name.startsWith("org.bukkit.craftbukkit.") || (this.remapNms && name.startsWith("net.minecraft."))) {
@@ -321,17 +312,10 @@ public final class PluginClassLoader extends URLClassLoader
                 if (!mapped.equals(name)) {
                     try {
                         Class<?> found = getParent().loadClass(mapped);
-                        if (io.lunararcdevs.lunararc.common.LunarArcDebug.CLASSLOAD) {
-                            io.lunararcdevs.lunararc.common.LunarArcDebug.classload(
-                                    "{}: absent under that name, parent resolved mapped name {}", name, mapped);
-                        }
                         return found;
                     } catch (ClassNotFoundException ignored) {
                     }
                 }
-            }
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.CLASSLOAD) {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.classload("{}: not on the parent under any name", name);
             }
             throw notUnderRequestedName;
         }

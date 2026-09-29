@@ -1,42 +1,33 @@
 package io.lunararcdevs.lunararc.common.compat;
 
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
-import sun.misc.Unsafe;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.lang.reflect.Field;
-import java.util.EnumSet;
+import java.util.Collection;
 import java.util.List;
 
 public final class LunarArcPlayerInfoUpdatePacketCompat {
-    private static final Unsafe UNSAFE = findUnsafe();
-    private static final Field ACTIONS_FIELD = findField("actions");
     private static final Field ENTRIES_FIELD = findField("entries");
+    private static final ThreadLocal<ClientboundPlayerInfoUpdatePacket.Entry> PENDING = new ThreadLocal<>();
 
     private LunarArcPlayerInfoUpdatePacketCompat() {
     }
 
-    public static ClientboundPlayerInfoUpdatePacket create(
-            EnumSet<ClientboundPlayerInfoUpdatePacket.Action> actions,
-            ClientboundPlayerInfoUpdatePacket.Entry entry) {
+    public static Collection<ServerPlayer> stash(ClientboundPlayerInfoUpdatePacket.Entry entry) {
+        PENDING.set(entry);
+        return List.of();
+    }
+
+    public static ClientboundPlayerInfoUpdatePacket apply(ClientboundPlayerInfoUpdatePacket packet) {
+        ClientboundPlayerInfoUpdatePacket.Entry entry = PENDING.get();
+        PENDING.remove();
         try {
-            ClientboundPlayerInfoUpdatePacket packet = (ClientboundPlayerInfoUpdatePacket)
-                    UNSAFE.allocateInstance(ClientboundPlayerInfoUpdatePacket.class);
-            ACTIONS_FIELD.set(packet, actions);
             ENTRIES_FIELD.set(packet, List.of(entry));
-            return packet;
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Could not construct single-entry ClientboundPlayerInfoUpdatePacket", e);
         }
-    }
-
-    private static Unsafe findUnsafe() {
-        try {
-            Field field = Unsafe.class.getDeclaredField("theUnsafe");
-            field.setAccessible(true);
-            return (Unsafe) field.get(null);
-        } catch (ReflectiveOperationException e) {
-            throw new ExceptionInInitializerError(e);
-        }
+        return packet;
     }
 
     private static Field findField(String name) {

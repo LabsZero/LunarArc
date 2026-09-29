@@ -3,8 +3,15 @@ package io.lunararcdevs.lunararc.common.mixin.core.network;
 import com.mojang.authlib.properties.Property;
 import io.lunararcdevs.lunararc.common.bridge.ConnectionBridge;
 import io.netty.channel.Channel;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import io.netty.channel.ChannelHandlerContext;
 import net.minecraft.network.Connection;
+import net.minecraft.network.ConnectionProtocol;
+import net.minecraft.network.PacketListener;
+import net.minecraft.network.PacketSendListener;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.level.ServerPlayer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -33,15 +40,6 @@ public abstract class ConnectionMixin implements ConnectionBridge {
     private void lunararc$channelActive(ChannelHandlerContext ctx, CallbackInfo ci) {
         this.n = this.channel;
         this.lunararc$rawAddress = this.channel.remoteAddress();
-    }
-
-    @Inject(method = "exceptionCaught", at = @At("HEAD"))
-    private void lunararc$logExceptionCaught(ChannelHandlerContext ctx, Throwable exception, CallbackInfo ci) {
-        if (!io.lunararcdevs.lunararc.common.LunarArcDebug.NETWORK) return;
-        java.io.StringWriter trace = new java.io.StringWriter();
-        exception.printStackTrace(new java.io.PrintWriter(trace));
-        io.lunararcdevs.lunararc.common.LunarArcDebug.network(
-                "Connection.exceptionCaught remoteAddress={} exception={}", this.lunararc$rawAddress, trace);
     }
 
     @Override
@@ -102,5 +100,18 @@ public abstract class ConnectionMixin implements ConnectionBridge {
     @Override
     public Channel lunararc$getChannel() {
         return this.channel;
+    }
+
+    @WrapOperation(method = "exceptionCaught", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/network/Connection;send(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketSendListener;)V"))
+    private void lunararc$skipUnregisteredDisconnect(Connection self, Packet<?> packet, PacketSendListener listener,
+            Operation<Void> original) {
+        PacketListener packetListener = self.getPacketListener();
+        ConnectionProtocol protocol = packetListener == null ? null : packetListener.protocol();
+        if (protocol == ConnectionProtocol.HANDSHAKING || protocol == ConnectionProtocol.STATUS) {
+            self.disconnect(Component.translatable("disconnect.genericReason"));
+            return;
+        }
+        original.call(self, packet, listener);
     }
 }

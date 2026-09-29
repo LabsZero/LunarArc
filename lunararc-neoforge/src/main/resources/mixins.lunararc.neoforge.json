@@ -18,7 +18,8 @@
     "core.entity.SlimeFloatGoalMixin_NeoForge",
     "core.entity.SlimeRandomDirectionGoalMixin_NeoForge",
     "core.entity.SlimeKeepOnJumpingGoalMixin_NeoForge",
-    "core.effect.HungerMobEffectMixin_NeoForge"
+    "core.effect.HungerMobEffectMixin_NeoForge",
+    "core.item.ShearsItemMixin_NeoForge"
   ],
   "injectors": {
     "defaultRequire": 1

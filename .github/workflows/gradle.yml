@@ -39,7 +39,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2
         with:
-          cache-read-only: false
+          cache-disabled: true
 
       - name: Cache Loom / compile reference setup
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25

@@ -876,15 +876,6 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     private String resolveRuntimeMember(Class<?> runtimeOwner, String spigotName, boolean method) {
         String resolved = lookupRuntimeMember(runtimeOwner, spigotName, method);
         if (resolved != null) return resolved;
-        if (isNmsRuntimeClass(runtimeOwner) && !namesRuntimeMember(runtimeOwner, spigotName, method)) {
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.REFLECT) {
-                LOGGER.warn("No reflective mapping found for {} {}#{} — a plugin's reflective lookup is "
-                                + "likely to throw NoSuchFieldException/NoSuchMethodException.",
-                        method ? "method" : "field", runtimeOwner.getName(), spigotName);
-            } else {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.hiddenLookupFailure(LOGGER);
-            }
-        }
         return spigotName;
     }
 
@@ -930,15 +921,6 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         String parameterDescriptor = parameterTypes == null ? null : runtimeParameterDescriptor(parameterTypes);
         String resolved = lookupRuntimeMethod(runtimeOwner, spigotName, parameterTypes, parameterDescriptor);
         if (resolved != null) return resolved;
-        if (isNmsRuntimeClass(runtimeOwner) && !namesRuntimeMember(runtimeOwner, spigotName, true)) {
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.REFLECT) {
-                LOGGER.warn("No reflective mapping found for method {}#{}{} — a plugin's reflective lookup is "
-                                + "likely to throw NoSuchMethodException.",
-                        runtimeOwner.getName(), spigotName, parameterDescriptor == null ? "(*)" : parameterDescriptor);
-            } else {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.hiddenLookupFailure(LOGGER);
-            }
-        }
         return spigotName;
     }
 
@@ -952,6 +934,11 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
             if (descriptorMapped != null) {
                 String runtimeName = toRuntimeMemberName(mojangOwner, descriptorMapped, true);
                 if (acceptsRuntimeParameters(runtimeOwner, runtimeName, parameterTypes)) return runtimeName;
+                if (needsIntermediaryHop() && parameterTypes != null) {
+                    String exact = findIntermediaryMethodMappingByParameters(
+                            mojangOwner, descriptorMapped, runtimeParameterDescriptorMojang(parameterTypes));
+                    if (exact != null && acceptsRuntimeParameters(runtimeOwner, exact, parameterTypes)) return exact;
+                }
             }
 
             String unique = METHOD_NAME_MAP.get(new MemberNameKey(spigotOwner, spigotName));
@@ -1054,7 +1041,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
             if (type == float.class) return "F";
             if (type == double.class) return "D";
         }
-        String internal = type.getName().replace('.', '/');
+        String internal = mojangNameOf(type);
         String spigot = MOJANG_TO_SPIGOT_CLASS.getOrDefault(internal, internal);
         return 'L' + spigot + ';';
     }
@@ -1115,10 +1102,6 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
 
             ClassVisitor remapper = new ClassRemapper(writer, effective);
             ClassVisitor visitor = remapNms ? new ReflectionMemberVisitor(remapper) : remapper;
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.REMAP) {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.remap(
-                        "{}: nmsSymbols={} reflectionBridge={}", className, classNeedsNms, remapNms);
-            }
             visitor = effective.compatibilityVisitor(visitor, className);
             reader.accept(visitor, 0);
             byte[] remapped = writer.toByteArray();

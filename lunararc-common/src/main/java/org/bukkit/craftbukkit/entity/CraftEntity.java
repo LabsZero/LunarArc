@@ -49,6 +49,10 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         if (entity instanceof net.minecraft.server.level.ServerPlayer sp) {
             return new CraftPlayer(server, sp);
         }
+        org.bukkit.entity.Entity typed = fromPaperEntityTypes(server, entity);
+        if (typed != null) {
+            return typed;
+        }
         if (entity instanceof net.minecraft.world.entity.item.ItemEntity item) {
             return new CraftItem(server, item);
         }
@@ -249,6 +253,25 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         return new CraftUnknownEntity(server, entity);
     }
 
+    private static boolean paperEntityTypesBroken;
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static org.bukkit.entity.Entity fromPaperEntityTypes(CraftServer server, Entity entity) {
+        if (paperEntityTypesBroken
+                || !"minecraft".equals(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getNamespace())) {
+            return null;
+        }
+        try {
+            CraftEntityTypes.EntityTypeData data = CraftEntityTypes.getEntityTypeData(CraftEntityType.minecraftToBukkit(entity.getType()));
+            if (data == null || data.convertFunction() == null) return null;
+            return (org.bukkit.entity.Entity) ((java.util.function.BiFunction) data.convertFunction()).apply(server, entity);
+        } catch (LinkageError | ClassCastException | IllegalArgumentException failure) {
+            paperEntityTypesBroken = true;
+            org.slf4j.LoggerFactory.getLogger(CraftEntity.class).error("Paper entity type registry unavailable, using fallback wrappers", failure);
+            return null;
+        }
+    }
+
     protected EntityBridge bridge() {
         return (EntityBridge) entity;
     }
@@ -428,11 +451,6 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         net.minecraft.server.level.ServerLevel level = craftWorld.getHandle();
         double x = destination.getX(), y = destination.getY(), z = destination.getZ();
         float yaw = destination.getYaw(), pitch = destination.getPitch();
-        // PlayerChangedWorldEvent is deliberately not fired here. A cross-world teleport of a
-        // player reaches ServerPlayer.changeDimension through teleportTo, and ServerPlayerMixin
-        // fires the event there - the same place CraftBukkit does, so it also covers portals, an
-        // end-return, and a mod's own transition, none of which come through this method. Firing
-        // it here as well would deliver the event twice for every plugin teleport.
         entity.teleportTo(level, x, y, z, Collections.emptySet(), yaw, pitch);
         return true;
     }
@@ -457,10 +475,6 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
             return CompletableFuture.completedFuture(false);
         }
 
-        // Paper's async teleport contract is primarily an asynchronous chunk-load
-        // boundary. The actual entity mutation and Bukkit events must still run on
-        // the owning Minecraft server thread. Do not run teleport() from an arbitrary
-        // plugin completion/executor thread.
         final CompletableFuture<Boolean> result = new CompletableFuture<>();
         craftWorld.getChunkAtAsync(requested.getBlockX() >> 4, requested.getBlockZ() >> 4, true, true)
                 .whenComplete((chunk, loadFailure) -> {
@@ -1080,20 +1094,40 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
     }
 
     public void update(net.minecraft.server.level.ServerPlayer player) {
-        if (!this.getHandle().isAlive()) {
-            return;
-        }
-
-        net.minecraft.server.level.ChunkMap chunkMap =
-                ((org.bukkit.craftbukkit.CraftWorld) this.getWorld()).getHandle().getChunkSource().chunkMap;
-        net.minecraft.server.level.ChunkMap.TrackedEntity tracked =
-                ((io.lunararcdevs.lunararc.common.bridge.access.ChunkMapAccessBridge) (Object) chunkMap)
-                        .lunararc$getEntityMap().get(this.getEntityId());
+        net.minecraft.server.level.ChunkMap.TrackedEntity tracked = this.trackedEntity();
         if (tracked == null) {
             return;
         }
 
         tracked.removePlayer(player);
         tracked.updatePlayer(player);
+    }
+
+    protected void update() {
+        net.minecraft.server.level.ChunkMap.TrackedEntity tracked = this.trackedEntity();
+        if (tracked == null) {
+            return;
+        }
+
+        for (net.minecraft.server.network.ServerPlayerConnection connection : java.util.List.copyOf(tracked.seenBy)) {
+            net.minecraft.server.level.ServerPlayer player = connection.getPlayer();
+            if (!(((io.lunararcdevs.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Player viewer)
+                    || !viewer.canSee(this)) {
+                continue;
+            }
+            List<net.minecraft.network.protocol.Packet<? super net.minecraft.network.protocol.game.ClientGamePacketListener>> packets = new java.util.ArrayList<>();
+            tracked.serverEntity.sendPairingData(player, packets::add);
+            player.connection.send(new net.minecraft.network.protocol.game.ClientboundBundlePacket(packets));
+        }
+    }
+
+    private net.minecraft.server.level.ChunkMap.TrackedEntity trackedEntity() {
+        if (!this.getHandle().isAlive()) {
+            return null;
+        }
+        net.minecraft.server.level.ChunkMap chunkMap =
+                ((org.bukkit.craftbukkit.CraftWorld) this.getWorld()).getHandle().getChunkSource().chunkMap;
+        return ((io.lunararcdevs.lunararc.common.bridge.access.ChunkMapAccessBridge) (Object) chunkMap)
+                .lunararc$getEntityMap().get(this.getEntityId());
     }
 }

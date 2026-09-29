@@ -19,14 +19,27 @@ def lunarArcBuildChannel = { ->
     return 'release'
 }
 
+
+def lunarArcGitHash = { ->
+    try {
+        Process process = new ProcessBuilder('git', 'rev-parse', '--short', 'HEAD')
+                .directory(rootDir)
+                .redirectErrorStream(true)
+                .start()
+        String hash = process.inputStream.text.trim()
+        process.waitFor()
+        return (process.exitValue() == 0 && !hash.isEmpty()) ? hash : null
+    } catch (ignored) {
+        return null
+    }
+}()
+
 def lunarArcEffectiveVersion = { ->
     def configured = lunarArcConfiguredVersion()
     if (configured.contains('+')) return configured
     if (lunarArcBuildChannel() == 'release') return configured
 
-    def githubRun = System.getenv('GITHUB_RUN_NUMBER')
-    def metadata = (githubRun != null && !githubRun.isBlank()) ? "build.${githubRun.trim()}" : 'local'
-    return "${configured}+${metadata}"
+    return "${configured}+${lunarArcGitHash ?: 'local'}"
 }
 
 ext.lunarArcBuildChannel = lunarArcBuildChannel
@@ -40,18 +53,18 @@ allprojects {
     version = rootProject.ext.lunarArcEffectiveVersion()
 
     ext {
-        gitHash = { ->
-            try {
-                def out = new ByteArrayOutputStream()
-                exec { commandLine 'git', 'rev-parse', '--short', 'HEAD'; standardOutput = out; ignoreExitValue = true }
-                def h = out.toString().trim(); return h.isEmpty() ? 'unknown' : h
-            } catch (ignored) { return 'unknown' }
-        }()
+        // Reuses the same hash lunarArcEffectiveVersion() already computed above, rather than
+        // re-running git a second time with the same (previously broken) exec pattern.
+        gitHash = lunarArcGitHash ?: 'unknown'
         gitBranch = { ->
             try {
-                def out = new ByteArrayOutputStream()
-                exec { commandLine 'git', 'rev-parse', '--abbrev-ref', 'HEAD'; standardOutput = out; ignoreExitValue = true }
-                def b = out.toString().trim(); return b.isEmpty() ? 'unknown' : b
+                Process process = new ProcessBuilder('git', 'rev-parse', '--abbrev-ref', 'HEAD')
+                        .directory(rootDir)
+                        .redirectErrorStream(true)
+                        .start()
+                String b = process.inputStream.text.trim()
+                process.waitFor()
+                return (process.exitValue() == 0 && !b.isEmpty()) ? b : 'unknown'
             } catch (ignored) { return 'unknown' }
         }()
         supportedPlatforms = ['neoforge', 'forge', 'fabric', 'quilt']

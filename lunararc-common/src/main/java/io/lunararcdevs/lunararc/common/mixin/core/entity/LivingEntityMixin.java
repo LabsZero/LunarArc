@@ -40,6 +40,32 @@ public abstract class LivingEntityMixin implements LivingEntityBridge {
     @Unique private boolean lunararc$suppressEffectEvent;
 
     @Override public void lunararc$completeUsingItem() { this.completeUsingItem(); }
+
+    @WrapOperation(method = "completeUsingItem", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/item/ItemStack;finishUsingItem(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/LivingEntity;)Lnet/minecraft/world/item/ItemStack;"))
+    private net.minecraft.world.item.ItemStack lunararc$itemConsume(net.minecraft.world.item.ItemStack useItem,
+            net.minecraft.world.level.Level level, LivingEntity entity, Operation<net.minecraft.world.item.ItemStack> original) {
+        if (!(entity instanceof net.minecraft.server.level.ServerPlayer)
+                || !(((io.lunararcdevs.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Player player)) {
+            return original.call(useItem, level, entity);
+        }
+        org.bukkit.inventory.ItemStack craftItem = org.bukkit.craftbukkit.inventory.CraftItemStack.asBukkitCopy(useItem);
+        var event = new org.bukkit.event.player.PlayerItemConsumeEvent(player, craftItem,
+                org.bukkit.craftbukkit.CraftEquipmentSlot.getHand(entity.getUsedItemHand()));
+        org.bukkit.Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            player.updateInventory();
+            player.sendHealthUpdate();
+            return useItem;
+        }
+        net.minecraft.world.item.ItemStack result = event.getItem().equals(craftItem)
+                ? original.call(useItem, level, entity)
+                : original.call(org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getItem()), level, entity);
+        if (result != null && event.getReplacement() != null) {
+            result = org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(event.getReplacement());
+        }
+        return result;
+    }
     @Override public net.minecraft.network.syncher.EntityDataAccessor<Integer> lunararc$getArrowCountDataAccessorBridge() { return DATA_ARROW_COUNT_ID; }
     @Override public int lunararc$getSpinAttackFlagBridge() { return LIVING_ENTITY_FLAG_SPIN_ATTACK; }
     @Override public byte lunararc$entityEventForEquipmentBreakBridge(net.minecraft.world.entity.EquipmentSlot slot) { return entityEventForEquipmentBreak(slot); }
@@ -64,6 +90,12 @@ public abstract class LivingEntityMixin implements LivingEntityBridge {
         this.lunararc$healReason = java.util.Objects.requireNonNull(reason, "reason");
         this.lunararc$fastRegen = fastRegen;
     }
+    public boolean removeEffect(net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect> effect,
+            org.bukkit.event.entity.EntityPotionEffectEvent.Cause cause) {
+        this.lunararc$effectCause = java.util.Objects.requireNonNull(cause, "cause");
+        return ((LivingEntity) (Object) this).removeEffect(effect);
+    }
+
     @Override public void lunararc$pushEffectCause(org.bukkit.event.entity.EntityPotionEffectEvent.Cause cause) {
         this.lunararc$effectCause = java.util.Objects.requireNonNull(cause, "cause");
     }
@@ -325,5 +357,14 @@ public abstract class LivingEntityMixin implements LivingEntityBridge {
             return;
         }
         original.call(source);
+    }
+
+    @WrapOperation(method = "updateFallFlying", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/LivingEntity;setSharedFlag(IZ)V"))
+    private void lunararc$toggleGlide(LivingEntity self, int flag, boolean value, Operation<Void> original) {
+        if (flag == 7 && value != self.isFallFlying() && CraftEventFactory.callToggleGlideEvent(self, value).isCancelled()) {
+            return;
+        }
+        original.call(self, flag, value);
     }
 }

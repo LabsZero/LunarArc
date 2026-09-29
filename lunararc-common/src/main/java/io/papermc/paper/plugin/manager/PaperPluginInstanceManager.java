@@ -201,7 +201,6 @@ class PaperPluginInstanceManager {
             return;
         }
 
-        long enableStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         String pluginDisplayName = plugin.getPluginMeta().getDisplayName();
 
         if (plugin.getPluginMeta() instanceof PluginDescriptionFile) {
@@ -247,8 +246,6 @@ class PaperPluginInstanceManager {
 
         HandlerList.bakeAll();
 
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartup(
-                "Plugin Enable", pluginDisplayName, enableStart);
     }
 
     public synchronized void disablePlugin(@NotNull Plugin plugin) {
@@ -259,7 +256,6 @@ class PaperPluginInstanceManager {
             return;
         }
 
-        long disableStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         String pluginName = plugin.getPluginMeta().getDisplayName();
 
         try {
@@ -348,8 +344,6 @@ class PaperPluginInstanceManager {
             this.handlePluginException("Error occurred (in the plugin loader) while removing chunk tickets for " + pluginName + " (Is it up to date?)", ex, plugin); // Paper
         }
 
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordShutdown(
-                "Plugin Disable", pluginName, disableStart);
     }
 
     // TODO: Implement event part in future patch (paper patch move up, this patch is lower)

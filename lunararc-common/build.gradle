@@ -49,9 +49,56 @@ static byte[] redirectPaperOnlyNmsCalls(byte[] classBytes) {
     boolean changed = false
     for (MethodNode method : classNode.methods) {
         for (AbstractInsnNode insn : method.instructions.toArray()) {
+            if (insn instanceof org.objectweb.asm.tree.FieldInsnNode) {
+                org.objectweb.asm.tree.FieldInsnNode field = (org.objectweb.asm.tree.FieldInsnNode) insn
+                if (field.getOpcode() == org.objectweb.asm.Opcodes.GETFIELD && field.name == 'recipeType' &&
+                        field.owner == 'net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity') {
+                    method.instructions.set(field, new MethodInsnNode(org.objectweb.asm.Opcodes.INVOKESTATIC,
+                            'io/lunararcdevs/lunararc/common/bridge/donor/DonorBlockEntitySupport', 'recipeType',
+                            '(Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;)Lnet/minecraft/world/item/crafting/RecipeType;', false))
+                    changed = true
+                }
+                continue
+            }
             if (!(insn instanceof MethodInsnNode)) continue
             MethodInsnNode call = (MethodInsnNode) insn
-            if (call.owner == 'net/minecraft/world/Container' && call.name == 'getOwner' &&
+            if (call.getOpcode() == org.objectweb.asm.Opcodes.INVOKESTATIC && call.name == 'calculateBoundingBoxStatic' &&
+                    (call.owner == 'net/minecraft/world/entity/decoration/ItemFrame' || call.owner == 'net/minecraft/world/entity/decoration/Painting')) {
+                boolean painting = call.owner == 'net/minecraft/world/entity/decoration/Painting'
+                call.owner = 'io/lunararcdevs/lunararc/common/bridge/donor/DonorEntitySupport'
+                call.name = painting ? 'paintingBox' : 'itemFrameBox'
+                changed = true
+                continue
+            }
+            if (call.getOpcode() == org.objectweb.asm.Opcodes.INVOKESTATIC) {
+                String blockSupport = 'io/lunararcdevs/lunararc/common/bridge/donor/DonorBlockEntitySupport'
+                if ((call.owner == 'org/apache/commons/lang/Validate' && call.name == 'isTrue' && call.desc == '(ZLjava/lang/String;)V') ||
+                        (call.owner == 'org/apache/commons/lang/StringUtils' && call.name == 'isBlank' && call.desc == '(Ljava/lang/String;)Z')) {
+                    call.owner = blockSupport
+                    changed = true
+                    continue
+                }
+                if ((call.owner == 'net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity' && call.name == 'getTotalCookTime' &&
+                        call.desc.startsWith('(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/item/crafting/RecipeType;')) ||
+                        (call.owner == 'net/minecraft/world/level/block/entity/BeaconBlockEntity' && call.name == 'getHumansInRange' &&
+                        call.desc == '(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;ILnet/minecraft/world/level/block/entity/BeaconBlockEntity;)Ljava/util/List;') ||
+                        (call.owner == 'net/minecraft/world/level/block/entity/ConduitBlockEntity' && call.name == 'getRange' &&
+                        call.desc == '(Ljava/util/List;)I') ||
+                        (call.owner == 'net/minecraft/world/level/block/entity/ConduitBlockEntity' && call.name == 'updateDestroyTarget' &&
+                        call.desc.endsWith('Lnet/minecraft/world/level/block/entity/ConduitBlockEntity;Z)V'))) {
+                    call.owner = blockSupport
+                    changed = true
+                    continue
+                }
+            }
+            String xpOrbCtorPrefix = '(Lnet/minecraft/world/level/Level;DDDILorg/bukkit/entity/ExperienceOrb$SpawnReason;'
+            if (call.owner == 'net/minecraft/world/entity/ExperienceOrb' && call.getOpcode() == org.objectweb.asm.Opcodes.INVOKESPECIAL &&
+                    call.name == '<init>' && call.desc.startsWith(xpOrbCtorPrefix)) {
+                int extraArguments = call.desc.count('Lnet/minecraft/world/entity/Entity;') + 1
+                extraArguments.times { method.instructions.insertBefore(call, new org.objectweb.asm.tree.InsnNode(org.objectweb.asm.Opcodes.POP)) }
+                call.desc = '(Lnet/minecraft/world/level/Level;DDDI)V'
+                changed = true
+            } else if (call.owner == 'net/minecraft/world/Container' && call.name == 'getOwner' &&
                     call.desc == '()Lorg/bukkit/inventory/InventoryHolder;') {
                 call.setOpcode(org.objectweb.asm.Opcodes.INVOKESTATIC)
                 call.owner = support
@@ -832,7 +879,8 @@ tasks.register('preparePaperImplementationSurface') {
             'io/papermc/paper/inventory/BrewingSimpleContainerData',
             'io/papermc/paper/persistence/PaperPersistentDataContainerView',
             'io/papermc/paper/util/ObfHelper',
-            'io/papermc/paper/util/StringPool'
+            'io/papermc/paper/util/StringPool',
+            'com/destroystokyo/paper/entity/CraftRangedEntity'
         ] as Set
         def referencesOf = { byte[] bytes ->
             Set<String> found = new TreeSet<>()
@@ -1097,23 +1145,6 @@ tasks.register('runCompatibilityRegression', JavaExec) {
 tasks.named('test', Test) {
     dependsOn tasks.named('runCompatibilityRegression')
     failOnNoDiscoveredTests = false
-}
-
-['off', 'timing', 'reflect,command', 'all'].eachWithIndex { mode, index ->
-    def verification = tasks.register("verifyDebugOptions${index}", JavaExec) {
-        dependsOn tasks.named('testClasses'), ':installer:classes', ':bootstrap:generateVersions'
-        classpath = files(tasks.named('runCompatibilityRegression', JavaExec).get().classpath,
-                project(':installer').sourceSets.main.output.classesDirs)
-        mainClass = 'io.lunararcdevs.lunararc.DebugOptionsRegressionTest'
-        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
-        systemProperty 'log4j2.loggerContextFactory', 'org.apache.logging.log4j.simple.SimpleLoggerContextFactory'
-        if (mode != 'off') systemProperty 'lunararc.debug', mode
-        args mode
-        doFirst {
-            workingDir java.nio.file.Files.createTempDirectory(layout.buildDirectory.get().asFile.toPath(), "debug-options-${index}-").toFile()
-        }
-    }
-    tasks.named('test') { dependsOn verification }
 }
 
 tasks.register('runPackagedRecipeRegression', JavaExec) {

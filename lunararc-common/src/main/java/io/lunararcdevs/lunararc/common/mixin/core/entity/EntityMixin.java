@@ -4,6 +4,7 @@ import io.lunararcdevs.lunararc.common.bridge.CommandSourceBridge;
 import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.entity.Entity;
@@ -37,17 +38,17 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
             Operation<Boolean> original) {
         boolean vanilla = original.call(entity, from, to);
         if (vanilla || !((Object) this instanceof net.minecraft.server.level.ServerPlayer)) return vanilla;
-        if (io.lunararcdevs.lunararc.common.LunarArcDebug.ENTITY) {
-            io.lunararcdevs.lunararc.common.LunarArcDebug.entity(
-                    "handlePortal: canChangeDimensions said no for a player going {} -> {}; allowing it",
-                    from.dimension().location(), to.dimension().location());
-        }
         return true;
     }
 
     @Shadow private int portalCooldown;
     @Shadow private int remainingFireTicks;
     @Shadow private boolean hasVisualFire;
+    @Shadow private Entity vehicle;
+    public boolean generation;
+    public boolean valid;
+    public org.bukkit.projectiles.ProjectileSource projectileSource;
+    @Shadow public abstract net.minecraft.world.level.Level level();
 
     @Override public int lunararc$getPortalCooldown() { return this.portalCooldown; }
     @Override public void lunararc$setPortalCooldown(int cooldown) { this.portalCooldown = cooldown; }
@@ -74,7 +75,19 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
         this.lunararc$originWorld = worldId;
     }
     @Override public boolean lunararc$isInWorld() { return this.lunararc$inWorld; }
-    @Override public void lunararc$setInWorld(boolean inWorld) { this.lunararc$inWorld = inWorld; }
+    @Override public void lunararc$setInWorld(boolean inWorld) {
+        this.lunararc$inWorld = inWorld;
+        this.valid = inWorld;
+    }
+    @Override public org.bukkit.projectiles.ProjectileSource lunararc$getProjectileSource() { return this.projectileSource; }
+    @Override public void lunararc$setProjectileSource(org.bukkit.projectiles.ProjectileSource source) { this.projectileSource = source; }
+
+    @Inject(method = "move", at = @At("HEAD"), cancellable = true)
+    private void lunararc$movementLock(net.minecraft.world.entity.MoverType type, Vec3 movement, CallbackInfo ci) {
+        if ((Object) this instanceof io.lunararcdevs.lunararc.common.bridge.entity.MovementLockBridge lock && !lock.lunararc$canMove()) {
+            ci.cancel();
+        }
+    }
     @Override public boolean lunararc$isVisualFire() { return this.hasVisualFire; }
     @Override public void lunararc$setVisualFire(boolean visualFire) { this.hasVisualFire = visualFire; }
     @Override public boolean lunararc$isPersistent() { return this.lunararc$persistent; }
@@ -172,40 +185,54 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
             tag.put("Paper.Origin", origin);
         }
     }
-    @Inject(method = "startRiding(Lnet/minecraft/world/entity/Entity;Z)Z", at = @At("HEAD"), cancellable = true, require = 0)
+    @Inject(method = "startRiding(Lnet/minecraft/world/entity/Entity;Z)Z", cancellable = true,
+            at = @At(value = "INVOKE", ordinal = 0, target = "Lnet/minecraft/world/entity/Entity;isPassenger()Z"))
     private void lunararc$vehicleEnter(Entity vehicle, boolean force, CallbackInfoReturnable<Boolean> cir) {
-        if (!org.bukkit.Bukkit.isPrimaryThread()) return;
+        if (!this.lunararc$inWorld || level().isClientSide) return;
         org.bukkit.entity.Entity bukkitVehicle = ((EntityBridge) vehicle).lunararc$getBukkitEntity();
         org.bukkit.entity.Entity bukkitPassenger = this.lunararc$getBukkitEntity();
+        var pluginManager = org.bukkit.Bukkit.getPluginManager();
         if (bukkitVehicle instanceof org.bukkit.entity.Vehicle bukkitVehicleEntity
-                && bukkitPassenger instanceof org.bukkit.entity.LivingEntity livingPassenger) {
-            org.bukkit.event.vehicle.VehicleEnterEvent event =
-                    new org.bukkit.event.vehicle.VehicleEnterEvent(bukkitVehicleEntity, livingPassenger);
-            org.bukkit.Bukkit.getPluginManager().callEvent(event);
+                && bukkitPassenger instanceof org.bukkit.entity.LivingEntity) {
+            var event = new org.bukkit.event.vehicle.VehicleEnterEvent(bukkitVehicleEntity, bukkitPassenger);
+            pluginManager.callEvent(event);
             if (event.isCancelled()) {
                 cir.setReturnValue(false);
+                return;
             }
+        }
+        var event = new org.bukkit.event.entity.EntityMountEvent(bukkitPassenger, bukkitVehicle);
+        pluginManager.callEvent(event);
+        if (event.isCancelled()) {
+            cir.setReturnValue(false);
         }
     }
 
-    @Inject(method = "removePassenger", at = @At("HEAD"), cancellable = true, require = 0)
-    private void lunararc$vehicleExit(Entity passenger, CallbackInfo ci) {
-        // Same reasoning as lunararc$vehicleEnter above.
-        if (!org.bukkit.Bukkit.isPrimaryThread()) return;
-        org.bukkit.entity.Entity bukkitVehicle = this.lunararc$getBukkitEntity();
-        org.bukkit.entity.Entity bukkitPassenger = ((EntityBridge) passenger).lunararc$getBukkitEntity();
+    @WrapOperation(method = "removeVehicle",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;removePassenger(Lnet/minecraft/world/entity/Entity;)V"))
+    private void lunararc$vehicleExit(Entity vehicle, Entity passenger, Operation<Void> original) {
+        if (lunararc$dismountCancelled(vehicle)) {
+            this.vehicle = vehicle;
+            return;
+        }
+        original.call(vehicle, passenger);
+    }
 
-        io.lunararcdevs.lunararc.common.compat.LunarArcDismountEvents.fireEntityDismount(bukkitVehicle, bukkitPassenger);
-
+    @Unique
+    private boolean lunararc$dismountCancelled(Entity vehicle) {
+        if (!this.lunararc$inWorld || level().isClientSide) return false;
+        org.bukkit.entity.Entity bukkitVehicle = ((EntityBridge) vehicle).lunararc$getBukkitEntity();
+        org.bukkit.entity.Entity bukkitPassenger = this.lunararc$getBukkitEntity();
+        var pluginManager = org.bukkit.Bukkit.getPluginManager();
         if (bukkitVehicle instanceof org.bukkit.entity.Vehicle bukkitVehicleEntity
                 && bukkitPassenger instanceof org.bukkit.entity.LivingEntity livingPassenger) {
-            org.bukkit.event.vehicle.VehicleExitEvent event =
-                    new org.bukkit.event.vehicle.VehicleExitEvent(bukkitVehicleEntity, livingPassenger);
-            org.bukkit.Bukkit.getPluginManager().callEvent(event);
-            if (event.isCancelled()) {
-                ci.cancel();
-            }
+            var event = new org.bukkit.event.vehicle.VehicleExitEvent(bukkitVehicleEntity, livingPassenger, true);
+            pluginManager.callEvent(event);
+            if (event.isCancelled() && this.vehicle == null) return true;
         }
+        var event = new org.bukkit.event.entity.EntityDismountEvent(bukkitPassenger, bukkitVehicle, true);
+        pluginManager.callEvent(event);
+        return event.isCancelled();
     }
 
     @Unique private boolean lunararc$dropLeashOnPlayerUnleash;
@@ -253,10 +280,39 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
         return result;
     }
 
+    @Unique private boolean lunararc$combustEventFired;
+
+    @WrapOperation(method = "thunderHit", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;igniteForSeconds(F)V"))
+    private void lunararc$lightningCombust(Entity self, float seconds, Operation<Void> original,
+            net.minecraft.server.level.ServerLevel level, net.minecraft.world.entity.LightningBolt lightning) {
+        var event = new org.bukkit.event.entity.EntityCombustByEntityEvent(
+                ((EntityBridge) lightning).lunararc$getBukkitEntity(), this.lunararc$getBukkitEntity(), seconds);
+        org.bukkit.Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) return;
+        this.lunararc$combustEventFired = true;
+        try {
+            original.call(self, event.getDuration());
+        } finally {
+            this.lunararc$combustEventFired = false;
+        }
+    }
+
+    @Inject(method = "thunderHit", cancellable = true, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/Entity;hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z"))
+    private void lunararc$lightningHangingBreak(net.minecraft.server.level.ServerLevel level,
+            net.minecraft.world.entity.LightningBolt lightning, CallbackInfo ci) {
+        if (this.lunararc$getBukkitEntity() instanceof org.bukkit.entity.Hanging hanging) {
+            var event = new org.bukkit.event.hanging.HangingBreakByEntityEvent(hanging,
+                    ((EntityBridge) lightning).lunararc$getBukkitEntity());
+            org.bukkit.Bukkit.getPluginManager().callEvent(event);
+            if (event.isCancelled()) ci.cancel();
+        }
+    }
+
     @WrapMethod(method = "igniteForSeconds")
     private void lunararc$combust(float seconds, Operation<Void> original) {
         Entity self = (Entity) (Object) this;
-        if (self.level().isClientSide || !org.bukkit.Bukkit.isPrimaryThread()) {
+        if (self.level().isClientSide || !org.bukkit.Bukkit.isPrimaryThread() || this.lunararc$combustEventFired) {
             original.call(seconds);
             return;
         }

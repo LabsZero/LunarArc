@@ -25,6 +25,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 
 public class CraftEventFactory {
+    public static net.minecraft.world.level.block.state.BlockState damagingBlockState;
+    public static net.minecraft.core.BlockPos damagingBlockPos;
+
     @SuppressWarnings("deprecation")
     public static EntityDamageEvent callEntityDamageEvent(LivingEntity entity, DamageSource source, float damage) {
         DamageCause cause = damageCause(source);
@@ -37,10 +40,22 @@ public class CraftEventFactory {
         org.bukkit.entity.Entity damager = bukkitSource.getDirectEntity();
         if (damager == null) damager = bukkitSource.getCausingEntity();
 
-        EntityDamageEvent event = damager == null
-                ? new EntityDamageEvent(bukkitEntity, cause, bukkitSource, (double) damage)
-                : new org.bukkit.event.entity.EntityDamageByEntityEvent(
-                        damager, bukkitEntity, cause, bukkitSource, (double) damage);
+        net.minecraft.world.level.block.state.BlockState blockState = damagingBlockState;
+        net.minecraft.core.BlockPos blockPos = damagingBlockPos;
+        damagingBlockState = null;
+        damagingBlockPos = null;
+        EntityDamageEvent event;
+        if (damager != null) {
+            event = new org.bukkit.event.entity.EntityDamageByEntityEvent(
+                    damager, bukkitEntity, cause, bukkitSource, (double) damage);
+        } else if (blockPos != null && entity.level() instanceof net.minecraft.server.level.ServerLevel level) {
+            org.bukkit.block.Block block = CraftBlock.at(level, blockPos);
+            event = new org.bukkit.event.entity.EntityDamageByBlockEvent(block,
+                    org.bukkit.craftbukkit.block.CraftBlockStates.getBlockState(level, blockPos),
+                    bukkitEntity, cause, bukkitSource, (double) damage);
+        } else {
+            event = new EntityDamageEvent(bukkitEntity, cause, bukkitSource, (double) damage);
+        }
         Bukkit.getPluginManager().callEvent(event);
         return event;
     }
@@ -153,6 +168,15 @@ public class CraftEventFactory {
                 ? org.bukkit.craftbukkit.block.CraftBlock.at(player.serverLevel(), bedPos)
                 : bukkitPlayer.getLocation().getBlock();
         var event = new org.bukkit.event.player.PlayerBedLeaveEvent(bukkitPlayer, bed, setSpawnLocation);
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    public static org.bukkit.event.entity.EntityToggleGlideEvent callToggleGlideEvent(
+            net.minecraft.world.entity.LivingEntity entity, boolean gliding) {
+        org.bukkit.entity.LivingEntity bukkit = (org.bukkit.entity.LivingEntity) ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) entity)
+                .lunararc$getBukkitEntity();
+        org.bukkit.event.entity.EntityToggleGlideEvent event = new org.bukkit.event.entity.EntityToggleGlideEvent(bukkit, gliding);
         Bukkit.getPluginManager().callEvent(event);
         return event;
     }
@@ -603,6 +627,212 @@ public class CraftEventFactory {
                 org.bukkit.craftbukkit.CraftExplosionResult.toBukkit(effect));
         Bukkit.getPluginManager().callEvent(event);
         return event;
+    }
+
+    public static net.minecraft.core.BlockPos sourceBlockOverride = null;
+
+    @FunctionalInterface
+    public interface BlockPlacer {
+        boolean place(net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.state.BlockState state, int flag);
+    }
+
+    public static boolean handleBlockGrowEvent(net.minecraft.world.level.Level world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState block) {
+        return handleBlockGrowEvent(world, pos, block, 3);
+    }
+
+    public static boolean handleBlockGrowEvent(net.minecraft.world.level.Level world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState block, int flag) {
+        return handleBlockGrowEvent(world, pos, block, flag, world::setBlock);
+    }
+
+    public static boolean handleBlockGrowEvent(net.minecraft.world.level.LevelAccessor world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState block, int flag, BlockPlacer placer) {
+        return fireBlockChange(world, pos, block, flag, placer,
+                state -> new org.bukkit.event.block.BlockGrowEvent(state.getBlock(), state));
+    }
+
+    public static boolean handleBlockSpreadEvent(net.minecraft.world.level.Level world, net.minecraft.core.BlockPos source,
+            net.minecraft.core.BlockPos target, net.minecraft.world.level.block.state.BlockState block) {
+        return handleBlockSpreadEvent(world, source, target, block, 2);
+    }
+
+    public static boolean handleBlockSpreadEvent(net.minecraft.world.level.LevelAccessor world, net.minecraft.core.BlockPos source,
+            net.minecraft.core.BlockPos target, net.minecraft.world.level.block.state.BlockState block, int flag) {
+        return handleBlockSpreadEvent(world, source, target, block, flag, world::setBlock);
+    }
+
+    public static boolean handleBlockSpreadEvent(net.minecraft.world.level.LevelAccessor world, net.minecraft.core.BlockPos source,
+            net.minecraft.core.BlockPos target, net.minecraft.world.level.block.state.BlockState block, int flag, BlockPlacer placer) {
+        return fireBlockChange(world, target, block, flag, placer, state -> new org.bukkit.event.block.BlockSpreadEvent(state.getBlock(),
+                CraftBlock.at((net.minecraft.server.level.ServerLevel) world, sourceBlockOverride != null ? sourceBlockOverride : source), state));
+    }
+
+    public static boolean handleBlockFormEvent(net.minecraft.world.level.Level world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState block, int flag) {
+        return handleBlockFormEvent(world, pos, block, flag, null, world::setBlock);
+    }
+
+    public static boolean handleBlockFormEvent(net.minecraft.world.level.Level world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState block, int flag, @Nullable net.minecraft.world.entity.Entity entity) {
+        return handleBlockFormEvent(world, pos, block, flag, entity, world::setBlock);
+    }
+
+    public static boolean handleBlockFormEvent(net.minecraft.world.level.LevelAccessor world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState block, int flag, @Nullable net.minecraft.world.entity.Entity entity,
+            BlockPlacer placer) {
+        return fireBlockChange(world, pos, block, flag, placer, state -> entity == null
+                ? new org.bukkit.event.block.BlockFormEvent(state.getBlock(), state)
+                : new org.bukkit.event.block.EntityBlockFormEvent(
+                        ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity(), state.getBlock(), state));
+    }
+
+    public static boolean handleMoistureChangeEvent(net.minecraft.world.level.Level world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState newData, int flag) {
+        return handleMoistureChangeEvent(world, pos, newData, flag, world::setBlock);
+    }
+
+    public static boolean handleMoistureChangeEvent(net.minecraft.world.level.LevelAccessor world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState newData, int flag, BlockPlacer placer) {
+        return fireBlockChange(world, pos, newData, flag, placer,
+                state -> new org.bukkit.event.block.MoistureChangeEvent(state.getBlock(), state));
+    }
+
+    private static boolean fireBlockChange(net.minecraft.world.level.LevelAccessor world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState block, int flag, BlockPlacer placer,
+            java.util.function.Function<org.bukkit.craftbukkit.block.CraftBlockState, ? extends org.bukkit.event.block.BlockEvent> factory) {
+        if (!(world instanceof net.minecraft.server.level.ServerLevel) || !Bukkit.isPrimaryThread()) return placer.place(pos, block, flag);
+        org.bukkit.craftbukkit.block.CraftBlockState state = org.bukkit.craftbukkit.block.CraftBlockStates.getBlockState(world, pos, flag);
+        state.setData(block);
+        org.bukkit.event.block.BlockEvent event = factory.apply(state);
+        Bukkit.getPluginManager().callEvent(event);
+        if (((org.bukkit.event.Cancellable) event).isCancelled()) return false;
+        return placer.place(pos, state.getHandle(), flag);
+    }
+
+    public static boolean callBlockFadeCancelled(net.minecraft.world.level.LevelAccessor world, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState newState) {
+        if (!(world instanceof net.minecraft.server.level.ServerLevel) || !Bukkit.isPrimaryThread()) return false;
+        return callBlockFadeEvent(world, pos, newState).isCancelled();
+    }
+
+    public static org.bukkit.event.block.BlockFadeEvent callBlockFadeEvent(net.minecraft.world.level.LevelAccessor world,
+            net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.state.BlockState newState) {
+        org.bukkit.craftbukkit.block.CraftBlockState state = org.bukkit.craftbukkit.block.CraftBlockStates.getBlockState(world, pos);
+        state.setData(newState);
+        org.bukkit.event.block.BlockFadeEvent event = new org.bukkit.event.block.BlockFadeEvent(state.getBlock(), state);
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    public static org.bukkit.event.entity.EntityShootBowEvent callEntityShootBowEvent(net.minecraft.world.entity.LivingEntity who,
+            net.minecraft.world.item.ItemStack bow, net.minecraft.world.item.ItemStack consumeItem, net.minecraft.world.entity.Entity projectile,
+            net.minecraft.world.InteractionHand hand, float force, boolean consume) {
+        CraftItemStack arrowItem = CraftItemStack.asCraftMirror(consumeItem);
+        org.bukkit.event.entity.EntityShootBowEvent event = new org.bukkit.event.entity.EntityShootBowEvent(
+                (org.bukkit.entity.LivingEntity) ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) who).lunararc$getBukkitEntity(),
+                CraftItemStack.asCraftMirror(bow),
+                arrowItem.getType() == org.bukkit.Material.AIR || arrowItem.getAmount() == 0 ? null : arrowItem,
+                ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) projectile).lunararc$getBukkitEntity(),
+                hand == net.minecraft.world.InteractionHand.MAIN_HAND ? org.bukkit.inventory.EquipmentSlot.HAND : org.bukkit.inventory.EquipmentSlot.OFF_HAND,
+                force, consume);
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    public static boolean dispenseEventFired = false;
+
+    public static org.bukkit.event.block.BlockDispenseEvent callBlockDispenseEvent(net.minecraft.core.dispenser.BlockSource source,
+            net.minecraft.world.item.ItemStack item, net.minecraft.world.phys.Vec3 velocity) {
+        org.bukkit.event.block.BlockDispenseEvent event = new org.bukkit.event.block.BlockDispenseEvent(CraftBlock.at(source.level(), source.pos()),
+                CraftItemStack.asBukkitCopy(item), new org.bukkit.util.Vector(velocity.x, velocity.y, velocity.z));
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    public static org.bukkit.event.player.PlayerHarvestBlockEvent callPlayerHarvestBlockEvent(net.minecraft.world.level.Level world,
+            net.minecraft.core.BlockPos pos, net.minecraft.world.entity.player.Player who, net.minecraft.world.InteractionHand hand,
+            java.util.List<net.minecraft.world.item.ItemStack> itemsToHarvest) {
+        java.util.List<ItemStack> bukkitItems = new ArrayList<>(itemsToHarvest.size());
+        for (net.minecraft.world.item.ItemStack item : itemsToHarvest) bukkitItems.add(CraftItemStack.asBukkitCopy(item));
+        org.bukkit.event.player.PlayerHarvestBlockEvent event = new org.bukkit.event.player.PlayerHarvestBlockEvent(
+                (org.bukkit.entity.Player) ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) who).lunararc$getBukkitEntity(),
+                CraftBlock.at((net.minecraft.server.level.ServerLevel) world, pos),
+                hand == net.minecraft.world.InteractionHand.OFF_HAND ? org.bukkit.inventory.EquipmentSlot.OFF_HAND : org.bukkit.inventory.EquipmentSlot.HAND,
+                bukkitItems);
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    public static org.bukkit.event.player.PlayerBucketEntityEvent callPlayerFishBucketEvent(net.minecraft.world.entity.LivingEntity fish,
+            net.minecraft.world.entity.player.Player entityHuman, net.minecraft.world.item.ItemStack originalBucket,
+            net.minecraft.world.item.ItemStack entityBucket, net.minecraft.world.InteractionHand hand) {
+        org.bukkit.entity.Player player = (org.bukkit.entity.Player) ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) entityHuman).lunararc$getBukkitEntity();
+        org.bukkit.entity.Entity bukkitEntity = ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) fish).lunararc$getBukkitEntity();
+        org.bukkit.inventory.EquipmentSlot slot = hand == net.minecraft.world.InteractionHand.OFF_HAND
+                ? org.bukkit.inventory.EquipmentSlot.OFF_HAND : org.bukkit.inventory.EquipmentSlot.HAND;
+        org.bukkit.event.player.PlayerBucketEntityEvent event = bukkitEntity instanceof org.bukkit.entity.Fish bukkitFish
+                ? new org.bukkit.event.player.PlayerBucketFishEvent(player, bukkitFish, CraftItemStack.asBukkitCopy(originalBucket), CraftItemStack.asBukkitCopy(entityBucket), slot)
+                : new org.bukkit.event.player.PlayerBucketEntityEvent(player, bukkitEntity, CraftItemStack.asBukkitCopy(originalBucket), CraftItemStack.asBukkitCopy(entityBucket), slot);
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    public static void callVehicleUpdateAndMove(net.minecraft.world.entity.Entity vehicle, @Nullable Location from) {
+        if (vehicle.level().isClientSide
+                || !(((io.lunararcdevs.lunararc.common.bridge.EntityBridge) vehicle).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Vehicle bukkitVehicle)) {
+            return;
+        }
+        Location to = bukkitVehicle.getLocation();
+        Bukkit.getPluginManager().callEvent(new org.bukkit.event.vehicle.VehicleUpdateEvent(bukkitVehicle));
+        if (from != null && !from.equals(to)) {
+            Bukkit.getPluginManager().callEvent(new org.bukkit.event.vehicle.VehicleMoveEvent(bukkitVehicle, from, to));
+        }
+    }
+
+    public static boolean callVehicleEntityCollisionCancelled(net.minecraft.world.entity.Entity vehicle, net.minecraft.world.entity.Entity other) {
+        if (vehicle.level().isClientSide
+                || !(((io.lunararcdevs.lunararc.common.bridge.EntityBridge) vehicle).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Vehicle bukkitVehicle)) {
+            return false;
+        }
+        var event = new org.bukkit.event.vehicle.VehicleEntityCollisionEvent(bukkitVehicle,
+                ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) other).lunararc$getBukkitEntity());
+        Bukkit.getPluginManager().callEvent(event);
+        return event.isCancelled();
+    }
+
+    public static boolean callPlayerShearEntityCancelled(net.minecraft.world.entity.player.Player player, net.minecraft.world.entity.Entity sheared,
+            net.minecraft.world.item.ItemStack shears, net.minecraft.world.InteractionHand hand) {
+        if (sheared.level().isClientSide
+                || !(((io.lunararcdevs.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Player bukkitPlayer)) {
+            return false;
+        }
+        org.bukkit.event.player.PlayerShearEntityEvent event = new org.bukkit.event.player.PlayerShearEntityEvent(bukkitPlayer,
+                ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) sheared).lunararc$getBukkitEntity(), CraftItemStack.asCraftMirror(shears),
+                hand == net.minecraft.world.InteractionHand.OFF_HAND ? org.bukkit.inventory.EquipmentSlot.OFF_HAND : org.bukkit.inventory.EquipmentSlot.HAND,
+                new ArrayList<>());
+        Bukkit.getPluginManager().callEvent(event);
+        return event.isCancelled();
+    }
+
+    public static org.bukkit.event.entity.ExplosionPrimeEvent callExplosionPrimeEvent(net.minecraft.world.entity.Entity entity, float radius, boolean fire) {
+        org.bukkit.event.entity.ExplosionPrimeEvent event = new org.bukkit.event.entity.ExplosionPrimeEvent(
+                ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity(), radius, fire);
+        Bukkit.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    public static boolean callTNTPrimeEvent(net.minecraft.world.level.Level world, net.minecraft.core.BlockPos pos,
+            org.bukkit.event.block.TNTPrimeEvent.PrimeCause cause, @Nullable net.minecraft.world.entity.Entity causingEntity,
+            @Nullable net.minecraft.core.BlockPos causePosition) {
+        if (!(world instanceof net.minecraft.server.level.ServerLevel level) || !Bukkit.isPrimaryThread()) return true;
+        org.bukkit.entity.Entity bukkitEntity = causingEntity == null ? null
+                : ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) causingEntity).lunararc$getBukkitEntity();
+        Block causeBlock = causePosition == null ? null : CraftBlock.at(level, causePosition);
+        org.bukkit.event.block.TNTPrimeEvent event = new org.bukkit.event.block.TNTPrimeEvent(
+                CraftBlock.at(level, pos), cause, bukkitEntity, causeBlock);
+        Bukkit.getPluginManager().callEvent(event);
+        return !event.isCancelled();
     }
 
     public static org.bukkit.event.block.BlockIgniteEvent callBlockIgniteEvent(

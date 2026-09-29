@@ -15,6 +15,10 @@ public abstract class ItemBasedSteeringMixin implements ItemBasedSteeringBridge 
     @Shadow private boolean boosting;
     @Shadow private int boostTime;
 
+    public void setBoostTicks(int ticks) {
+        this.lunararc$setBoostTicks(ticks);
+    }
+
     @Override public boolean lunararc$isBoosting() { return this.boosting; }
     @Override public int lunararc$getBoostTime() { return this.boostTime; }
     @Override public void lunararc$setBoostTime(int ticks) { this.boostTime = ticks; }

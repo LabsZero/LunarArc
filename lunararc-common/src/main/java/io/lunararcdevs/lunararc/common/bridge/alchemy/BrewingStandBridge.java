@@ -4,6 +4,7 @@ package io.lunararcdevs.lunararc.common.bridge.alchemy;
 public interface BrewingStandBridge {
     int lunararc$getBrewTime();
     void lunararc$setBrewTime(int ticks);
+    int lunararc$getRecipeBrewTime();
     int lunararc$getFuel();
     void lunararc$setFuel(int fuel);
 }

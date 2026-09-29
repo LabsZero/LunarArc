@@ -51,11 +51,11 @@ public class CraftMob extends CraftLivingEntity implements Mob {
     }
 
     @Override
-    public @Nullable LivingEntity getTarget() {
+    public @Nullable CraftLivingEntity getTarget() {
         net.minecraft.world.entity.LivingEntity target = getHandle().getTarget();
         if (target == null) return null;
         org.bukkit.entity.Entity bukkit = CraftEntity.getEntity(server, target);
-        return bukkit instanceof LivingEntity living ? living : null;
+        return bukkit instanceof CraftLivingEntity living ? living : null;
     }
 
     @Override public void setAware(boolean aware) { ((MobBridge) getHandle()).lunararc$setAware(aware); }

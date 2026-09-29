@@ -287,8 +287,6 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void lunararc$onInit(CallbackInfo ci) {
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.markServerStart();
-        long initStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
 
         this.lunararc$dataLoadContext = io.lunararcdevs.lunararc.common.mod.util.LunarArcWorldLoaderCapture.take();
         LunarArcServer.attach((MinecraftServer) (Object) this);
@@ -299,7 +297,6 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         LunarArcConfig.load();
         io.lunararcdevs.lunararc.api.LunarArcServer.init();
 
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartupPhase("Server Init", initStart);
     }
 
     @Inject(method = "loadLevel", at = @At("HEAD"))
@@ -316,7 +313,6 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         this.lunararc$bukkitStartupStartedNanos = System.nanoTime();
         io.lunararcdevs.lunararc.common.server.LunarArcWorldVersionStamp.stamp((MinecraftServer) (Object) this);
 
-        long loadStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         try {
             craftServer.loadPlugins();
         } catch (io.lunararcdevs.lunararc.common.config.IncompatibleSoftwareException fatal) {
@@ -327,11 +323,8 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
             ((MinecraftServer) (Object) this).halt(false);
             throw fatal;
         }
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartupPhase("Plugin Load", loadStart);
 
-        long enableStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         this.lunararc$enablePlugins(craftServer, PluginLoadOrder.STARTUP);
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartupPhase("Plugin Enable STARTUP", enableStart);
     }
 
 
@@ -343,28 +336,20 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         MinecraftServer minecraftServer = (MinecraftServer) (Object) this;
         CraftServer craftServer = this.lunararc$requireCraftServer();
 
-        long worldInitStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         for (net.minecraft.server.level.ServerLevel level : minecraftServer.getAllLevels()) {
             if (!craftServer.worldLoadEventFired.add(level.dimension())) continue;
-            long worldStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
             org.bukkit.craftbukkit.CraftWorld craftWorld = craftServer.getCraftWorld(level);
             craftServer.getPluginManager().callEvent(new org.bukkit.event.world.WorldInitEvent(craftWorld));
             craftServer.getPluginManager().callEvent(new org.bukkit.event.world.WorldLoadEvent(craftWorld));
-            io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartup(
-                    "World Init", level.dimension().location().toString(), worldStart);
         }
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartupPhase("World Init Events", worldInitStart);
 
-        long enableStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         this.lunararc$enablePlugins(craftServer, PluginLoadOrder.POSTWORLD);
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartupPhase("Plugin Enable POSTWORLD", enableStart);
 
         long commandSyncStarted = System.nanoTime();
         this.lunararc$firePaperCommandLifecycle(minecraftServer);
         this.lunararc$syncCommands(craftServer, minecraftServer);
         long commandSyncMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - commandSyncStarted);
         LunarArcConsole.success(lunararc$logger, "Bukkit command tree finalized in {}ms", commandSyncMillis);
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartupPhase("Command Sync", commandSyncStarted);
 
         if (!this.lunararc$serverLoadEventFired) {
             this.lunararc$serverLoadEventFired = true;
@@ -372,29 +357,17 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
                     org.bukkit.event.server.ServerLoadEvent.LoadType.STARTUP));
         }
 
-        long bridgeStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
 
-        long tier3ProbeStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         io.lunararcdevs.lunararc.common.server.LunarArcTier3RuntimeProbe.run(craftServer);
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartup(
-                "Compatibility Bridge", "Tier3 Runtime Probe", tier3ProbeStart);
 
-        long essentialsBridgeStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         io.lunararcdevs.lunararc.common.server.LunarArcEssentialsItemBridge.populateModdedItems(craftServer);
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartup(
-                "Compatibility Bridge", "Essentials Items", essentialsBridgeStart);
 
-        long antiXrayBridgeStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         io.lunararcdevs.lunararc.common.server.LunarArcAntiXrayOreBridge.mergeModdedOres(craftServer);
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartup(
-                "Compatibility Bridge", "Anti-Xray Ores", antiXrayBridgeStart);
 
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordStartupPhase("Compatibility Bridges", bridgeStart);
 
         long startupMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - this.lunararc$bukkitStartupStartedNanos);
         LunarArcConsole.success(lunararc$logger, "Bukkit/Paper 1.21.1 compatibility layer ready ({}ms)", startupMillis);
 
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.logStartupSummary();
     }
 
     @Unique
@@ -441,33 +414,24 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
     @Inject(method = "stopServer", at = @At("HEAD"))
     private void lunararc$onStop(CallbackInfo ci) {
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.markShutdownStart();
 
         CraftServer craftServer = this.lunararc$craftServer;
         if (craftServer != null) {
-            long disableStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
             craftServer.disablePlugins();
-            io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordShutdownPhase("Plugin Disable", disableStart);
 
-            long clearStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
             craftServer.clearPluginsForShutdown();
             craftServer.shutdownSchedulers();
-            io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordShutdownPhase("Scheduler/Cleanup", clearStart);
         }
 
-        long cleanupStart = io.lunararcdevs.lunararc.common.server.LunarArcTimings.phaseStart();
         io.lunararcdevs.lunararc.common.network.LunarArcPluginMessageOwnership.clear();
         io.lunararcdevs.lunararc.common.server.LunarArcLifecycleEventRunner.resetServerState();
         org.bukkit.plugin.java.PluginClassLoader.shutdownSharedLoaders();
         io.lunararcdevs.lunararc.common.server.LunarArcContext.clearServerReferences();
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.recordShutdownPhase("Server Cleanup", cleanupStart);
     }
 
     @Inject(method = "stopServer", at = @At("RETURN"))
     private void lunararc$afterStop(CallbackInfo ci) {
         io.lunararcdevs.lunararc.common.server.LunarArcProfileCacheWriter.flush();
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.logShutdownSummary();
-        io.lunararcdevs.lunararc.common.server.LunarArcTimings.reset();
         // Real vanilla's own JVM shutdown-hook thread (net.minecraft.server.Main$1) only ever
         // calls halt(true) then LogManager.shutdown() - confirmed directly by disassembling it -
         // and neither Spigot nor Paper patch that mechanism to add any protection beyond it. The

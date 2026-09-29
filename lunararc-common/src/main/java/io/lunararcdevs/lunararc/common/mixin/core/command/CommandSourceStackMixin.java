@@ -76,4 +76,8 @@ public abstract class CommandSourceStackMixin
     public CommandSender lunararc$getBukkitSender() {
         return this.getSender();
     }
+
+    public CommandSender getBukkitSender() {
+        return this.getSender();
+    }
 }

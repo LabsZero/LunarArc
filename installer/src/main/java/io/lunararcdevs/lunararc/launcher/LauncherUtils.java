@@ -30,6 +30,7 @@ public class LauncherUtils {
         if (!System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win")) return;
         try {
             new ProcessBuilder("cmd.exe", "/c", "chcp", "65001")
+                    .redirectInput(ProcessBuilder.Redirect.INHERIT)
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start().waitFor();

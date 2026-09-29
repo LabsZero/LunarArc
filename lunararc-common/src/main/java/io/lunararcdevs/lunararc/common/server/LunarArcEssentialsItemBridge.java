@@ -66,9 +66,6 @@ public final class LunarArcEssentialsItemBridge {
             Class.forName("com.earth2me.essentials.commands.Commandgive", false, loader);
             Class.forName("com.earth2me.essentials.commands.Commanditem", false, loader);
         } catch (ReflectiveOperationException error) {
-            if (io.lunararcdevs.lunararc.common.LunarArcDebug.CLASSLOAD) {
-                io.lunararcdevs.lunararc.common.LunarArcDebug.classload("Essentials item command preparation failed: {}", error.toString());
-            }
         }
     }
 
@@ -95,10 +92,6 @@ public final class LunarArcEssentialsItemBridge {
                 refresh();
                 return snapshot.aliases().get(alias);
             } finally {
-                if (io.lunararcdevs.lunararc.common.LunarArcDebug.TIMING) {
-                    io.lunararcdevs.lunararc.common.LunarArcDebug.timing(
-                            "AliasIndex.get({}) took {}ns", alias, System.nanoTime() - start);
-                }
             }
         }
 
@@ -121,10 +114,6 @@ public final class LunarArcEssentialsItemBridge {
                     snapshot = new Snapshot<>(count, Map.copyOf(aliases));
                 }
             } finally {
-                if (io.lunararcdevs.lunararc.common.LunarArcDebug.TIMING) {
-                    io.lunararcdevs.lunararc.common.LunarArcDebug.timing(
-                            "AliasIndex.refresh() took {}ns (rebuilt={})", System.nanoTime() - start, rebuilt);
-                }
             }
         }
 

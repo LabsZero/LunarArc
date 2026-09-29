@@ -1,32 +1,41 @@
-![Logo](.github/lunararclogo.jpg)
+# LunarArc
 
-[![Downloads count](https://img.shields.io/github/downloads/LunarArcDevs/LunarArc/total?style=for-the-badge)](https://lunararc.lunararcdevs.com)  ![License](https://img.shields.io/github/license/LunarArcDevs/LunarArc?style=for-the-badge) ![GitHub forks](https://img.shields.io/github/forks/LunarArcDevs/LunarArc?style=for-the-badge&logo=github)
+<p align="center">
+  <img src=".github/lunararclogo.jpg" alt="LunarArc Logo" width="220">
+</p>
 
+<p align="center">
+  <a href="https://lunararc.ampznetwork.com"><img src="https://img.shields.io/github/downloads/LunarArcDevs/LunarArc/total?style=for-the-badge" alt="Downloads count"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/LunarArcDevs/LunarArc?style=for-the-badge" alt="License"></a>
+  <a href="https://github.com/LunarArcDevs/LunarArc/forks"><img src="https://img.shields.io/github/forks/LunarArcDevs/LunarArc?style=for-the-badge&logo=github" alt="GitHub forks"></a>
+</p>
 
-An experimental hybrid Minecraft server compatibility layer. **Forge/NeoForge/Fabric/Quilt**, while LunarArc layers Bukkit/Spigot/Paper plugin compatibility on top with concrete Craft-style adapters and targeted mixins. Paper is an API/behaviour contract and merge reference, not a second shaded server runtime.
+A hybrid Minecraft server compatibility layer. **Forge, NeoForge, Fabric, and Quilt** are supported, while LunarArc layers Bukkit/Spigot/Paper plugin compatibility on top with concrete Craft-style adapters and targeted mixins. Paper is an API/behaviour contract and merge reference, not a second shaded server runtime.
 
 LunarArc also provides native [EssentialsX](https://essentialsx.net) integration for modded blocks and items. Modded registry entries are automatically exposed to EssentialsX, allowing commands such as `/give`, `/item`, and `/i` to work with modded content **out of the box, with no additional integration plugin required**.
 
+---
 
-|        Release        |  Forge  | NeoForge |  Fabric  |  QuiltMC  | Status |                                                                                                                                              Build                                                           
+## Compatible Loaders
+
+| Release | Forge | NeoForge | Fabric | QuiltMC | Status | Build Status |
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Trial Zenith (1.21.1) | 52.1.16 | 21.1.251 |  0.19.5  |  0.30.1  | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3ATrial-Zenith) |
+| Trial Zenith (1.21.1) | 52.1.16 | 21.1.251 | 0.19.5 | 0.30.1 | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3ATrial-Zenith) |
+
+---
 
 ## Installing
 
- Download the jar.  
- Launch with command `java -jar lunararc.jar nogui`. 
-   The `nogui` argument will disable the server control panel.
+1. Download the jar.  
+2. Launch with command:
+   ```bash
+   java -jar lunararc.jar nogui
 
-Read our document for more information.
+   Read our [wiki](https://lunararc.ampznetwork.com/en/wiki) for more information.
 
 ## Support
 
 Discord Server [Inivte Link](https://discord.gg/JDP3CMfBef)
-
-## License
-
-This project is licensed under [GPL v3](LICENSE).
 
 ## Sponsor
 
@@ -53,3 +62,7 @@ LunarArc uses the following upstream projects as runtime platforms, API contract
 - **[Fabric](https://github.com/FabricMC/fabric)**  - Fabric loader/API lifecycle and integration hooks used by LunarArc's Fabric module.
 - **[Quilt](https://github.com/QuiltMC/quilt-loader)** - Quilt runtime/loader support used by LunarArc's Quilt module.
 - **[SpongePowered Mixin](https://github.com/SpongePowered/Mixin)** - Bytecode mixin framework used for targeted hooks and bridge state on the real loader-owned Minecraft classes.
+
+## License
+
+This project is licensed under [GPL v3](LICENSE).

@@ -2,7 +2,11 @@ package io.lunararcdevs.lunararc.common.mixin.core.item;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
+import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Leashable;
@@ -25,6 +29,24 @@ public abstract class LeadItemMixin {
     @Inject(method = "useOn", at = @At("HEAD"), require = 0)
     private void lunararc$captureHand(UseOnContext context, CallbackInfoReturnable<net.minecraft.world.InteractionResult> cir) {
         lunararc$hand.set(context.getHand());
+    }
+
+    @Inject(method = "bindPlayerMobs", cancellable = true, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/decoration/LeashFenceKnotEntity;playPlacementSound()V"))
+    private static void lunararc$knotPlace(Player player, Level level, BlockPos pos,
+            CallbackInfoReturnable<net.minecraft.world.InteractionResult> cir, @Local LeashFenceKnotEntity knot) {
+        var bukkitKnot = ((EntityBridge) knot).lunararc$getBukkitEntity();
+        var bukkitPlayer = player == null ? null : ((EntityBridge) player).lunararc$getBukkitEntity();
+        if (!(bukkitKnot instanceof org.bukkit.entity.Hanging hanging) || !(level instanceof ServerLevel serverLevel)) return;
+        var event = new org.bukkit.event.hanging.HangingPlaceEvent(hanging,
+                bukkitPlayer instanceof org.bukkit.entity.Player p ? p : null,
+                org.bukkit.craftbukkit.block.CraftBlock.at(serverLevel, pos), org.bukkit.block.BlockFace.SELF,
+                org.bukkit.craftbukkit.CraftEquipmentSlot.getHand(lunararc$hand.get()));
+        org.bukkit.Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            knot.discard();
+            cir.setReturnValue(net.minecraft.world.InteractionResult.PASS);
+        }
     }
 
     @WrapOperation(
