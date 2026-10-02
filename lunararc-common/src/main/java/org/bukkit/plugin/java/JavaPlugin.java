@@ -17,8 +17,11 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Logger;
@@ -142,6 +145,26 @@ public abstract class JavaPlugin extends PluginBase implements org.bukkit.comman
     @Override
     public @Nullable InputStream getResource(@NotNull String filename) {
         return getClass().getClassLoader().getResourceAsStream(filename);
+    }
+
+    protected final @Nullable Reader getTextResource(@NotNull String file) {
+        final InputStream in = getResource(file);
+        return in == null ? null : new InputStreamReader(in, StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public final boolean isNaggable() {
+        return naggable;
+    }
+
+    @Override
+    public final void setNaggable(boolean canNag) {
+        this.naggable = canNag;
+    }
+
+    @Override
+    public String toString() {
+        return description.getFullName();
     }
 
     @Override

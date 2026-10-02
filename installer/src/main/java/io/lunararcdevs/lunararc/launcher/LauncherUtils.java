@@ -231,4 +231,64 @@ public class LauncherUtils {
         }
         return null;
     }
+
+    static Path minecraftServerJar(Path workingDir, String mcVersion) {
+        Path standard = workingDir.resolve("server.jar");
+        if (!Files.exists(standard) || isMinecraftServerJar(standard)) return standard;
+        return workingDir.resolve("minecraft_server." + mcVersion + ".jar");
+    }
+
+    static boolean isStandardServerJar(Path minecraftServerJar) {
+        return minecraftServerJar.getFileName().toString().equals("server.jar");
+    }
+
+    static boolean isMinecraftServerJar(Path jar) {
+        try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jar.toFile())) {
+            return zip.getEntry("META-INF/versions.list") != null
+                    || zip.getEntry("net/minecraft/bundler/Main.class") != null
+                    || zip.getEntry("net/minecraft/server/Main.class") != null
+                    || zip.getEntry("net/minecraft/server/MinecraftServer.class") != null;
+        } catch (IOException unreadable) {
+            return false;
+        }
+    }
+
+    static void pinGameJar(String property, Path minecraftServerJar) {
+        if (isStandardServerJar(minecraftServerJar) || System.getProperty(property) != null) return;
+        System.out.println("[LunarArc] server.jar is not a Minecraft server jar, so the game is kept as "
+                + minecraftServerJar.getFileName() + " and server.jar is left untouched.");
+        System.setProperty(property, minecraftServerJar.toAbsolutePath().toString());
+    }
+
+    static Path createInstallDirectory(Path workingDir) throws IOException {
+        Path root = workingDir.resolve(".lunararc");
+        Files.createDirectories(root);
+        return Files.createTempDirectory(root, "install-");
+    }
+
+    static void adoptServerJar(Path installDir, Path minecraftServerJar) throws IOException {
+        Path produced = installDir.resolve("server.jar");
+        if (isStandardServerJar(minecraftServerJar) || !Files.exists(produced)) return;
+        Files.move(produced, minecraftServerJar, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    static void mergeUp(Path source, Path target) throws IOException {
+        try (java.util.stream.Stream<Path> files = Files.walk(source)) {
+            for (Path file : (Iterable<Path>) files.filter(Files::isRegularFile)::iterator) {
+                Path dest = target.resolve(source.relativize(file));
+                Files.createDirectories(dest.getParent());
+                Files.move(file, dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        deleteTree(source);
+    }
+
+    static void deleteTree(Path root) throws IOException {
+        if (!Files.exists(root)) return;
+        try (java.util.stream.Stream<Path> paths = Files.walk(root)) {
+            for (Path path : (Iterable<Path>) paths.sorted(java.util.Comparator.reverseOrder())::iterator) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
 }

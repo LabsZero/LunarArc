@@ -1,8 +1,4 @@
-# LunarArc
-
-<p align="center">
-  <img src=".github/lunararclogo.jpg" alt="LunarArc Logo" width="220">
-</p>
+[![](.github/lunararclogo.jpg)](https://lunararc.ampznetwork.com)
 
 <p align="center">
   <a href="https://lunararc.ampznetwork.com"><img src="https://img.shields.io/github/downloads/LunarArcDevs/LunarArc/total?style=for-the-badge" alt="Downloads count"></a>
@@ -20,7 +16,7 @@ LunarArc also provides native [EssentialsX](https://essentialsx.net) integration
 
 | Release | Forge | NeoForge | Fabric | QuiltMC | Status | Build Status |
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Trial Zenith (1.21.1) | 52.1.16 | 21.1.251 | 0.19.5 | 0.30.1 | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3ATrial-Zenith) |
+| Trial Zenith (1.21.1) | 52.1.16 | 21.1.252 | 0.19.5 | 0.30.1 | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3ATrial-Zenith) |
 
 ---
 
@@ -28,10 +24,9 @@ LunarArc also provides native [EssentialsX](https://essentialsx.net) integration
 
 1. Download the jar.  
 2. Launch with command:
-   ```bash
-   java -jar lunararc.jar nogui
+   `` bash java -jar lunararc.jar nogui `` 
 
-   Read our [wiki](https://lunararc.ampznetwork.com/en/wiki) for more information.
+Read our [wiki](https://lunararc.ampznetwork.com/en/wiki) for more information.
 
 ## Support
 

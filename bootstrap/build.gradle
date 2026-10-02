@@ -185,6 +185,9 @@ def createFatJar(String platform) {
                 exclude forgeLocatorServiceFile
                 exclude 'META-INF/MANIFEST.MF'
                 exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+                filesMatching('META-INF/accesstransformer.cfg') {
+                    filter { String line -> line.trim() == 'public net.minecraft.world.level.biome.Biome climateSettings' ? null : line }
+                }
             }
         } else {
             from(zipTree(platformJarTask.outputs.files.singleFile)) {
@@ -201,6 +204,7 @@ def createFatJar(String platform) {
         from(platformProject.sourceSets.main.output.resourcesDir) {
             if (platform == 'neoforge') {
                 exclude 'META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator'
+                exclude 'META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader'
             } else if (platform == 'forge') {
                 exclude forgeLocatorServiceFile
             }
@@ -400,6 +404,9 @@ def createFatJar(String platform) {
                 if (platform == 'forge') {
                     exclude 'META-INF/services/net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer$Provider'
                     exclude 'META-INF/services/net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer$Provider'
+                    filesMatching('META-INF/accesstransformer.cfg') {
+                        filter { String line -> line.trim() == 'public net.minecraft.world.level.biome.Biome climateSettings' ? null : line }
+                    }
                 }
                 exclude 'META-INF/MANIFEST.MF'
                 exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'

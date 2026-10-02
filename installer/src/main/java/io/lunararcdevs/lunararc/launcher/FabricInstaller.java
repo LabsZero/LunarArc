@@ -7,13 +7,13 @@ import java.nio.file.Paths;
 public class FabricInstaller {
     public static void install(Path workingDir, java.util.Properties versions, Path selfPath) throws Exception {
         Path fabricServerJar = workingDir.resolve("fabric-server-launch.jar");
-        Path minecraftServerJar = workingDir.resolve("server.jar");
         Path versionSentinel = workingDir.resolve(".lunararc-fabric-version");
 
         String mcVersion = LauncherUtils.requireVersion(versions, "minecraft");
         String fabricVersion = LauncherUtils.requireVersion(versions, "fabric");
         String installerVersion = LauncherUtils.requireVersion(versions, "fabricInstaller");
 
+        Path minecraftServerJar = LauncherUtils.minecraftServerJar(workingDir, mcVersion);
         Path installerJar = Paths.get("fabric-" + mcVersion + "-" + fabricVersion + "-installer.jar");
 
         String installerUrl = String.format(
@@ -44,16 +44,32 @@ public class FabricInstaller {
                 Downloader.download(installerUrl, installerJar);
             }
 
-            ProcessBuilder pb = new ProcessBuilder(
-                    LauncherUtils.getJavaExecutable(), "-jar", installerJar.toAbsolutePath().toString(), "server",
-                    "-mcversion", mcVersion, "-loader", fabricVersion, "-downloadMinecraft");
-            pb.inheritIO();
-            Process process = pb.start();
-            int exitCode = process.waitFor();
+            boolean sideInstall = !LauncherUtils.isStandardServerJar(minecraftServerJar);
+            Path installDir = sideInstall ? LauncherUtils.createInstallDirectory(workingDir) : workingDir;
+            try {
+                java.util.List<String> command = new java.util.ArrayList<>(java.util.List.of(
+                        LauncherUtils.getJavaExecutable(), "-jar", installerJar.toAbsolutePath().toString(), "server",
+                        "-mcversion", mcVersion, "-loader", fabricVersion, "-downloadMinecraft"));
+                if (sideInstall) {
+                    command.add("-dir");
+                    command.add(installDir.toString());
+                }
+                ProcessBuilder pb = new ProcessBuilder(command);
+                pb.inheritIO();
+                Process process = pb.start();
+                int exitCode = process.waitFor();
 
-            if (exitCode != 0) {
-                ConsoleUI.printError("install.fabric.failed_exit_code", exitCode);
-                return;
+                if (exitCode != 0) {
+                    ConsoleUI.printError("install.fabric.failed_exit_code", exitCode);
+                    return;
+                }
+
+                if (sideInstall) {
+                    LauncherUtils.adoptServerJar(installDir, minecraftServerJar);
+                    LauncherUtils.mergeUp(installDir, workingDir);
+                }
+            } finally {
+                if (sideInstall) LauncherUtils.deleteTree(installDir);
             }
 
             if (!Files.exists(fabricServerJar)) {
@@ -71,6 +87,6 @@ public class FabricInstaller {
             Files.writeString(versionSentinel, combinedVersion);
         }
 
-        FabricLauncher.launch(workingDir, selfPath);
+        FabricLauncher.launch(workingDir, selfPath, minecraftServerJar);
     }
 }

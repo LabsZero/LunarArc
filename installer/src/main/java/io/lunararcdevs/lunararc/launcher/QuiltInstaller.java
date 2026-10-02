@@ -1,23 +1,19 @@
 package io.lunararcdevs.lunararc.launcher;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.Comparator;
-import java.util.stream.Stream;
 
 public class QuiltInstaller {
     public static void install(Path workingDir, java.util.Properties versions, Path selfPath) throws Exception {
         Path quiltServerJar = workingDir.resolve("quilt-server-launch.jar");
-        Path minecraftServerJar = workingDir.resolve("server.jar");
         Path versionSentinel = workingDir.resolve(".lunararc-quilt-version");
 
         String mcVersion = LauncherUtils.requireVersion(versions, "minecraft");
         String loaderVersion = LauncherUtils.requireVersion(versions, "quilt");
         String installerVersion = LauncherUtils.requireVersion(versions, "quiltInstaller");
 
+        Path minecraftServerJar = LauncherUtils.minecraftServerJar(workingDir, mcVersion);
         Path installerJar = Paths.get("quilt-" + mcVersion + "-" + loaderVersion + "-installer.jar");
 
         String installerUrl = String.format(
@@ -63,7 +59,8 @@ public class QuiltInstaller {
 
             Path installOutput = workingDir.resolve("server");
             if (Files.isDirectory(installOutput)) {
-                mergeUp(installOutput, workingDir);
+                LauncherUtils.adoptServerJar(installOutput, minecraftServerJar);
+                LauncherUtils.mergeUp(installOutput, workingDir);
             }
 
             if (!Files.exists(quiltServerJar)) {
@@ -81,21 +78,6 @@ public class QuiltInstaller {
             Files.writeString(versionSentinel, combinedVersion);
         }
 
-        QuiltLauncher.launch(workingDir, selfPath);
-    }
-
-    private static void mergeUp(Path source, Path target) throws IOException {
-        try (Stream<Path> files = Files.walk(source)) {
-            for (Path file : (Iterable<Path>) files.filter(Files::isRegularFile)::iterator) {
-                Path dest = target.resolve(source.relativize(file));
-                Files.createDirectories(dest.getParent());
-                Files.move(file, dest, StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
-        try (Stream<Path> dirs = Files.walk(source)) {
-            for (Path dir : (Iterable<Path>) dirs.sorted(Comparator.reverseOrder())::iterator) {
-                Files.deleteIfExists(dir);
-            }
-        }
+        QuiltLauncher.launch(workingDir, selfPath, minecraftServerJar);
     }
 }

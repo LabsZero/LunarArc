@@ -283,6 +283,8 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         if (craftServer != null) {
             ((CraftScheduler) craftServer.getScheduler()).mainThreadHeartbeat(this.tickCount);
         }
+
+        io.papermc.paper.adventure.providers.ClickCallbackProviderImpl.CALLBACK_MANAGER.handleQueue(this.tickCount);
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))

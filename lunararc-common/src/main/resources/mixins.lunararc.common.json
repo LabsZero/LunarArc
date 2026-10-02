@@ -248,6 +248,7 @@
     "core.server.ChunkMapMixin_TrackingRange",
     "core.server.PlayerListAccessor",
     "core.entity.ThrowableItemProjectileAccessor",
+    "core.entity.ProjectileAccessor",
     "core.entity.ContainerEntityMixin"
   ],
   "injectors": {

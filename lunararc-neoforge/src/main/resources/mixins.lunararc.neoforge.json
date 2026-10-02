@@ -10,6 +10,7 @@
     "permission.PermissionAPIMixin",
     "core.server.MinecraftServerMixin_NeoForge",
     "bukkit.CraftWorldMixin_NeoForge",
+    "bukkit.CraftBlockMixin_NeoForge",
     "network.NetworkRegistryMixin_NeoForge",
     "network.NetworkRegistryAccessor_NeoForge",
     "bukkit.StandardMessengerMixin_NeoForge",

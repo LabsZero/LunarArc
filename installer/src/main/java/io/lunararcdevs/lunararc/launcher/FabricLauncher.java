@@ -4,7 +4,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class FabricLauncher {
-    public static void launch(Path workingDir, Path selfPath) throws Exception {
+    public static void launch(Path workingDir, Path selfPath, Path minecraftServerJar) throws Exception {
         Path launchJar = workingDir.resolve("fabric-server-launch.jar");
         if (!Files.isRegularFile(launchJar)) {
             System.err.println("[LunarArc] Error: " + launchJar.toAbsolutePath()
@@ -18,6 +18,8 @@ public class FabricLauncher {
             System.exit(1);
             return;
         }
+
+        LauncherUtils.pinGameJar("fabric.gameJarPath", minecraftServerJar);
 
         Path modFile = workingDir.resolve(".lunararc").resolve("mod_file").resolve("fabric.jar");
         if (Files.isRegularFile(modFile)) {
