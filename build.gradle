@@ -129,9 +129,20 @@ def countClassesWithPrefix = { File jarFile, String prefix ->
     return count
 }
 
+def paperExclusionMarker = { File jar -> new File(jar.parentFile, jar.name + '.excluded') }
+
+def paperReferenceHonoursSources = { File jar ->
+    File marker = paperExclusionMarker(jar)
+    if (!marker.isFile()) return false
+    marker.readLines().every { String base ->
+        base.isEmpty() || new File(rootProject.projectDir, "lunararc-common/src/main/java/${base}").exists()
+    }
+}
+
 def writePaperCompileReference = { File sourceJar, File targetJar ->
     File tempJar = new File(targetJar.parentFile, targetJar.name + '.tmp')
     if (tempJar.exists()) tempJar.delete()
+    Set<String> ownedBases = new TreeSet<>()
 
     new java.util.jar.JarFile(sourceJar).withCloseable { inputJar ->
         new java.util.jar.JarOutputStream(new java.io.BufferedOutputStream(new java.io.FileOutputStream(tempJar))).withCloseable { outputJar ->
@@ -145,7 +156,10 @@ def writePaperCompileReference = { File sourceJar, File targetJar ->
                 if (name.endsWith('.class')) {
                     int dollar = name.indexOf('$')
                     String base = (dollar >= 0 ? name.substring(0, dollar) : name.replace('.class', '')) + '.java'
-                    if (new File(rootProject.projectDir, "lunararc-common/src/main/java/${base}").exists()) continue
+                    if (new File(rootProject.projectDir, "lunararc-common/src/main/java/${base}").exists()) {
+                        ownedBases.add(base)
+                        continue
+                    }
                 }
 
                 String upper = name.toUpperCase(java.util.Locale.ROOT)
@@ -165,6 +179,7 @@ def writePaperCompileReference = { File sourceJar, File targetJar ->
     Files.move(tempJar.toPath(), targetJar.toPath(),
         java.nio.file.StandardCopyOption.REPLACE_EXISTING,
         java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+    paperExclusionMarker(targetJar).text = ownedBases.join('\n')
 }
 
 tasks.register('preparePaperCompileReference') {
@@ -173,6 +188,7 @@ tasks.register('preparePaperCompileReference') {
         rootProject.ext.paperBundlerJar.isFile() &&
             countClassesWithPrefix(rootProject.ext.paperServerJar, 'org/bukkit/craftbukkit/') >= 250 &&
             countClassesWithPrefix(rootProject.ext.paperServerJar, 'net/minecraft/') == 0 &&
+            paperReferenceHonoursSources(rootProject.ext.paperServerJar) &&
 
             !new java.util.jar.JarFile(rootProject.ext.paperServerJar).withCloseable { jar ->
                 jar.entries().any { entry ->
@@ -197,7 +213,8 @@ tasks.register('preparePaperCompileReference') {
 
         int cachedCraftClasses = countClassesWithPrefix(preparedServer, 'org/bukkit/craftbukkit/')
         int cachedNmsClasses = countClassesWithPrefix(preparedServer, 'net/minecraft/')
-        if (preparedServer.isFile() && bundler.isFile() && cachedCraftClasses >= 250 && cachedNmsClasses == 0) {
+        if (preparedServer.isFile() && bundler.isFile() && cachedCraftClasses >= 250 && cachedNmsClasses == 0
+                && paperReferenceHonoursSources(preparedServer)) {
             println "Paper compile reference already prepared: ${preparedServer} (${cachedCraftClasses} CraftBukkit classes)"
             return
         }
