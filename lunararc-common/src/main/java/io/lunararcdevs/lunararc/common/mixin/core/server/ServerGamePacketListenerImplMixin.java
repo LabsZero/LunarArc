@@ -442,12 +442,12 @@ public abstract class ServerGamePacketListenerImplMixin {
             }
         }
 
-        org.bukkit.event.player.PlayerAnimationType type =
+        org.bukkit.inventory.EquipmentSlot swingHand =
                 packet.getHand() == net.minecraft.world.InteractionHand.OFF_HAND
-                        ? org.bukkit.event.player.PlayerAnimationType.OFF_ARM_SWING
-                        : org.bukkit.event.player.PlayerAnimationType.ARM_SWING;
+                        ? org.bukkit.inventory.EquipmentSlot.OFF_HAND
+                        : org.bukkit.inventory.EquipmentSlot.HAND;
         org.bukkit.event.player.PlayerAnimationEvent event =
-                new org.bukkit.event.player.PlayerAnimationEvent(bukkitPlayer, type);
+                new io.papermc.paper.event.player.PlayerArmSwingEvent(bukkitPlayer, swingHand);
         LunarArcServerAccess.getCraftServer(this.player.server).getPluginManager().callEvent(event);
         if (event.isCancelled()) ci.cancel();
     }

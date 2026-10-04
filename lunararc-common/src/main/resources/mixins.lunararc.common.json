@@ -22,6 +22,8 @@
     "core.server.ServerLoginPacketListenerMixin",
     "core.server.ServerConfigurationPacketListenerImplMixin",
     "core.server.PlayerListMixin",
+    "core.server.PlayerAdvancementsMixin",
+    "core.world.PrimaryLevelDataWeatherMixin",
     "core.server.ServerCommonPacketListenerImplMixin",
     "core.server.ServerGamePacketListenerImplMixin",
     "core.server.ServerPlayerMixin",
