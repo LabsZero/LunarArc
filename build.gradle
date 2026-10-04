@@ -95,9 +95,13 @@ allprojects {
     }
 
     repositories.all { repo ->
-        if (repo instanceof MavenArtifactRepository && repo.url.scheme in ['http', 'https']
-                && repo.url.host != 'maven.quiltmc.org') {
-            repo.content { excludeGroupByRegex 'org\\.quiltmc(\\..*)?' }
+        if (repo instanceof MavenArtifactRepository && repo.url.scheme in ['http', 'https']) {
+            boolean quiltHost = repo.url.host == 'maven.quiltmc.org'
+            repo.content {
+                excludeGroupByRegex 'remapped(\\..*)?'
+                excludeModuleByRegex 'net\\.minecraft', '(.+-)?minecraft-(merged|client|server|common|clientOnly)-[0-9a-f]{6,}'
+                if (!quiltHost) excludeGroupByRegex 'org\\.quiltmc(\\..*)?'
+            }
         }
     }
 
