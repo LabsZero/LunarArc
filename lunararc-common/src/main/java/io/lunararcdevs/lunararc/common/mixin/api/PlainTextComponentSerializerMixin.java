@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 /** Same reasoning as LegacyComponentSerializerMixin. */
 @Mixin(value = PlainTextComponentSerializer.class, remap = false)
 public interface PlainTextComponentSerializerMixin {
+    @SuppressWarnings("overwrite")
     @Overwrite
     static PlainTextComponentSerializer plainText() {
         return new PlainTextComponentSerializerProviderImpl().plainTextSimple();

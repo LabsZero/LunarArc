@@ -14,12 +14,29 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 public final class PlayerJoinListener {
+    private static final long NOTIFY_WINDOW_MILLIS = 60_000L;
+    private static final java.util.Map<java.util.UUID, Long> LAST_NOTIFIED = new java.util.concurrent.ConcurrentHashMap<>();
+
     private PlayerJoinListener() {
+    }
+
+    private static boolean claimNotification(java.util.UUID playerId) {
+        long now = System.currentTimeMillis();
+        boolean[] claimed = {false};
+        LAST_NOTIFIED.compute(playerId, (id, previous) -> {
+            if (previous == null || now - previous > NOTIFY_WINDOW_MILLIS) {
+                claimed[0] = true;
+                return now;
+            }
+            return previous;
+        });
+        return claimed[0];
     }
 
     public static void checkAndNotify(Player player, GameProfile profile, net.minecraft.server.MinecraftServer server,
                                       Consumer<Runnable> serverExecutor) {
         if (!hasLevelFourOperatorAccess(profile, server)) return;
+        if (!claimNotification(player.getUniqueId())) return;
 
         CompletableFuture
                 .supplyAsync(LunarArcVersionFetcher::fetchLatestRelease)

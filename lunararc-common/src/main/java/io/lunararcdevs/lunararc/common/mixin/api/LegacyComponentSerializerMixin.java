@@ -7,11 +7,13 @@ import org.spongepowered.asm.mixin.Overwrite;
 
 @Mixin(value = LegacyComponentSerializer.class, remap = false)
 public interface LegacyComponentSerializerMixin {
+    @SuppressWarnings("overwrite")
     @Overwrite
     static LegacyComponentSerializer legacySection() {
         return new LegacyComponentSerializerProviderImpl().legacySection();
     }
 
+    @SuppressWarnings("overwrite")
     @Overwrite
     static LegacyComponentSerializer legacyAmpersand() {
         return new LegacyComponentSerializerProviderImpl().legacyAmpersand();

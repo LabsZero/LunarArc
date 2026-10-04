@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(targets = "net.minecraft.world.level.block.entity.SculkSensorBlockEntity$VibrationUser", remap = false)
 public abstract class SculkSensorVibrationUserMixin {
+    @SuppressWarnings("target")
     @Shadow(aliases = {"this$0", "field_44618"}, remap = true) @Final SculkSensorBlockEntity outer;
 
     @Inject(method = "getListenerRadius", at = @At("HEAD"), cancellable = true, remap = true)

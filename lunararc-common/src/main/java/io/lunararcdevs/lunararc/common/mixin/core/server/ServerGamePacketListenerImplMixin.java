@@ -374,6 +374,49 @@ public abstract class ServerGamePacketListenerImplMixin {
         }
     }
 
+    @Inject(method = "handleInteract", at = @At("RETURN"), require = 0)
+    private void lunararc$onInteractUnknownEntity(
+            net.minecraft.network.protocol.game.ServerboundInteractPacket packet,
+            CallbackInfo ci) {
+        if (packet.getTarget(this.player.serverLevel()) != null) {
+            return;
+        }
+        if (!(((EntityBridge) this.player).lunararc$getBukkitEntity() instanceof Player bukkitPlayer)) {
+            return;
+        }
+
+        final int entityId = ((io.lunararcdevs.lunararc.common.bridge.access.ServerboundInteractPacketAccessBridge) (Object) packet)
+                .lunararc$getEntityId();
+        packet.dispatch(new net.minecraft.network.protocol.game.ServerboundInteractPacket.Handler() {
+            private void lunararc$call(boolean attack, net.minecraft.world.InteractionHand hand, net.minecraft.world.phys.Vec3 position) {
+                org.bukkit.inventory.EquipmentSlot slot = hand == net.minecraft.world.InteractionHand.OFF_HAND
+                        ? org.bukkit.inventory.EquipmentSlot.OFF_HAND
+                        : org.bukkit.inventory.EquipmentSlot.HAND;
+                org.bukkit.util.Vector clicked = position == null
+                        ? null
+                        : new org.bukkit.util.Vector(position.x, position.y, position.z);
+                LunarArcServerAccess.getCraftServer(ServerGamePacketListenerImplMixin.this.player.server)
+                        .getPluginManager().callEvent(new com.destroystokyo.paper.event.player.PlayerUseUnknownEntityEvent(
+                                bukkitPlayer, entityId, attack, slot, clicked));
+            }
+
+            @Override
+            public void onInteraction(net.minecraft.world.InteractionHand hand) {
+                lunararc$call(false, hand, null);
+            }
+
+            @Override
+            public void onInteraction(net.minecraft.world.InteractionHand hand, net.minecraft.world.phys.Vec3 position) {
+                lunararc$call(false, hand, position);
+            }
+
+            @Override
+            public void onAttack() {
+                lunararc$call(true, net.minecraft.world.InteractionHand.MAIN_HAND, null);
+            }
+        });
+    }
+
     @Inject(method = "handleAnimate", at = @At("HEAD"), cancellable = true, require = 0)
     private void lunararc$onAnimation(
             net.minecraft.network.protocol.game.ServerboundSwingPacket packet,
