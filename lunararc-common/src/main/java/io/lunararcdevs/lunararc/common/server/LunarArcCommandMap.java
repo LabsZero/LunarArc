@@ -5,7 +5,7 @@ import net.minecraft.commands.CommandSourceStack;
 import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.SimpleCommandMap;
-import org.bukkit.command.PluginCommand;
+import org.bukkit.command.PluginIdentifiableCommand;
 import org.bukkit.plugin.Plugin;
 
 import java.util.HashMap;
@@ -19,6 +19,7 @@ public class LunarArcCommandMap extends SimpleCommandMap {
     private final Server lunararc$server;
     private Set<String> lunararc$mirroredLabels;
     private CommandDispatcher<CommandSourceStack> lunararc$mirroredDispatcher;
+    private volatile boolean lunararc$shuttingDown;
 
     public LunarArcCommandMap(Server server) {
         super(server, new HashMap<>());
@@ -31,6 +32,10 @@ public class LunarArcCommandMap extends SimpleCommandMap {
 
     public static CommandDispatcher<CommandSourceStack> getDispatcher() {
         return dispatcher;
+    }
+
+    public void beginShutdown() {
+        this.lunararc$shuttingDown = true;
     }
 
     @Override
@@ -47,7 +52,7 @@ public class LunarArcCommandMap extends SimpleCommandMap {
         Set<String> removedLabels = new LinkedHashSet<>();
         getKnownCommands().entrySet().removeIf(entry -> {
             Command command = entry.getValue();
-            if (command instanceof PluginCommand pluginCommand && pluginCommand.getPlugin() == plugin) {
+            if (command instanceof PluginIdentifiableCommand owned && owned.getPlugin() == plugin) {
                 removed.add(command);
                 removedLabels.add(normalize(entry.getKey()));
                 return true;
@@ -190,6 +195,7 @@ public class LunarArcCommandMap extends SimpleCommandMap {
 
     private void syncCommandTreeToPlayers() {
         Server server = this.lunararc$server;
+        if (lunararc$shuttingDown) return;
         if (server == null) {
 
 

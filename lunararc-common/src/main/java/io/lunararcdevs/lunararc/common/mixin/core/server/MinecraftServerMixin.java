@@ -419,7 +419,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
         CraftServer craftServer = this.lunararc$craftServer;
         if (craftServer != null) {
-            craftServer.disablePlugins();
+            craftServer.disablePluginsForShutdown();
 
             craftServer.clearPluginsForShutdown();
             craftServer.shutdownSchedulers();
@@ -434,16 +434,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
     @Inject(method = "stopServer", at = @At("RETURN"))
     private void lunararc$afterStop(CallbackInfo ci) {
         io.lunararcdevs.lunararc.common.server.LunarArcProfileCacheWriter.flush();
-        // Real vanilla's own JVM shutdown-hook thread (net.minecraft.server.Main$1) only ever
-        // calls halt(true) then LogManager.shutdown() - confirmed directly by disassembling it -
-        // and neither Spigot nor Paper patch that mechanism to add any protection beyond it. The
-        // JVM's native DestroyJavaVM call waits for every non-daemon thread to end on its own, and
-        // a real live boot proved several plugins (bStats' own metrics schedulers, PlaceholderAPI's
-        // IO pool, WorldGuard's per-world region-chunk executor) create theirs as non-daemon and
-        // never shut them down - each one confirmed via a live thread dump to be idly parked in
-        // ThreadPoolExecutor.getTask(), not deadlocked, just never told to stop. Chunk saving and
-        // plugin disabling themselves finished in seconds on that same boot; this grace period only
-        // exists to bound how long a plugin's own leaked thread can hold the process open.
+
         Thread watchdog = new Thread(() -> {
             try {
                 Thread.sleep(15_000);

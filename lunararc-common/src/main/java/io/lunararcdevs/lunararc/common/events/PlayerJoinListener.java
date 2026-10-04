@@ -31,13 +31,7 @@ public final class PlayerJoinListener {
     }
 
     private static boolean hasLevelFourOperatorAccess(GameProfile profile, net.minecraft.server.MinecraftServer server) {
-        try {
-            Object opList = server.getPlayerList().getOps();
-            Object entry = opList.getClass().getMethod("get", GameProfile.class).invoke(opList, profile);
-            return entry != null && ((Number) entry.getClass().getMethod("getLevel").invoke(entry)).intValue() >= 4;
-        } catch (ReflectiveOperationException ignored) {
-            return false;
-        }
+        return server.getProfilePermissions(profile) >= 4;
     }
 
     private static boolean isCurrentVersion(String latestVersion) {
@@ -46,9 +40,12 @@ public final class PlayerJoinListener {
 
     private static void notifyPlayer(Player player, LunarArcVersionFetcher.Release release) {
         if (!player.isOnline()) return;
-        player.sendMessage(Component.text(TranslationManager.get("ingame.update.available"),
-                NamedTextColor.AQUA, TextDecoration.BOLD));
-        player.sendMessage(Component.text(TranslationManager.get("ingame.update.latest"), NamedTextColor.WHITE)
+        player.sendMessage(Component.text("[LunarArc]", NamedTextColor.AQUA, TextDecoration.BOLD));
+        player.sendMessage(Component.text(TranslationManager.get("ingame.update.available"), NamedTextColor.YELLOW));
+        player.sendMessage(Component.text(TranslationManager.get("ingame.update.current"), NamedTextColor.GRAY)
+                .append(Component.text(LunarArcVersionInfo.lunarArcVersion(), NamedTextColor.YELLOW))
+                .append(Component.text(" → ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(TranslationManager.get("ingame.update.new"), NamedTextColor.GRAY))
                 .append(Component.text(release.version(), NamedTextColor.GREEN)));
         player.sendMessage(Component.text(TranslationManager.get("ingame.update.download_link"),
                         NamedTextColor.GOLD, TextDecoration.UNDERLINED)

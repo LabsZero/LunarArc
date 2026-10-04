@@ -532,6 +532,13 @@ public class CraftServer implements Server {
         simplePluginManager.disablePlugins();
     }
 
+    public void disablePluginsForShutdown() {
+        if (commandMap instanceof io.lunararcdevs.lunararc.common.server.LunarArcCommandMap lunarArcMap) {
+            lunarArcMap.beginShutdown();
+        }
+        disablePlugins();
+    }
+
     public void shutdownSchedulers() {
         paperSchedulers.beginShutdown();
         scheduler.beginShutdown();

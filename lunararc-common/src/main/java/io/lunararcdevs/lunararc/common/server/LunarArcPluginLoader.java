@@ -93,6 +93,13 @@ public class LunarArcPluginLoader implements PluginLoader {
             } catch (NumberFormatException ignored) {
             }
         }
+        if (requiredFeature > runtimeFeature) {
+            String minecraft = LunarArcVersionInfo.minecraftVersion();
+            return "[LunarArc] Cannot load " + fileName + ": plugin requires Java "
+                    + requiredFeature + ", but this server is running Java " + runtimeFeature + ". "
+                    + "A plugin built for a newer Java than Minecraft " + minecraft + " uses is usually built for a newer "
+                    + "Minecraft version too; install a build of it that supports Minecraft " + minecraft + ".";
+        }
         if (requiredFeature > 0) {
             return "[LunarArc] Cannot load " + fileName + ": plugin requires Java "
                     + requiredFeature + ", but this server is running Java " + runtimeFeature + ".";

@@ -32,7 +32,7 @@ public class DirectoryProviderSource implements ProviderSource<Path, List<Path>>
             } catch (IllegalArgumentException ignored) {
                 // Ignore illegal argument exceptions from jar checking
             } catch (final Exception e) {
-                LOGGER.error("Error preparing plugin context: " + e.getMessage(), e);
+                LOGGER.error("Error preparing plugin context " + path.getFileName() + ": " + e.getMessage(), e);
             }
         });
         return files;
@@ -48,7 +48,7 @@ public class DirectoryProviderSource implements ProviderSource<Path, List<Path>>
             } catch (IllegalArgumentException ignored) {
                 // Ignore illegal argument exceptions from jar checking
             } catch (Exception e) {
-                LOGGER.error("Error loading plugin: " + e.getMessage(), e);
+                LOGGER.error("Error loading plugin " + path.getFileName() + ": " + e.getMessage(), e);
             }
         }
     }

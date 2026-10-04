@@ -17,10 +17,14 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 public final class BukkitCommandWrapper {
     private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc");
+    private static final ConcurrentMap<String, AtomicInteger> PERMISSION_FAILURES = new ConcurrentHashMap<>();
     private final CommandMap commandMap;
     private final String label;
 
@@ -47,13 +51,16 @@ public final class BukkitCommandWrapper {
         try {
             return command.testPermissionSilent(sender(source));
         } catch (Throwable ex) {
-            // This runs for every command node each time the tree is sent to a player, on the
-            // join path. CraftBukkit calls testPermissionSilent unguarded, but it can afford to:
-            // there a plugin's commands cannot outlive the plugin the way they can here. Letting a
-            // misbehaving or half-unloaded plugin throw takes the server down on player join,
-            // which is a far worse failure than hiding one command from one player.
-            LOGGER.warn("Permission check for command '{}' threw; hiding it from this sender.",
-                    commandLabel, ex);
+            StackTraceElement[] frames = ex.getStackTrace();
+            String failureKey = ex.getClass().getName() + "@" + (frames.length > 0 ? frames[0] : "");
+            int seen = PERMISSION_FAILURES.computeIfAbsent(failureKey, key -> new AtomicInteger()).incrementAndGet();
+            if (seen == 1) {
+                LOGGER.warn("Permission check for command '{}' threw; hiding it from this sender. Repeats of this failure are counted, not logged in full.",
+                        commandLabel, ex);
+            } else if (seen % 100 == 0) {
+                LOGGER.warn("Permission check for command '{}' has now thrown {} times ({}); still hiding it.",
+                        commandLabel, seen, ex.getClass().getSimpleName());
+            }
             return false;
         }
     }
@@ -78,13 +85,6 @@ public final class BukkitCommandWrapper {
 
         List<String> completions;
         try {
-            // context.getInput() includes the leading "/" (confirmed live: input was literally
-            // "/warp ..."), but label never does - stripping only label.length() characters left
-            // a stray leftover character (label's own last letter) at the front of args, shifting
-            // every real argument one slot to the right. Essentials' /warp then read the actual
-            // partial warp name as arg[1] (its "target player" slot) instead of arg[0] (the warp
-            // name slot), which is exactly why it suggested player names instead of warp names -
-            // and this shifted every command routed through this wrapper, not just /warp.
             String commandText = input.startsWith("/") ? input.substring(1) : input;
             boolean hasArgumentInput = commandText.length() > label.length();
             String argumentText = hasArgumentInput ? commandText.substring(label.length()) : "";
@@ -94,10 +94,6 @@ public final class BukkitCommandWrapper {
         } catch (org.bukkit.command.CommandException exception) {
             throw exception;
         } catch (Throwable throwable) {
-            // A TabCompleter throwing anything else used to escape this method uncaught and
-            // silently drop suggestions with no visible evidence in the log - log it so a broken
-            // plugin completer surfaces as an obvious cause rather than "tab-complete just doesn't
-            // work here".
             LOGGER.warn("TabCompleter for '{}' threw while completing '{}'", label, input, throwable);
             completions = List.of();
         }
@@ -108,9 +104,6 @@ public final class BukkitCommandWrapper {
                 : builder;
 
         String remaining = target.getRemainingLowerCase();
-        // A TabCompleter returning null is Bukkit's documented way of saying "no suggestions of
-        // my own"; CraftBukkit treats it as an empty list. DecentHolograms' /dh returns null and
-        // took the whole ServerboundCommandSuggestionPacket down with an NPE here.
         if (completions == null) return target.buildFuture();
         for (String completion : completions) {
             if (completion != null && completion.toLowerCase(java.util.Locale.ROOT).startsWith(remaining)) {
