@@ -27,6 +27,26 @@ public abstract class CommandsMixin {
         CraftCommandMap.setDispatcher(this.dispatcher);
     }
 
+    @Inject(method = "sendCommands", require = 0,
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/server/network/ServerGamePacketListenerImpl;send(Lnet/minecraft/network/protocol/Packet;)V"))
+    private void lunararc$commandSendEvent(net.minecraft.server.level.ServerPlayer player, CallbackInfo ci,
+            @com.llamalad7.mixinextras.sugar.Local com.mojang.brigadier.tree.RootCommandNode<net.minecraft.commands.SharedSuggestionProvider> root) {
+        if (org.bukkit.event.player.PlayerCommandSendEvent.getHandlerList().getRegisteredListeners().length == 0
+                || !(((io.lunararcdevs.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity()
+                        instanceof org.bukkit.entity.Player bukkitPlayer)) {
+            return;
+        }
+        java.util.Set<String> labels = new java.util.LinkedHashSet<>();
+        for (CommandNode<net.minecraft.commands.SharedSuggestionProvider> node : root.getChildren()) labels.add(node.getName());
+        org.bukkit.event.player.PlayerCommandSendEvent event =
+                new org.bukkit.event.player.PlayerCommandSendEvent(bukkitPlayer, new java.util.LinkedHashSet<>(labels));
+        io.lunararcdevs.lunararc.common.LunarArcServerAccess.getCraftServer(player.server).getPluginManager().callEvent(event);
+        for (String label : labels) {
+            if (!event.getCommands().contains(label)) CraftCommandMap.removeBrigadierChild(root, label);
+        }
+    }
+
     @Unique
     private void lunararc$registerMinecraftNamespaceAliases() {
         for (CommandNode<CommandSourceStack> node

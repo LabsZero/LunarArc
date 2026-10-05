@@ -747,36 +747,52 @@ public class CraftServer implements Server {
 
     @Override
     public int broadcastMessage(@NotNull String message) {
-        int count = 0;
-        for (Player p : getOnlinePlayers()) { p.sendMessage(message); count++; }
-        getConsoleSender().sendMessage(message);
-        return count;
+        Set<CommandSender> recipients = new LinkedHashSet<>(getOnlinePlayers());
+        recipients.add(getConsoleSender());
+        return broadcastTo(message, recipients);
     }
 
     @Override
     public int broadcast(@NotNull String message, @NotNull String permission) {
-        int count = 0;
+        Set<CommandSender> recipients = new LinkedHashSet<>();
         for (Player p : getOnlinePlayers()) {
-            if (p.hasPermission(permission)) { p.sendMessage(message); count++; }
+            if (p.hasPermission(permission)) recipients.add(p);
         }
-        return count;
+        return broadcastTo(message, recipients);
     }
 
     @Override
     public int broadcast(@NotNull net.kyori.adventure.text.Component message, @NotNull String permission) {
-        int count = 0;
+        Set<CommandSender> recipients = new LinkedHashSet<>();
         for (Player p : getOnlinePlayers()) {
-            if (p.hasPermission(permission)) { p.sendMessage(message); count++; }
+            if (p.hasPermission(permission)) recipients.add(p);
         }
-        return count;
+        return broadcastTo(message, recipients);
+    }
+
+    private int broadcastTo(String message, Set<CommandSender> recipients) {
+        org.bukkit.event.server.BroadcastMessageEvent event =
+                new org.bukkit.event.server.BroadcastMessageEvent(!Bukkit.isPrimaryThread(), message, recipients);
+        getPluginManager().callEvent(event);
+        if (event.isCancelled()) return 0;
+        for (CommandSender recipient : event.getRecipients()) recipient.sendMessage(event.getMessage());
+        return event.getRecipients().size();
+    }
+
+    private int broadcastTo(net.kyori.adventure.text.Component message, Set<CommandSender> recipients) {
+        org.bukkit.event.server.BroadcastMessageEvent event =
+                new org.bukkit.event.server.BroadcastMessageEvent(!Bukkit.isPrimaryThread(), message, recipients);
+        getPluginManager().callEvent(event);
+        if (event.isCancelled()) return 0;
+        for (CommandSender recipient : event.getRecipients()) recipient.sendMessage(event.message());
+        return event.getRecipients().size();
     }
 
     @Override
     public int broadcast(@NotNull net.kyori.adventure.text.Component message) {
-        int count = 0;
-        for (Player p : getOnlinePlayers()) { p.sendMessage(message); count++; }
-        getConsoleSender().sendMessage(message);
-        return count;
+        Set<CommandSender> recipients = new LinkedHashSet<>(getOnlinePlayers());
+        recipients.add(getConsoleSender());
+        return broadcastTo(message, recipients);
     }
 
     @Override

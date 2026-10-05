@@ -246,6 +246,27 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         return new double[] { this.recentTps[0], this.recentTps[1], this.recentTps[2] };
     }
 
+    @Unique
+    private long lunararc$tickStartedNanos;
+
+    @Inject(method = "tickServer", at = @At("HEAD"), require = 0)
+    private void lunararc$tickStart(java.util.function.BooleanSupplier hasTimeLeft, CallbackInfo ci) {
+        this.lunararc$tickStartedNanos = System.nanoTime();
+        if (com.destroystokyo.paper.event.server.ServerTickStartEvent.getHandlerList().getRegisteredListeners().length == 0
+                || this.lunararc$craftServer == null) return;
+        this.lunararc$craftServer.getPluginManager()
+                .callEvent(new com.destroystokyo.paper.event.server.ServerTickStartEvent(this.tickCount + 1));
+    }
+
+    @Inject(method = "tickServer", at = @At("RETURN"), require = 0)
+    private void lunararc$tickEnd(java.util.function.BooleanSupplier hasTimeLeft, CallbackInfo ci) {
+        if (com.destroystokyo.paper.event.server.ServerTickEndEvent.getHandlerList().getRegisteredListeners().length == 0
+                || this.lunararc$craftServer == null) return;
+        long elapsed = System.nanoTime() - this.lunararc$tickStartedNanos;
+        this.lunararc$craftServer.getPluginManager().callEvent(new com.destroystokyo.paper.event.server.ServerTickEndEvent(
+                this.tickCount, elapsed / 1_000_000.0D, Math.max(0L, 50_000_000L - elapsed)));
+    }
+
     @Inject(method = "tickChildren", at = @At("HEAD"))
     private void lunararc$beginTickChildren(CallbackInfo ci) {
         this.lunararc$tickingWorlds = true;
