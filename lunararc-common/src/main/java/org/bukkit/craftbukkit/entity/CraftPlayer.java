@@ -196,6 +196,34 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
                 net.md_5.bungee.api.chat.BaseComponent... components) {
             sendMessage(position, components);
         }
+
+        @Override
+        public java.net.InetSocketAddress getRawAddress() {
+            if (getHandle().connection == null) return null;
+            return (java.net.InetSocketAddress) getHandle().connection.getRemoteAddress();
+        }
+
+        @Override
+        public void respawn() {
+            if (getHealth() <= 0 && isOnline()) {
+                getHandle().connection.handleClientCommand(new net.minecraft.network.protocol.game.ServerboundClientCommandPacket(
+                        net.minecraft.network.protocol.game.ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+            }
+        }
+
+        @Override
+        public Set<Player> getHiddenPlayers() {
+            Set<Player> hidden = new java.util.HashSet<>();
+            for (Player other : getServer().getOnlinePlayers()) {
+                if (!canSee(other)) hidden.add(other);
+            }
+            return Collections.unmodifiableSet(hidden);
+        }
+
+        @Override
+        public int getPing() {
+            return CraftPlayer.this.getPing();
+        }
     };
 
     @SuppressWarnings("deprecation")
@@ -716,7 +744,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         net.minecraft.core.BlockPos pos = getHandle().serverLevel().getSharedSpawnPos();
         return new Location(getWorld(), pos.getX(), pos.getY(), pos.getZ());
     }
-    @Override public Iterable<? extends BossBar> activeBossBars() { return io.lunararcdevs.lunararc.common.server.LunarArcBossBar.activeAdventureFor(this); }
+    @Override public Iterable<? extends BossBar> activeBossBars() { return org.bukkit.craftbukkit.boss.CraftBossBar.activeAdventureFor(this); }
     @Override public void sendExperienceChange(float progress) {
         getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSetExperiencePacket(progress, getHandle().totalExperience, getHandle().experienceLevel));
     }
@@ -1141,8 +1169,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public PlayerProfile getPlayerProfile() {
         com.mojang.authlib.GameProfile handle =
                 getHandle().gameProfile;
-        io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile profile =
-                new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(handle.getId(), handle.getName());
+        com.destroystokyo.paper.profile.CraftPlayerProfile profile =
+                new com.destroystokyo.paper.profile.CraftPlayerProfile(handle.getId(), handle.getName());
         java.util.List<com.destroystokyo.paper.profile.ProfileProperty> properties = new java.util.ArrayList<>();
         for (com.mojang.authlib.properties.Property property : handle.getProperties().values()) {
             properties.add(new com.destroystokyo.paper.profile.ProfileProperty(
@@ -1427,6 +1455,114 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public void stopSound(@NotNull SoundCategory category) {
         if (category == null || getHandle().connection == null) return;
         getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundStopSoundPacket(null, toSoundSource(category)));
+    }
+
+    @Override
+    public void playSound(net.kyori.adventure.sound.@NotNull Sound sound) {
+        playSound(sound, getHandle().getX(), getHandle().getY(), getHandle().getZ());
+    }
+
+    @Override
+    public void playSound(net.kyori.adventure.sound.@NotNull Sound sound, double x, double y, double z) {
+        if (getHandle().connection == null) return;
+        getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSoundPacket(
+                resolveSound(sound.name().asString()), io.papermc.paper.adventure.PaperAdventure.asVanilla(sound.source()),
+                x, y, z, sound.volume(), sound.pitch(), sound.seed().orElseGet(() -> getHandle().getRandom().nextLong())));
+    }
+
+    @Override
+    public void playSound(net.kyori.adventure.sound.@NotNull Sound sound, net.kyori.adventure.sound.Sound.@NotNull Emitter emitter) {
+        if (getHandle().connection == null) return;
+        net.minecraft.world.entity.Entity target;
+        if (emitter == net.kyori.adventure.sound.Sound.Emitter.self()) {
+            target = getHandle();
+        } else if (emitter instanceof CraftEntity craftEntity) {
+            target = craftEntity.getHandle();
+        } else {
+            throw new IllegalArgumentException("Specified emitter '" + emitter + "' is not a valid emitter");
+        }
+        getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSoundEntityPacket(
+                resolveSound(sound.name().asString()), io.papermc.paper.adventure.PaperAdventure.asVanilla(sound.source()),
+                target, sound.volume(), sound.pitch(), sound.seed().orElseGet(() -> getHandle().getRandom().nextLong())));
+    }
+
+    @Override
+    public void stopSound(net.kyori.adventure.sound.@NotNull SoundStop stop) {
+        if (getHandle().connection == null) return;
+        getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundStopSoundPacket(
+                io.papermc.paper.adventure.PaperAdventure.asVanillaNullable(stop.sound()),
+                io.papermc.paper.adventure.PaperAdventure.asVanillaNullable(stop.source())));
+    }
+
+    @Override
+    public void showBossBar(@NotNull BossBar bar) {
+        net.kyori.adventure.bossbar.BossBarImplementation.get(bar, io.papermc.paper.adventure.BossBarImplementationImpl.class).playerShow(this);
+    }
+
+    @Override
+    public void hideBossBar(@NotNull BossBar bar) {
+        net.kyori.adventure.bossbar.BossBarImplementation.get(bar, io.papermc.paper.adventure.BossBarImplementationImpl.class).playerHide(this);
+    }
+
+    @Override
+    public void openBook(net.kyori.adventure.inventory.@NotNull Book book) {
+        net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WRITTEN_BOOK);
+        java.util.List<net.minecraft.server.network.Filterable<net.minecraft.network.chat.Component>> pages = new ArrayList<>();
+        for (Component page : book.pages()) {
+            pages.add(net.minecraft.server.network.Filterable.passThrough(io.papermc.paper.adventure.PaperAdventure.asVanilla(page)));
+        }
+        stack.set(net.minecraft.core.component.DataComponents.WRITTEN_BOOK_CONTENT,
+                new net.minecraft.world.item.component.WrittenBookContent(
+                        net.minecraft.server.network.Filterable.passThrough(
+                                net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(book.title())),
+                        net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(book.author()),
+                        0, pages, true));
+        openBook(CraftItemStack.asBukkitCopy(stack));
+    }
+
+    @Override
+    public void sendResourcePacks(net.kyori.adventure.resource.@NotNull ResourcePackRequest request) {
+        boolean first = true;
+        for (net.kyori.adventure.resource.ResourcePackInfo info : request.packs()) {
+            byte[] hash = info.hash().isEmpty() ? null : java.util.HexFormat.of().parseHex(info.hash());
+            pushResourcePack(info.id(), info.uri().toString(), hash,
+                    request.prompt() == null ? null : io.lunararcdevs.lunararc.common.messaging.LunarArcComponentPipeline.fromAdventure(request.prompt()),
+                    request.required(), first && request.replace());
+            first = false;
+        }
+    }
+
+    @Override
+    public void removeResourcePacks(@NotNull UUID id, @NotNull UUID @NotNull ... others) {
+        removeResourcePack(id);
+        for (UUID other : others) removeResourcePack(other);
+    }
+
+    @Override
+    public void clearResourcePacks() {
+        removeResourcePacks();
+    }
+
+    @Override
+    public void deleteMessage(net.kyori.adventure.chat.SignedMessage.@NotNull Signature signature) {
+        if (getHandle().connection == null) return;
+        getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundDeleteChatPacket(
+                new net.minecraft.network.chat.MessageSignature.Packed(
+                        new net.minecraft.network.chat.MessageSignature(signature.bytes()))));
+    }
+
+    @Override
+    public net.kyori.adventure.pointer.@NotNull Pointers pointers() {
+        return net.kyori.adventure.pointer.Pointers.builder()
+                .withDynamic(net.kyori.adventure.identity.Identity.NAME, this::getName)
+                .withDynamic(net.kyori.adventure.identity.Identity.UUID, this::getUniqueId)
+                .withDynamic(net.kyori.adventure.identity.Identity.DISPLAY_NAME, this::displayName)
+                .withDynamic(net.kyori.adventure.identity.Identity.LOCALE, this::locale)
+                .withDynamic(net.kyori.adventure.permission.PermissionChecker.POINTER, () -> permission ->
+                        isPermissionSet(permission)
+                                ? net.kyori.adventure.util.TriState.byBoolean(hasPermission(permission))
+                                : net.kyori.adventure.util.TriState.NOT_SET)
+                .build();
     }
 
     @Override

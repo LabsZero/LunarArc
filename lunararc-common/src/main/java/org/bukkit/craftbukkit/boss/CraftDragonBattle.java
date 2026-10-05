@@ -1,7 +1,7 @@
 package org.bukkit.craftbukkit.boss;
 
 import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
-import io.lunararcdevs.lunararc.common.server.LunarArcBossBar;
+import org.bukkit.craftbukkit.boss.CraftBossBar;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
@@ -54,7 +54,7 @@ public final class CraftDragonBattle implements DragonBattle {
         return bukkit instanceof EnderDragon dragon ? dragon : null;
     }
 
-    @Override public @NotNull BossBar getBossBar() { return LunarArcBossBar.wrap(this.handle.dragonEvent); }
+    @Override public @NotNull BossBar getBossBar() { return CraftBossBar.wrap(this.handle.dragonEvent); }
 
     @Override
     public @Nullable Location getEndPortalLocation() {

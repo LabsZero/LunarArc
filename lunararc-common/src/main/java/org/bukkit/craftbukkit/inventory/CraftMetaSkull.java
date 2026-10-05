@@ -98,8 +98,8 @@ public final class CraftMetaSkull extends CraftItemMeta implements SkullMeta {
     }
 
     private static com.destroystokyo.paper.profile.PlayerProfile toPaperProfile(ResolvableProfile source) {
-        io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile result =
-                new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(source.id().orElse(null), source.name().orElse(null));
+        com.destroystokyo.paper.profile.CraftPlayerProfile result =
+                new com.destroystokyo.paper.profile.CraftPlayerProfile(source.id().orElse(null), source.name().orElse(null));
         for (Property p : source.properties().values()) {
             result.setProperty(new com.destroystokyo.paper.profile.ProfileProperty(p.name(), p.value(), p.signature()));
         }

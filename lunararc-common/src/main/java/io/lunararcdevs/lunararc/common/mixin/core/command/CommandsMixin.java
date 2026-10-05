@@ -3,7 +3,7 @@ package io.lunararcdevs.lunararc.common.mixin.core.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.CommandNode;
-import io.lunararcdevs.lunararc.common.server.LunarArcCommandMap;
+import org.bukkit.craftbukkit.command.CraftCommandMap;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import org.spongepowered.asm.mixin.Final;
@@ -24,7 +24,7 @@ public abstract class CommandsMixin {
                                           net.minecraft.commands.CommandBuildContext context,
                                           CallbackInfo ci) {
         this.lunararc$registerMinecraftNamespaceAliases();
-        LunarArcCommandMap.setDispatcher(this.dispatcher);
+        CraftCommandMap.setDispatcher(this.dispatcher);
     }
 
     @Unique

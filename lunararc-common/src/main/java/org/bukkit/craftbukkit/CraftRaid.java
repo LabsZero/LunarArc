@@ -2,7 +2,7 @@ package org.bukkit.craftbukkit;
 
 import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
 import io.lunararcdevs.lunararc.common.bridge.world.raid.RaidBridge;
-import io.lunararcdevs.lunararc.common.server.LunarArcBossBar;
+import org.bukkit.craftbukkit.boss.CraftBossBar;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.raid.Raider;
 import org.bukkit.Bukkit;
@@ -83,7 +83,7 @@ public final class CraftRaid implements Raid {
     }
 
     @Override public int getId() { return this.handle.getId(); }
-    @Override public @NotNull BossBar getBossBar() { return LunarArcBossBar.wrap(bridge().lunararc$bossEvent()); }
+    @Override public @NotNull BossBar getBossBar() { return CraftBossBar.wrap(bridge().lunararc$bossEvent()); }
     @Override public @NotNull org.bukkit.persistence.PersistentDataContainer getPersistentDataContainer() { return bridge().lunararc$persistentData(); }
 
     @Override public boolean equals(Object other) { return this == other || (other instanceof CraftRaid raid && this.handle.equals(raid.handle)); }

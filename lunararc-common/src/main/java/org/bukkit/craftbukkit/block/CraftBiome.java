@@ -1,6 +1,6 @@
 package org.bukkit.craftbukkit.block;
 
-import io.lunararcdevs.lunararc.common.server.LunarArcRegistryAccess;
+import io.papermc.paper.registry.PaperRegistryAccess;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -17,7 +17,7 @@ public final class CraftBiome {
         ResourceLocation id = holder.unwrapKey().map(net.minecraft.resources.ResourceKey::location)
                 .orElseGet(() -> registry.getKey(holder.value()));
         if (id == null) throw new IllegalArgumentException("Unregistered NMS biome " + holder.value());
-        Biome biome = LunarArcRegistryAccess.INSTANCE.getRegistry(Biome.class)
+        Biome biome = PaperRegistryAccess.INSTANCE.getRegistry(Biome.class)
                 .get(new NamespacedKey(id.getNamespace(), id.getPath()));
         if (biome == null) throw new IllegalArgumentException("No Bukkit biome for " + id);
         return biome;
@@ -40,7 +40,7 @@ public final class CraftBiome {
         if (server == null) throw new IllegalStateException("MinecraftServer has not been attached to LunarArc yet");
         ResourceLocation id = server.registryAccess().registryOrThrow(Registries.BIOME).getKey(minecraft);
         if (id == null) return Biome.CUSTOM;
-        Biome biome = LunarArcRegistryAccess.INSTANCE.getRegistry(Biome.class)
+        Biome biome = PaperRegistryAccess.INSTANCE.getRegistry(Biome.class)
                 .get(new NamespacedKey(id.getNamespace(), id.getPath()));
         return biome == null ? Biome.CUSTOM : biome;
     }

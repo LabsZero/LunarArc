@@ -19,7 +19,7 @@ import java.util.Map;
  * are read from BuiltInRegistries. No synthetic vanilla key lists are kept
  * here, so mod/datapack registry additions remain visible to plugins.
  */
-final class LunarArcRegistryEntries {
+public final class LunarArcRegistryEntries {
     private LunarArcRegistryEntries() {}
 
     private static RegistryAccess activeRegistries() {
@@ -33,18 +33,18 @@ final class LunarArcRegistryEntries {
     // These Bukkit types are enum/class-backed in Paper 1.21.1, so arbitrary
     // loader registry entries cannot be represented as synthetic subclasses.
     // Expose the canonical Bukkit registries for exact 1.21.1 compatibility.
-    static Registry<? extends Keyed> createAttributeRegistry() { return Registry.ATTRIBUTE; }
-    static Registry<? extends Keyed> createFluidRegistry() { return Registry.FLUID; }
-    static Registry<? extends Keyed> createSoundRegistry() { return Registry.SOUNDS; }
-    static Registry<? extends Keyed> createBiomeRegistry() { return Registry.BIOME; }
-    static Registry<? extends Keyed> createArtRegistry() { return Registry.ART; }
+    public static Registry<? extends Keyed> createAttributeRegistry() { return Registry.ATTRIBUTE; }
+    public static Registry<? extends Keyed> createFluidRegistry() { return Registry.FLUID; }
+    public static Registry<? extends Keyed> createSoundRegistry() { return Registry.SOUNDS; }
+    public static Registry<? extends Keyed> createBiomeRegistry() { return Registry.BIOME; }
+    public static Registry<? extends Keyed> createArtRegistry() { return Registry.ART; }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    static Registry<? extends Keyed> createMemoryKeyRegistry() {
+    public static Registry<? extends Keyed> createMemoryKeyRegistry() {
         return LunarArcBukkitRegistry.fromValues((java.util.Collection) org.bukkit.entity.memory.MemoryKey.values());
     }
 
-    static Registry<? extends Keyed> createEnchantmentRegistry() {
+    public static Registry<? extends Keyed> createEnchantmentRegistry() {
         return LunarArcBukkitRegistry.lazy(() -> {
             net.minecraft.core.Registry<net.minecraft.world.item.enchantment.Enchantment> nms =
                     activeRegistries().registryOrThrow(Registries.ENCHANTMENT);
@@ -58,7 +58,7 @@ final class LunarArcRegistryEntries {
         });
     }
 
-    static Registry<? extends Keyed> createGameEventRegistry() {
+    public static Registry<? extends Keyed> createGameEventRegistry() {
         return LunarArcBukkitRegistry.lazy(() -> {
             List<Keyed> values = new ArrayList<>();
             for (Map.Entry<net.minecraft.resources.ResourceKey<net.minecraft.world.level.gameevent.GameEvent>,
@@ -89,7 +89,7 @@ final class LunarArcRegistryEntries {
         @Override public String toString() { return "CraftGameEvent[" + this.key + "]"; }
     }
 
-    static Registry<? extends Keyed> createMusicInstrumentRegistry() {
+    public static Registry<? extends Keyed> createMusicInstrumentRegistry() {
         return LunarArcBukkitRegistry.lazy(() -> {
             net.minecraft.core.Registry<net.minecraft.world.item.Instrument> nms =
                     activeRegistries().registryOrThrow(Registries.INSTRUMENT);
@@ -103,7 +103,7 @@ final class LunarArcRegistryEntries {
         });
     }
 
-    static Registry<? extends Keyed> createStructureTypeRegistry() {
+    public static Registry<? extends Keyed> createStructureTypeRegistry() {
         return LunarArcBukkitRegistry.lazy(() -> {
             List<Keyed> values = new ArrayList<>();
             for (Map.Entry<net.minecraft.resources.ResourceKey<net.minecraft.world.level.levelgen.structure.StructureType<?>>,
@@ -115,7 +115,7 @@ final class LunarArcRegistryEntries {
         });
     }
 
-    static Registry<? extends Keyed> createStructureRegistry() {
+    public static Registry<? extends Keyed> createStructureRegistry() {
         return LunarArcBukkitRegistry.lazy(() -> {
             net.minecraft.core.Registry<net.minecraft.world.level.levelgen.structure.Structure> structures =
                     activeRegistries().registryOrThrow(Registries.STRUCTURE);
@@ -142,7 +142,7 @@ final class LunarArcRegistryEntries {
      * Bukkit compatibility name/ordinal are derived metadata only; the handle
      * remains authoritative so modloader-added entries are not synthetic.
      */
-    static Registry<? extends Keyed> createKeyedNmsRegistry(Class<? extends Keyed> apiType,
+    public static Registry<? extends Keyed> createKeyedNmsRegistry(Class<? extends Keyed> apiType,
                                                               net.minecraft.core.Registry<?> nms) {
         // Bukkit's OldEnum-style registry interfaces (for example
         // Villager.Profession) resolve their legacy constants through the matching
@@ -249,7 +249,7 @@ final class LunarArcRegistryEntries {
         @Override public String toString() { return name(); }
     }
 
-    static Registry<? extends Keyed> createWolfVariantRegistry() {
+    public static Registry<? extends Keyed> createWolfVariantRegistry() {
         return LunarArcBukkitRegistry.lazy(() -> {
             net.minecraft.core.Registry<net.minecraft.world.entity.animal.WolfVariant> nms =
                     activeRegistries().registryOrThrow(Registries.WOLF_VARIANT);
@@ -277,7 +277,7 @@ final class LunarArcRegistryEntries {
         @Override public String toString() { return "CraftWolfVariant[" + this.key + "]"; }
     }
 
-    static Registry<? extends Keyed> createPatternTypeRegistry() {
+    public static Registry<? extends Keyed> createPatternTypeRegistry() {
         return LunarArcBukkitRegistry.lazy(() -> {
             net.minecraft.core.Registry<net.minecraft.world.level.block.entity.BannerPattern> nms =
                     activeRegistries().registryOrThrow(Registries.BANNER_PATTERN);
@@ -291,7 +291,7 @@ final class LunarArcRegistryEntries {
         });
     }
 
-    static Registry<? extends Keyed> createTrimRegistry(Class<? extends Keyed> apiType) {
+    public static Registry<? extends Keyed> createTrimRegistry(Class<? extends Keyed> apiType) {
         if (org.bukkit.inventory.meta.trim.TrimMaterial.class.isAssignableFrom(apiType)) {
             return LunarArcBukkitRegistry.lazy(() -> {
                 net.minecraft.core.Registry<net.minecraft.world.item.armortrim.TrimMaterial> nms =
@@ -321,7 +321,7 @@ final class LunarArcRegistryEntries {
         throw LunarArcMissingAdapterException.forSurface("trim registry " + apiType.getName());
     }
 
-    static Registry<? extends Keyed> createJukeboxSongRegistry() {
+    public static Registry<? extends Keyed> createJukeboxSongRegistry() {
         return LunarArcBukkitRegistry.lazy(() -> {
             net.minecraft.core.Registry<net.minecraft.world.item.JukeboxSong> nms =
                     activeRegistries().registryOrThrow(Registries.JUKEBOX_SONG);
@@ -335,7 +335,7 @@ final class LunarArcRegistryEntries {
         });
     }
 
-    static Registry<? extends Keyed> createDamageTypeRegistry() {
+    public static Registry<? extends Keyed> createDamageTypeRegistry() {
         return LunarArcBukkitRegistry.lazy(() -> {
             net.minecraft.core.Registry<net.minecraft.world.damagesource.DamageType> nms =
                     activeRegistries().registryOrThrow(Registries.DAMAGE_TYPE);
@@ -349,7 +349,7 @@ final class LunarArcRegistryEntries {
         });
     }
 
-    static Registry<? extends Keyed> createMapCursorTypeRegistry() {
+    public static Registry<? extends Keyed> createMapCursorTypeRegistry() {
         List<Keyed> values = new ArrayList<>();
         byte index = 0;
         for (ResourceLocation location : BuiltInRegistries.MAP_DECORATION_TYPE.keySet()) {

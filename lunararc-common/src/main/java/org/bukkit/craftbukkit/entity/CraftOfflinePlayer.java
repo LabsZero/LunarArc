@@ -242,7 +242,7 @@ public class CraftOfflinePlayer implements OfflinePlayer {
 
     @Override
     public @NotNull com.destroystokyo.paper.profile.PlayerProfile getPlayerProfile() {
-        return new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(uuid, name);
+        return new com.destroystokyo.paper.profile.CraftPlayerProfile(uuid, name);
     }
 
     @Override

@@ -1,4 +1,9 @@
-package io.lunararcdevs.lunararc.common.server;
+package io.papermc.paper.registry;
+
+import io.lunararcdevs.lunararc.common.server.LunarArcBukkitRegistry;
+import io.lunararcdevs.lunararc.common.server.LunarArcMissingAdapterException;
+import io.lunararcdevs.lunararc.common.server.LunarArcRegistryEntries;
+import io.lunararcdevs.lunararc.common.server.LunarArcTaggedRegistry;
 
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
@@ -9,11 +14,11 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class LunarArcRegistryAccess implements RegistryAccess {
-    public static final RegistryAccess INSTANCE = new LunarArcRegistryAccess();
+public final class PaperRegistryAccess implements RegistryAccess {
+    public static final RegistryAccess INSTANCE = new PaperRegistryAccess();
     private final Map<Class<?>, Registry<?>> registries = new ConcurrentHashMap<>();
 
-    public LunarArcRegistryAccess() {}
+    public PaperRegistryAccess() {}
 
     public static RegistryAccess provider() {
         return INSTANCE;
@@ -45,6 +50,8 @@ public final class LunarArcRegistryAccess implements RegistryAccess {
         if (created == null) {
             throw LunarArcMissingAdapterException.forSurface("registry " + type.getName());
         }
+        RegistryKey<T> registryKey = registryKeyFor(type);
+        if (registryKey != null) created = new LunarArcTaggedRegistry<>(created, registryKey);
         Registry<?> raced = registries.putIfAbsent(type, created);
         return raced == null ? created : (Registry<T>) raced;
     }
@@ -214,6 +221,45 @@ public final class LunarArcRegistryAccess implements RegistryAccess {
             }
             return values;
         });
+    }
+
+    private static final java.util.List<RegistryKey<?>> TAGGABLE_KEYS = java.util.List.of(
+            RegistryKey.GAME_EVENT,
+            RegistryKey.STRUCTURE_TYPE,
+            RegistryKey.MOB_EFFECT,
+            RegistryKey.BLOCK,
+            RegistryKey.ITEM,
+            RegistryKey.CAT_VARIANT,
+            RegistryKey.FROG_VARIANT,
+            RegistryKey.VILLAGER_PROFESSION,
+            RegistryKey.VILLAGER_TYPE,
+            RegistryKey.MAP_DECORATION_TYPE,
+            RegistryKey.MENU,
+            RegistryKey.ATTRIBUTE,
+            RegistryKey.FLUID,
+            RegistryKey.SOUND_EVENT,
+            RegistryKey.BIOME,
+            RegistryKey.STRUCTURE,
+            RegistryKey.TRIM_MATERIAL,
+            RegistryKey.TRIM_PATTERN,
+            RegistryKey.DAMAGE_TYPE,
+            RegistryKey.WOLF_VARIANT,
+            RegistryKey.ENCHANTMENT,
+            RegistryKey.JUKEBOX_SONG,
+            RegistryKey.BANNER_PATTERN,
+            RegistryKey.PAINTING_VARIANT,
+            RegistryKey.INSTRUMENT,
+            RegistryKey.ENTITY_TYPE,
+            RegistryKey.PARTICLE_TYPE,
+            RegistryKey.POTION,
+            RegistryKey.MEMORY_MODULE_TYPE);
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static <T extends Keyed> RegistryKey<T> registryKeyFor(Class<T> type) {
+        for (RegistryKey<?> key : TAGGABLE_KEYS) {
+            if (resolveType((RegistryKey) key) == type) return (RegistryKey<T>) key;
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")

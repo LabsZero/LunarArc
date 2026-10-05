@@ -1,6 +1,6 @@
 package io.lunararcdevs.lunararc.common.events;
 
-import io.lunararcdevs.lunararc.common.server.LunarArcVersionFetcher;
+import com.destroystokyo.paper.PaperVersionFetcher;
 import io.lunararcdevs.lunararc.common.server.LunarArcVersionInfo;
 import io.lunararcdevs.lunararc.i18n.TranslationManager;
 import com.mojang.authlib.GameProfile;
@@ -39,7 +39,7 @@ public final class PlayerJoinListener {
         if (!claimNotification(player.getUniqueId())) return;
 
         CompletableFuture
-                .supplyAsync(LunarArcVersionFetcher::fetchLatestRelease)
+                .supplyAsync(PaperVersionFetcher::fetchLatestRelease)
                 .thenAccept(release -> release.ifPresent(latest -> {
                     if (!isCurrentVersion(latest.version())) {
                         serverExecutor.accept(() -> notifyPlayer(player, latest));
@@ -52,10 +52,10 @@ public final class PlayerJoinListener {
     }
 
     private static boolean isCurrentVersion(String latestVersion) {
-        return LunarArcVersionFetcher.isSameVersion(LunarArcVersionInfo.lunarArcVersion(), latestVersion);
+        return PaperVersionFetcher.isSameVersion(LunarArcVersionInfo.lunarArcVersion(), latestVersion);
     }
 
-    private static void notifyPlayer(Player player, LunarArcVersionFetcher.Release release) {
+    private static void notifyPlayer(Player player, PaperVersionFetcher.Release release) {
         if (!player.isOnline()) return;
         player.sendMessage(Component.text("[LunarArc]", NamedTextColor.AQUA, TextDecoration.BOLD));
         player.sendMessage(Component.text(TranslationManager.get("ingame.update.available"), NamedTextColor.YELLOW));

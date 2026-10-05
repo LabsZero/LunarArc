@@ -1,4 +1,4 @@
-package io.lunararcdevs.lunararc.common.server;
+package org.bukkit.craftbukkit.profile;
 
 import org.bukkit.profile.PlayerTextures;
 import org.jetbrains.annotations.NotNull;
@@ -6,7 +6,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.net.URL;
 
-public final class LunarArcPlayerTextures implements PlayerTextures {
+public final class CraftPlayerTextures implements PlayerTextures {
     private URL skin;
     private URL cape;
     private SkinModel skinModel = SkinModel.CLASSIC;

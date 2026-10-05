@@ -17,7 +17,7 @@ import java.util.NoSuchElementException;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
+public final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
     private final Map<NamespacedKey, T> byKey;
     private final List<T> values;
 
@@ -26,7 +26,7 @@ final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
         this.values = values;
     }
 
-    static <T extends Keyed> Registry<T> forType(Class<T> type) {
+    public static <T extends Keyed> Registry<T> forType(Class<T> type) {
         if (type == null) return empty();
 
         Map<NamespacedKey, T> byKey = new LinkedHashMap<>();
@@ -44,7 +44,7 @@ final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
                 Collections.unmodifiableList(values));
     }
 
-    static <T extends Keyed> Registry<T> fromValues(java.util.Collection<T> source) {
+    public static <T extends Keyed> Registry<T> fromValues(java.util.Collection<T> source) {
         Map<NamespacedKey, T> byKey = new LinkedHashMap<>();
         List<T> values = new ArrayList<>();
         for (T value : source) {
@@ -55,12 +55,12 @@ final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
                 Collections.unmodifiableList(values));
     }
 
-    static <T extends Keyed> Registry<T> empty() {
+    public static <T extends Keyed> Registry<T> empty() {
         return new LunarArcBukkitRegistry<>(Collections.emptyMap(), Collections.emptyList());
     }
 
 
-    static <T extends Keyed> Registry<T> lazy(Supplier<Collection<T>> valuesSupplier) {
+    public static <T extends Keyed> Registry<T> lazy(Supplier<Collection<T>> valuesSupplier) {
         return new LazyRegistry<>(valuesSupplier);
     }
 

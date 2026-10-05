@@ -3,7 +3,7 @@ package io.lunararcdevs.lunararc.common.mixin.core.server;
 import io.lunararcdevs.lunararc.common.bridge.CommandSourceBridge;
 import io.lunararcdevs.lunararc.common.bridge.MinecraftServerBridge;
 import io.lunararcdevs.lunararc.common.config.LunarArcConfig;
-import io.lunararcdevs.lunararc.common.server.LunarArcCommandMap;
+import org.bukkit.craftbukkit.command.CraftCommandMap;
 import io.lunararcdevs.lunararc.common.mod.server.LunarArcServer;
 import io.lunararcdevs.lunararc.common.mod.server.LunarArcRollingAverage;
 import io.lunararcdevs.lunararc.common.mod.util.log.LunarArcConsole;
@@ -384,8 +384,8 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         net.minecraft.commands.Commands minecraftCommands = minecraftServer.getCommands();
         com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher =
                 minecraftCommands.getDispatcher();
-        io.lunararcdevs.lunararc.common.server.LunarArcPaperCommands registrar =
-                new io.lunararcdevs.lunararc.common.server.LunarArcPaperCommands(dispatcher);
+        io.papermc.paper.command.brigadier.PaperCommands registrar =
+                new io.papermc.paper.command.brigadier.PaperCommands(dispatcher);
         io.lunararcdevs.lunararc.common.server.LunarArcReloadableRegistrarEvent<io.papermc.paper.command.brigadier.Commands> event =
                 new io.lunararcdevs.lunararc.common.server.LunarArcReloadableRegistrarEvent<>(
                         registrar,
@@ -400,7 +400,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher =
                 commands.getDispatcher();
 
-        if (craftServer.getCommandMap() instanceof LunarArcCommandMap lunarArcMap) {
+        if (craftServer.getCommandMap() instanceof CraftCommandMap lunarArcMap) {
             lunarArcMap.syncToBrigadier(dispatcher);
         }
 
@@ -437,7 +437,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
         Thread watchdog = new Thread(() -> {
             try {
-                Thread.sleep(15_000);
+                Thread.sleep(3_000);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 return;
@@ -449,9 +449,8 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
                 if (culprits.length() > 0) culprits.append(", ");
                 culprits.append('\'').append(thread.getName()).append('\'');
             }
-            org.slf4j.LoggerFactory.getLogger("LunarArc").warn(
-                    "Server did not exit within 15s of shutdown completing - forcing the JVM to exit. "
-                            + "Still-running non-daemon thread(s) that held it open: {}",
+            org.slf4j.LoggerFactory.getLogger("LunarArc").info(
+                    "Shutdown finished; exiting the JVM now. Plugin thread(s) that were never stopped by their plugin: {}",
                     culprits.length() > 0 ? culprits : "none found (already exiting on its own)");
             Runtime.getRuntime().halt(0);
         }, "LunarArc Shutdown Watchdog");

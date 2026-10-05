@@ -47,6 +47,13 @@ public final class IncompatibleList {
 
     private static void report(List<Detected> detected) {
         boolean crash = detected.stream().anyMatch(item -> item.crash() == null || item.crash());
+        if (!crash) {
+            for (Detected item : detected) {
+                LOGGER.info("Note: {} {} ({}) - {}", item.displayName(),
+                        item.version() == null ? "" : item.version(), item.type(), item.reason());
+            }
+            return;
+        }
         for (Detected item : detected) {
             log(crash, "[LunarArc/Incompatible] type={} id={} name=\"{}\"{} reason=\"{}\"",
                     item.type(), item.id(), item.displayName().replace("\"", "'"),

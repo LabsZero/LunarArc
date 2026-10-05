@@ -293,6 +293,14 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
     }
 
     @Override
+    public net.kyori.adventure.pointer.@NotNull Pointers pointers() {
+        return net.kyori.adventure.pointer.Pointers.builder()
+                .withDynamic(net.kyori.adventure.identity.Identity.UUID, this::getUniqueId)
+                .withDynamic(net.kyori.adventure.identity.Identity.NAME, this::getName)
+                .build();
+    }
+
+    @Override
     public @NotNull String getName() {
         return entity.getName().getString();
     }

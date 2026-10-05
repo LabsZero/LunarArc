@@ -1,4 +1,7 @@
-package io.lunararcdevs.lunararc.common.server;
+package com.destroystokyo.paper;
+
+import io.lunararcdevs.lunararc.common.server.LunarArcVersionInfo;
+import io.lunararcdevs.lunararc.common.server.LunarArcWorldVersionStamp;
 
 import com.destroystokyo.paper.util.VersionFetcher;
 import com.google.gson.JsonArray;
@@ -18,7 +21,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-public final class LunarArcVersionFetcher implements VersionFetcher {
+public final class PaperVersionFetcher implements VersionFetcher {
 
     private static final String API_URL = "https://api.github.com/repos/LunarArcDevs/LunarArc/releases";
     private static final int CONNECT_TIMEOUT_MILLIS = 3000;

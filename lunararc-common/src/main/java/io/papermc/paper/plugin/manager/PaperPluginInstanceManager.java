@@ -276,7 +276,7 @@ class PaperPluginInstanceManager {
             // testPermissionSilent, and loading any not-yet-loaded class from the closed loader
             // throws NoClassDefFoundError (WorldEdit's BukkitPlayer, from wrapCommandSender).
             try {
-                if (this.commandMap instanceof io.lunararcdevs.lunararc.common.server.LunarArcCommandMap lunarArcMap) {
+                if (this.commandMap instanceof org.bukkit.craftbukkit.command.CraftCommandMap lunarArcMap) {
                     lunarArcMap.unregisterPlugin(plugin);
                 }
             } catch (Throwable ex) {
