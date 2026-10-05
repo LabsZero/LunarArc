@@ -72,6 +72,10 @@ public final class LunarArcCommandRouter {
             return PacketResult.CANCEL;
         }
 
+        if (redirectVanillaWeather(server, player, routedLine)) {
+            return PacketResult.CANCEL;
+        }
+
         boolean modified = !eventMessage.equals(originalEventMessage);
         CommandMap commandMap = server.getCommandMap();
         String label = labelOf(routedLine);
@@ -116,6 +120,8 @@ public final class LunarArcCommandRouter {
                 if (line.isEmpty()) return false;
             }
 
+            if (redirectVanillaWeather(server, sender, line)) return true;
+
             CommandMap map = server.getCommandMap();
 
 
@@ -141,6 +147,18 @@ public final class LunarArcCommandRouter {
                 LunarArcCommandLogger.end();
             }
         }
+    }
+
+    private static boolean redirectVanillaWeather(Server server, CommandSender sender, String line) {
+        String bare = line.startsWith("/") ? line.substring(1).trim() : line.trim();
+        String[] parts = bare.split("\\s+");
+        if (parts.length < 2 || !parts[0].equalsIgnoreCase("weather")) return false;
+        String kind = parts[1].toLowerCase(Locale.ROOT);
+        if (!kind.equals("clear") && !kind.equals("rain") && !kind.equals("thunder")) return false;
+        Command owner = server.getCommandMap().getCommand("weather");
+        if (!(owner instanceof org.bukkit.command.PluginIdentifiableCommand) || !owner.testPermissionSilent(sender)) return false;
+        dispatchNative(server, sender, bare);
+        return true;
     }
 
     public static boolean dispatchNative(Server server, CommandSender sender, String line) {
