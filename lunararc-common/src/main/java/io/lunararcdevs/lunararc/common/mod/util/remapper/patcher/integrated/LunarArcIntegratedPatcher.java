@@ -41,6 +41,13 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
                     + "Lorg/bukkit/generator/ChunkGenerator;"
                     + "Lorg/bukkit/generator/BiomeProvider;)V";
 
+    private static final String WORLDEDIT_ADAPTER_PREFIX = "com/sk89q/worldedit/bukkit/adapter/impl/";
+    private static final String WORLDEDIT_PROPERTY_LOADER_SUFFIX = "/PaperweightAdapter$1";
+    private static final String WORLDEDIT_PROPERTY = "com/sk89q/worldedit/registry/state/Property";
+    private static final String WORLDEDIT_ENUM_PROPERTY = "com/sk89q/worldedit/registry/state/EnumProperty";
+    private static final String WORLDEDIT_PROPERTY_COMPAT =
+            "io/lunararcdevs/lunararc/common/compat/worldedit/LunarArcWorldEditProperties";
+
     private static final String CLOSE_NAME = "close";
     private static final String CLOSE_WITH_SAVE_DESC = "(Z)V";
     private static final String CLOSE_NO_ARG_DESC = "()V";
@@ -65,6 +72,68 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
         }
         patchPlayerInfoUpdateSingleEntryConstructor(node);
         patchChunkSetBlockStateExtraFlag(node);
+        if (node.name.startsWith(WORLDEDIT_ADAPTER_PREFIX) && node.name.endsWith(WORLDEDIT_PROPERTY_LOADER_SUFFIX)) {
+            patchWorldEditUnknownProperties(node);
+        }
+    }
+
+    private static void patchWorldEditUnknownProperties(ClassNode node) {
+        for (MethodNode method : node.methods) {
+            if (!"load".equals(method.name) || (method.access & Opcodes.ACC_SYNTHETIC) != 0) continue;
+            if (!method.desc.endsWith(")L" + WORLDEDIT_PROPERTY + ";")) continue;
+
+            TypeInsnNode enumNew = null;
+            MethodInsnNode enumInit = null;
+            MethodInsnNode nameCall = null;
+            TypeInsnNode illegalNew = null;
+            for (AbstractInsnNode insn : method.instructions) {
+                if (insn instanceof TypeInsnNode type && insn.getOpcode() == Opcodes.NEW) {
+                    if (type.desc.equals(WORLDEDIT_ENUM_PROPERTY)) enumNew = type;
+                    else if (type.desc.equals("java/lang/IllegalArgumentException")) illegalNew = type;
+                } else if (insn instanceof MethodInsnNode call) {
+                    if (call.getOpcode() == Opcodes.INVOKESPECIAL && call.owner.equals(WORLDEDIT_ENUM_PROPERTY)
+                            && "<init>".equals(call.name) && enumInit == null) {
+                        enumInit = call;
+                    } else if (call.getOpcode() == Opcodes.INVOKEVIRTUAL && "()Ljava/lang/String;".equals(call.desc)
+                            && nameCall == null && !call.owner.equals("java/lang/Class")) {
+                        nameCall = call;
+                    }
+                }
+            }
+            if (enumNew == null || enumInit == null || nameCall == null || illegalNew == null) continue;
+
+            AbstractInsnNode cursor = illegalNew;
+            AbstractInsnNode end = null;
+            while (cursor != null) {
+                if (cursor.getOpcode() == Opcodes.ATHROW) {
+                    end = cursor;
+                    break;
+                }
+                cursor = cursor.getNext();
+            }
+            if (end == null) continue;
+
+            org.objectweb.asm.tree.InsnList replacement = new org.objectweb.asm.tree.InsnList();
+            replacement.add(new TypeInsnNode(Opcodes.NEW, WORLDEDIT_ENUM_PROPERTY));
+            replacement.add(new org.objectweb.asm.tree.InsnNode(Opcodes.DUP));
+            replacement.add(new org.objectweb.asm.tree.VarInsnNode(Opcodes.ALOAD, 1));
+            replacement.add(new MethodInsnNode(nameCall.getOpcode(), nameCall.owner, nameCall.name, nameCall.desc, nameCall.itf));
+            replacement.add(new org.objectweb.asm.tree.VarInsnNode(Opcodes.ALOAD, 1));
+            replacement.add(new MethodInsnNode(Opcodes.INVOKESTATIC, WORLDEDIT_PROPERTY_COMPAT, "valueNames",
+                    "(Ljava/lang/Object;)Ljava/util/List;", false));
+            replacement.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, WORLDEDIT_ENUM_PROPERTY, "<init>", enumInit.desc, false));
+            replacement.add(new org.objectweb.asm.tree.InsnNode(Opcodes.ARETURN));
+
+            AbstractInsnNode removeCursor = illegalNew;
+            while (removeCursor != null) {
+                AbstractInsnNode following = removeCursor.getNext();
+                boolean last = removeCursor == end;
+                method.instructions.remove(removeCursor);
+                if (last) break;
+                removeCursor = following;
+            }
+            method.instructions.add(replacement);
+        }
     }
 
     private static void patchChunkSetBlockStateExtraFlag(ClassNode node) {
