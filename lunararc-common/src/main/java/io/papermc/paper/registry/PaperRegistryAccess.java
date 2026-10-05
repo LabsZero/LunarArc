@@ -3,7 +3,6 @@ package io.papermc.paper.registry;
 import io.lunararcdevs.lunararc.common.server.LunarArcBukkitRegistry;
 import io.lunararcdevs.lunararc.common.server.LunarArcMissingAdapterException;
 import io.lunararcdevs.lunararc.common.server.LunarArcRegistryEntries;
-import io.lunararcdevs.lunararc.common.server.LunarArcTaggedRegistry;
 
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
@@ -51,7 +50,7 @@ public final class PaperRegistryAccess implements RegistryAccess {
             throw LunarArcMissingAdapterException.forSurface("registry " + type.getName());
         }
         RegistryKey<T> registryKey = registryKeyFor(type);
-        if (registryKey != null) created = new LunarArcTaggedRegistry<>(created, registryKey);
+        if (registryKey != null) created = new LunarArcBukkitRegistry.Tagged<>(created, registryKey);
         Registry<?> raced = registries.putIfAbsent(type, created);
         return raced == null ? created : (Registry<T>) raced;
     }

@@ -1,6 +1,6 @@
 package io.lunararcdevs.lunararc.common.mixin.core.world.blockentity;
 
-import io.lunararcdevs.lunararc.common.bridge.donor.DonorLecternSupport;
+import io.lunararcdevs.lunararc.common.bridge.donor.DonorContainerSupport;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.Container;
 import net.minecraft.world.level.block.entity.LecternBlockEntity;
@@ -18,6 +18,6 @@ public abstract class LecternBlockEntityMixin {
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void lunararc$registerBookAccess(BlockPos pos, BlockState state, CallbackInfo ci) {
-        DonorLecternSupport.register(this.bookAccess, (LecternBlockEntity) (Object) this);
+        DonorContainerSupport.registerLectern(this.bookAccess, (LecternBlockEntity) (Object) this);
     }
 }

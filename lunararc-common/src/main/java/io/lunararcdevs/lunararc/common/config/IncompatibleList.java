@@ -49,8 +49,8 @@ public final class IncompatibleList {
         boolean crash = detected.stream().anyMatch(item -> item.crash() == null || item.crash());
         if (!crash) {
             for (Detected item : detected) {
-                LOGGER.info("Note: {} {} ({}) - {}", item.displayName(),
-                        item.version() == null ? "" : item.version(), item.type(), item.reason());
+                LOGGER.warn("Incompatible {} (warn-only): {}{} - {}", item.type(), item.displayName(),
+                        item.version() == null ? "" : " " + item.version(), item.reason());
             }
             return;
         }

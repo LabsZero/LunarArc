@@ -23,11 +23,7 @@ public abstract class PrimaryLevelDataWeatherMixin {
         if (world == null) return;
         WeatherChangeEvent event = new WeatherChangeEvent(world, raining);
         Bukkit.getPluginManager().callEvent(event);
-        if (event.isCancelled()) {
-            org.slf4j.LoggerFactory.getLogger("LunarArc").info(
-                    "Rain change to {} in world '{}' was cancelled by a plugin listening to WeatherChangeEvent", raining, world.getName());
-            ci.cancel();
-        }
+        if (event.isCancelled()) ci.cancel();
     }
 
     @Inject(method = "setThundering(Z)V", at = @At("HEAD"), cancellable = true, require = 0)
@@ -37,10 +33,6 @@ public abstract class PrimaryLevelDataWeatherMixin {
         if (world == null) return;
         ThunderChangeEvent event = new ThunderChangeEvent(world, thundering);
         Bukkit.getPluginManager().callEvent(event);
-        if (event.isCancelled()) {
-            org.slf4j.LoggerFactory.getLogger("LunarArc").info(
-                    "Thunder change to {} in world '{}' was cancelled by a plugin listening to ThunderChangeEvent", thundering, world.getName());
-            ci.cancel();
-        }
+        if (event.isCancelled()) ci.cancel();
     }
 }

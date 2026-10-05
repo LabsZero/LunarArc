@@ -1,6 +1,6 @@
 package org.bukkit.craftbukkit.inventory;
 
-import io.lunararcdevs.lunararc.common.bridge.donor.DonorLecternSupport;
+import io.lunararcdevs.lunararc.common.bridge.donor.DonorContainerSupport;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.MenuProvider;
@@ -13,7 +13,7 @@ public class CraftInventoryLectern extends CraftInventory implements LecternInve
 
     public CraftInventoryLectern(Container inventory) {
         super(inventory);
-        this.tile = DonorLecternSupport.lecternOf(inventory);
+        this.tile = DonorContainerSupport.lecternOf(inventory);
     }
 
     @Override

@@ -4,6 +4,7 @@ import io.papermc.paper.registry.PaperRegistryAccess;
 import io.lunararcdevs.lunararc.api.Unsafe;
 import io.papermc.paper.adventure.providers.ClickCallbackProviderImpl;
 import io.papermc.paper.adventure.providers.DataComponentValueConverterProviderImpl;
+import io.papermc.paper.adventure.providers.PlainTextComponentSerializerProviderImpl;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEventTypeProviderImpl;
 import io.papermc.paper.registry.RegistryAccess;
 import net.kyori.adventure.text.event.DataComponentValueConverterRegistry;
@@ -44,6 +45,8 @@ public final class LunarArcPaperServiceBootstrap {
     private static void installAdventureProviders() {
         install("Paper's click callback provider; ClickEvent.callback stays unsupported",
                 LunarArcPaperServiceBootstrap::installClickCallbackProvider);
+        install("Paper's plain text serializer; translatable components will render as raw keys",
+                LunarArcPaperServiceBootstrap::installPlainTextProvider);
         install("adventure's JSON serializer provider; JSONComponentSerializer.json() may be unavailable",
                 LunarArcPaperServiceBootstrap::installJsonSerializerProvider);
         install("Paper's data component converters; item hover components will not convert to JSON",
@@ -98,6 +101,16 @@ public final class LunarArcPaperServiceBootstrap {
         Field provider = staticField("net.kyori.adventure.text.event.ClickCallbackInternals", "PROVIDER");
         if (readStatic(provider) instanceof ClickCallbackProviderImpl) return;
         writeStatic(provider, new ClickCallbackProviderImpl());
+    }
+
+    private static void installPlainTextProvider() throws Exception {
+        String impl = "net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializerImpl";
+        Field service = staticField(impl, "SERVICE");
+        if (readStatic(service) instanceof Optional<?> present && present.isPresent()) return;
+        PlainTextComponentSerializerProviderImpl provider = new PlainTextComponentSerializerProviderImpl();
+        writeStatic(service, Optional.of(provider));
+        writeStatic(staticField(impl, "BUILDER"), provider.plainText());
+        writeStatic(staticField(impl + "$Instances", "INSTANCE"), provider.plainTextSimple());
     }
 
     private static boolean gsonVisibleToAdventure() {

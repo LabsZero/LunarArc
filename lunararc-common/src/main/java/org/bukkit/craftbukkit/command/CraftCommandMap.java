@@ -27,6 +27,25 @@ public class CraftCommandMap extends SimpleCommandMap {
         this.lunararc$server = java.util.Objects.requireNonNull(server, "server");
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static void removeBrigadierChild(com.mojang.brigadier.tree.CommandNode<?> node, String name) {
+        if (node instanceof io.lunararcdevs.lunararc.common.bridge.access.CommandNodeAccessBridge bridge) {
+            bridge.lunararc$getChildren().remove(name);
+            bridge.lunararc$getLiterals().remove(name);
+            bridge.lunararc$getArguments().remove(name);
+            return;
+        }
+        try {
+            for (String field : new String[] {"children", "literals", "arguments"}) {
+                java.lang.reflect.Field map = com.mojang.brigadier.tree.CommandNode.class.getDeclaredField(field);
+                map.setAccessible(true);
+                ((java.util.Map) map.get(node)).remove(name);
+            }
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Unable to remove command node '" + name + "' from Brigadier", failure);
+        }
+    }
+
     public static void setDispatcher(CommandDispatcher<CommandSourceStack> value) {
         dispatcher = value;
     }
@@ -87,11 +106,9 @@ public class CraftCommandMap extends SimpleCommandMap {
         if (!previous.isEmpty()) {
             getKnownCommands().entrySet().removeIf(entry -> previous.contains(normalize(entry.getKey())));
             CommandDispatcher<CommandSourceStack> target = dispatcher;
-            if (target != null && target.getRoot() instanceof io.lunararcdevs.lunararc.common.bridge.access.CommandNodeAccessBridge accessor) {
+            if (target != null) {
                 for (String alias : previous) {
-                    accessor.lunararc$getChildren().remove(alias);
-                    accessor.lunararc$getLiterals().remove(alias);
-                    accessor.lunararc$getArguments().remove(alias);
+                    removeBrigadierChild(target.getRoot(), alias);
                 }
             }
         }
@@ -181,11 +198,7 @@ public class CraftCommandMap extends SimpleCommandMap {
     }
 
     private void removeMirror(CommandDispatcher<CommandSourceStack> target, String label) {
-        if (target.getRoot() instanceof io.lunararcdevs.lunararc.common.bridge.access.CommandNodeAccessBridge accessor) {
-            accessor.lunararc$getChildren().remove(label);
-            accessor.lunararc$getLiterals().remove(label);
-            accessor.lunararc$getArguments().remove(label);
-        }
+        removeBrigadierChild(target.getRoot(), label);
         mirroredLabels().remove(label);
     }
 

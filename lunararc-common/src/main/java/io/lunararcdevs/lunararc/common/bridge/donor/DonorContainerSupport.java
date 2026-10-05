@@ -1,5 +1,6 @@
 package io.lunararcdevs.lunararc.common.bridge.donor;
 
+import net.minecraft.world.level.block.entity.LecternBlockEntity;
 import io.lunararcdevs.lunararc.common.LunarArcServerAccess;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -55,7 +56,18 @@ public final class DonorContainerSupport {
                 }
             };
 
+    private static final java.util.Map<Container, LecternBlockEntity> LECTERNS =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
     private DonorContainerSupport() {
+    }
+
+    public static void registerLectern(Container bookAccess, LecternBlockEntity lectern) {
+        LECTERNS.put(bookAccess, lectern);
+    }
+
+    public static LecternBlockEntity lecternOf(Container bookAccess) {
+        return LECTERNS.get(bookAccess);
     }
 
     public static @Nullable InventoryHolder ownerOf(Container container) {

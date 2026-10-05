@@ -46,7 +46,7 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
     private static final String WORLDEDIT_PROPERTY = "com/sk89q/worldedit/registry/state/Property";
     private static final String WORLDEDIT_ENUM_PROPERTY = "com/sk89q/worldedit/registry/state/EnumProperty";
     private static final String WORLDEDIT_PROPERTY_COMPAT =
-            "io/lunararcdevs/lunararc/common/compat/worldedit/LunarArcWorldEditProperties";
+            "io/lunararcdevs/lunararc/common/mod/util/remapper/patcher/integrated/LunarArcIntegratedPatcher";
 
     private static final String CLOSE_NAME = "close";
     private static final String CLOSE_WITH_SAVE_DESC = "(Z)V";
@@ -75,6 +75,19 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
         if (node.name.startsWith(WORLDEDIT_ADAPTER_PREFIX) && node.name.endsWith(WORLDEDIT_PROPERTY_LOADER_SUFFIX)) {
             patchWorldEditUnknownProperties(node);
         }
+    }
+
+    public static java.util.List<String> worldEditPropertyValueNames(Object property) {
+        return propertyValueNames((net.minecraft.world.level.block.state.properties.Property<?>) property);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static java.util.List<String> propertyValueNames(net.minecraft.world.level.block.state.properties.Property property) {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        for (Object value : property.getPossibleValues()) {
+            names.add(property.getName((Comparable) value));
+        }
+        return names;
     }
 
     private static void patchWorldEditUnknownProperties(ClassNode node) {
@@ -119,7 +132,7 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
             replacement.add(new org.objectweb.asm.tree.VarInsnNode(Opcodes.ALOAD, 1));
             replacement.add(new MethodInsnNode(nameCall.getOpcode(), nameCall.owner, nameCall.name, nameCall.desc, nameCall.itf));
             replacement.add(new org.objectweb.asm.tree.VarInsnNode(Opcodes.ALOAD, 1));
-            replacement.add(new MethodInsnNode(Opcodes.INVOKESTATIC, WORLDEDIT_PROPERTY_COMPAT, "valueNames",
+            replacement.add(new MethodInsnNode(Opcodes.INVOKESTATIC, WORLDEDIT_PROPERTY_COMPAT, "worldEditPropertyValueNames",
                     "(Ljava/lang/Object;)Ljava/util/List;", false));
             replacement.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, WORLDEDIT_ENUM_PROPERTY, "<init>", enumInit.desc, false));
             replacement.add(new org.objectweb.asm.tree.InsnNode(Opcodes.ARETURN));

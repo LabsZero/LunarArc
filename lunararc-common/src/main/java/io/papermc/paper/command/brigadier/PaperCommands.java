@@ -8,7 +8,6 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.LiteralCommandNode;
-import io.lunararcdevs.lunararc.common.bridge.access.CommandNodeAccessBridge;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandRegistrationFlag;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -198,11 +197,7 @@ public final class PaperCommands implements Commands {
         CommandNode<net.minecraft.commands.CommandSourceStack> existing = root.getChild(node.getLiteral());
         if (existing != null && !override) return false;
         if (existing != null) {
-            CommandNodeAccessBridge<net.minecraft.commands.CommandSourceStack> accessor =
-                    (CommandNodeAccessBridge<net.minecraft.commands.CommandSourceStack>) (Object) root;
-            accessor.lunararc$getChildren().remove(node.getLiteral());
-            accessor.lunararc$getLiterals().remove(node.getLiteral());
-            accessor.lunararc$getArguments().remove(node.getLiteral());
+            org.bukkit.craftbukkit.command.CraftCommandMap.removeBrigadierChild(root, node.getLiteral());
         }
         root.addChild(node);
         return true;

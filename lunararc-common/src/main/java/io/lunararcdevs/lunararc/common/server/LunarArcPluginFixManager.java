@@ -39,16 +39,6 @@ public final class LunarArcPluginFixManager {
             case "com.sk89q.worldedit.bukkit.adapter.impl.v1_21.PaperweightAdapter",
                  "com.sk89q.worldedit.bukkit.adapter.ext.fawe.v1_21_R1.PaperweightAdapter" ->
                     node -> helloWorld(node, "org.spigotmc.WatchdogThread", REPLACEMENT);
-            case "com.sk89q.worldedit.bukkit.paperlib.PaperLib" -> node -> {
-                removePaper0(node);
-                if (System.getProperty("paperlib.shown-benefits") == null) {
-                    System.setProperty("paperlib.shown-benefits", "1");
-                }
-            };
-            case "org.mvplugins.multiverse.external.paperlib.PaperLib",
-                 "me.SuperRonanCraft.BetterRTP.lib.paperlib.PaperLib",
-                 "com.plotsquared.bukkit.paperlib.PaperLib" ->
-                    LunarArcPluginFixManager::removePaper0;
             case "com.fastasyncworldedit.bukkit.util.MinecraftVersion" ->
                     node -> redirectMethodToGetNMSVersion(node, "getPackageVersion");
             case "com.ghostchu.quickshop.platform.spigot.AbstractSpigotPlatform" ->
@@ -242,11 +232,6 @@ public final class LunarArcPluginFixManager {
         String requested = itemName.trim().toLowerCase(Locale.ROOT);
         if (requested.isEmpty()) return null;
         return LunarArcEssentialsItemBridge.resolveAlias(requested);
-    }
-
-    private static void removePaper0(ClassNode node) {
-        helloWorld(node, "com.destroystokyo.paper.PaperConfig", REPLACEMENT);
-        helloWorld(node, "io.papermc.paper.configuration.Configuration", REPLACEMENT);
     }
 
     private static void redirectMethodToGetNMSVersion(ClassNode node, String methodName) {
