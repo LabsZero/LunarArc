@@ -28,6 +28,22 @@ public abstract class LivingEntityMixin implements LivingEntityBridge {
     @org.spongepowered.asm.mixin.Shadow @org.spongepowered.asm.mixin.Final private static int LIVING_ENTITY_FLAG_SPIN_ATTACK;
     @org.spongepowered.asm.mixin.Shadow private static byte entityEventForEquipmentBreak(net.minecraft.world.entity.EquipmentSlot slot) { throw new AssertionError(); }
     @org.spongepowered.asm.mixin.Shadow protected abstract void completeUsingItem();
+    @Inject(method = "jumpFromGround", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$jumpEvent(CallbackInfo ci) {
+        if (io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.jump((LivingEntity) (Object) this)) ci.cancel();
+    }
+
+    @Inject(method = "releaseUsingItem", at = @At("HEAD"), require = 0)
+    private void lunararc$stopUsingEvent(CallbackInfo ci) {
+        io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.stopUsing((LivingEntity) (Object) this);
+    }
+
+    @Inject(method = "checkTotemDeathProtection", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$totemEvent(DamageSource source, CallbackInfoReturnable<Boolean> cir) {
+        Boolean resurrected = io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.resurrect((LivingEntity) (Object) this, source);
+        if (resurrected != null) cir.setReturnValue(resurrected);
+    }
+
     @Unique private TriState lunararc$frictionState = TriState.NOT_SET;
     @Unique private int lunararc$shieldBlockingDelay = 5;
     @Unique private int lunararc$maximumAirOverride = -1;

@@ -6,7 +6,9 @@ import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Paper/Bukkit XP pickup event without replacing orb pickup or mending logic. */
 @Mixin(ExperienceOrb.class)
@@ -15,6 +17,11 @@ public abstract class ExperienceOrbMixin {
     public java.util.UUID triggerEntityId;
     public org.bukkit.entity.ExperienceOrb.SpawnReason spawnReason = org.bukkit.entity.ExperienceOrb.SpawnReason.UNKNOWN;
 
+
+    @Inject(method = "playerTouch", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$pickupExperienceEvent(Player player, CallbackInfo ci) {
+        if (io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.pickupExperience(player, (ExperienceOrb) (Object) this)) ci.cancel();
+    }
 
     @Redirect(
             method = "playerTouch",

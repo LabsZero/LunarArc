@@ -6,6 +6,7 @@ import net.minecraft.world.item.component.DyedItemColor;
 import org.bukkit.Color;
 import org.bukkit.inventory.meta.ColorableArmorMeta;
 
+@org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
 public final class CraftMetaColorableArmor extends CraftMetaArmor implements ColorableArmorMeta {
     private Color color;
     private boolean showInTooltip = true;

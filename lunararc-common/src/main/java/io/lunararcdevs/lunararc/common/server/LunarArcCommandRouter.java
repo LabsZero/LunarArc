@@ -75,6 +75,9 @@ public final class LunarArcCommandRouter {
         if (redirectVanillaWeather(server, player, routedLine)) {
             return PacketResult.CANCEL;
         }
+        if (unknownCommand(server, player, routedLine)) {
+            return PacketResult.CANCEL;
+        }
 
         boolean modified = !eventMessage.equals(originalEventMessage);
         CommandMap commandMap = server.getCommandMap();
@@ -161,8 +164,29 @@ public final class LunarArcCommandRouter {
         return true;
     }
 
+    private static boolean unknownCommand(Server server, CommandSender sender, String line) {
+        if (!(server instanceof CraftServer craftServer)
+                || org.bukkit.event.command.UnknownCommandEvent.getHandlerList().getRegisteredListeners().length == 0) {
+            return false;
+        }
+        String bare = line.startsWith("/") ? line.substring(1) : line;
+        String label = rawLabelOf(bare);
+        if (server.getCommandMap().getCommand(label) != null
+                || craftServer.getServer().getCommands().getDispatcher().getRoot().getChild(label) != null) {
+            return false;
+        }
+        net.kyori.adventure.text.Component message = net.kyori.adventure.text.Component.translatable(
+                "command.unknown.command", net.kyori.adventure.text.format.NamedTextColor.RED);
+        org.bukkit.event.command.UnknownCommandEvent event =
+                new org.bukkit.event.command.UnknownCommandEvent(sender, bare, message);
+        server.getPluginManager().callEvent(event);
+        if (event.message() != null) sender.sendMessage(event.message());
+        return true;
+    }
+
     public static boolean dispatchNative(Server server, CommandSender sender, String line) {
         if (!(server instanceof CraftServer craftServer)) return false;
+        if (unknownCommand(server, sender, line)) return false;
         try {
             net.minecraft.commands.Commands commands = craftServer.getServer().getCommands();
             boolean known = commands.getDispatcher().getRoot().getChild(rawLabelOf(line)) != null;

@@ -253,6 +253,24 @@ public final class PluginClassLoader extends URLClassLoader
         }
     }
 
+    private static volatile byte[] patchFingerprint;
+
+    private static byte[] patchFingerprint() throws IOException, java.security.NoSuchAlgorithmException {
+        byte[] fingerprint = patchFingerprint;
+        if (fingerprint == null) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            for (Class<?> patch : new Class<?>[] {
+                    io.lunararcdevs.lunararc.common.server.LunarArcPluginFixManager.class,
+                    io.lunararcdevs.lunararc.common.mod.util.remapper.patcher.integrated.LunarArcIntegratedPatcher.class}) {
+                try (InputStream input = patch.getResourceAsStream(patch.getSimpleName() + ".class")) {
+                    if (input != null) digest.update(input.readAllBytes());
+                }
+            }
+            patchFingerprint = fingerprint = digest.digest();
+        }
+        return fingerprint;
+    }
+
     private static Path createTransformedCacheRoot(File pluginFile, PluginMappingNamespace mappingNamespace,
             String legacyFingerprint) {
         try {
@@ -269,7 +287,8 @@ public final class PluginClassLoader extends URLClassLoader
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8));
             digest.update(LunarArcServer.platformName().getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
-            digest.update("compat-transform-v31-paperlib-detects-paper".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            digest.update("compat-transform-v33".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            digest.update(patchFingerprint());
             if (legacyFingerprint != null) {
                 digest.update(legacyFingerprint.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             }

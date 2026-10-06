@@ -21,6 +21,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /** Concrete signed-book meta backed by Minecraft 1.21.1 WRITTEN_BOOK_CONTENT. */
+@org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
 public final class CraftMetaBookSigned extends CraftItemMeta implements BookMeta {
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
     private static final int MAX_PAGE_LENGTH = WritableBookContent.PAGE_EDIT_LENGTH;

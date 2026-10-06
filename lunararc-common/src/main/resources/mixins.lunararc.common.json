@@ -138,6 +138,7 @@
     "core.entity.EntitySelectorCollisionMixin",
     "core.entity.LightningBoltMixin",
     "core.entity.ItemEntityMixin",
+    "core.entity.ServerEntityMixin",
     "core.entity.PrimedTntMixin",
     "core.entity.ProjectileMixin",
     "core.entity.AreaEffectCloudMixin",

@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class BukkitCommandWrapper {
     private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc");
     private static final ConcurrentMap<String, AtomicInteger> PERMISSION_FAILURES = new ConcurrentHashMap<>();
+    private static final int MAX_SUGGESTIONS = 500;
     private final CommandMap commandMap;
     private final String label;
 
@@ -91,6 +92,7 @@ public final class BukkitCommandWrapper {
             if (argumentText.startsWith(" ")) argumentText = argumentText.substring(1);
             String[] args = hasArgumentInput ? argumentText.split(" ", -1) : new String[0];
             completions = command == null ? List.of() : command.tabComplete(sender, label, args);
+            if (command != null) completions = LunarArcEssentialsItemBridge.withModdedItems(command, args, completions);
         } catch (org.bukkit.command.CommandException exception) {
             throw exception;
         } catch (Throwable throwable) {
@@ -105,11 +107,17 @@ public final class BukkitCommandWrapper {
 
         String remaining = target.getRemainingLowerCase();
         if (completions == null) return target.buildFuture();
+        List<String> matches = new java.util.ArrayList<>();
         for (String completion : completions) {
             if (completion != null && completion.toLowerCase(java.util.Locale.ROOT).startsWith(remaining)) {
-                target.suggest(completion);
+                matches.add(completion);
             }
         }
+        if (matches.size() > MAX_SUGGESTIONS) {
+            matches.sort(String.CASE_INSENSITIVE_ORDER);
+            matches = matches.subList(0, MAX_SUGGESTIONS);
+        }
+        for (String match : matches) target.suggest(match);
         return target.buildFuture();
     }
 

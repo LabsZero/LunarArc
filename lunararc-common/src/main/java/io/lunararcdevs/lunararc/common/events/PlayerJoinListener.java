@@ -60,10 +60,10 @@ public final class PlayerJoinListener {
         player.sendMessage(Component.text("[LunarArc]", NamedTextColor.AQUA, TextDecoration.BOLD));
         player.sendMessage(Component.text(TranslationManager.get("ingame.update.available"), NamedTextColor.YELLOW));
         player.sendMessage(Component.text(TranslationManager.get("ingame.update.current"), NamedTextColor.GRAY)
-                .append(Component.text(LunarArcVersionInfo.lunarArcVersion(), NamedTextColor.YELLOW))
+                .append(Component.text(LunarArcVersionInfo.lunarArcVersion().replaceFirst("\\+.*$", ""), NamedTextColor.YELLOW))
                 .append(Component.text(" → ", NamedTextColor.DARK_GRAY))
                 .append(Component.text(TranslationManager.get("ingame.update.new"), NamedTextColor.GRAY))
-                .append(Component.text(release.version(), NamedTextColor.GREEN)));
+                .append(Component.text(release.displayVersion(), NamedTextColor.GREEN)));
         player.sendMessage(Component.text(TranslationManager.get("ingame.update.download_link"),
                         NamedTextColor.GOLD, TextDecoration.UNDERLINED)
                 .clickEvent(ClickEvent.openUrl(release.downloadUrl())));

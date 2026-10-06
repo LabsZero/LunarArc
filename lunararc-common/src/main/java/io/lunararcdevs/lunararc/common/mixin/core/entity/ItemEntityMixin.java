@@ -102,6 +102,15 @@ public abstract class ItemEntityMixin implements ItemEntityBridge {
             return;
         }
 
+        org.bukkit.event.player.PlayerAttemptPickupItemEvent attempt =
+                new org.bukkit.event.player.PlayerAttemptPickupItemEvent(bukkitPlayer, bukkitItem, remaining);
+        LunarArcServerAccess.getCraftServer(((net.minecraft.server.level.ServerPlayer) player).server)
+                .getPluginManager().callEvent(attempt);
+        if (attempt.isCancelled()) {
+            ci.cancel();
+            return;
+        }
+
         @SuppressWarnings("deprecation")
         org.bukkit.event.player.PlayerPickupItemEvent legacy =
                 new org.bukkit.event.player.PlayerPickupItemEvent(bukkitPlayer, bukkitItem, remaining);

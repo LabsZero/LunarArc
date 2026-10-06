@@ -32,6 +32,7 @@ public final class PaperCommands implements Commands {
 
     private final CommandDispatcher<net.minecraft.commands.CommandSourceStack> nmsDispatcher;
     private volatile net.minecraft.commands.CommandBuildContext buildContext;
+    private boolean invalid;
 
     private PaperCommands() {
         this.nmsDispatcher = null;

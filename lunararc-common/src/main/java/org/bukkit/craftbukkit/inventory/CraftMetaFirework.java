@@ -14,6 +14,7 @@ import org.bukkit.FireworkEffect;
 import org.bukkit.inventory.meta.FireworkMeta;
 
 /** Concrete firework-rocket metadata over Minecraft 1.21.1 FIREWORKS. */
+@org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
 public final class CraftMetaFirework extends CraftItemMeta implements FireworkMeta {
     private List<FireworkEffect> effects;
     private Integer power;

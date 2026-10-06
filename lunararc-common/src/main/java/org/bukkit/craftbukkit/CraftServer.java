@@ -188,6 +188,7 @@ public class CraftServer implements Server {
     }
 
     public CraftServer(MinecraftServer console, PlayerList playerList) {
+        org.bukkit.craftbukkit.inventory.SerializableMeta.register();
         this.console = console;
         this.potionBrewer = new org.bukkit.craftbukkit.potion.CraftPotionBrewer(console);
         this.playerList = playerList;
