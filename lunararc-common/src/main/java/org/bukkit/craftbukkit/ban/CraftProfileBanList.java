@@ -92,7 +92,7 @@ public final class CraftProfileBanList implements org.bukkit.ban.ProfileBanList 
         }
     }
     static com.destroystokyo.paper.profile.PlayerProfile toBukkit(GameProfile profile) {
-        io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile result = new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(profile.getId(), profile.getName());
+        com.destroystokyo.paper.profile.CraftPlayerProfile result = new com.destroystokyo.paper.profile.CraftPlayerProfile(profile.getId(), profile.getName());
         for (Property property : profile.getProperties().values()) {
             result.setProperty(new com.destroystokyo.paper.profile.ProfileProperty(property.name(), property.value(), property.signature()));
         }

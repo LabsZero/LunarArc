@@ -18,6 +18,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /** Concrete player-head metadata over Minecraft 1.21.1 PROFILE / NOTE_BLOCK_SOUND components. */
+@org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
 public final class CraftMetaSkull extends CraftItemMeta implements SkullMeta {
     private static final int MAX_OWNER_LENGTH = 16;
     private ResolvableProfile profile;
@@ -98,8 +99,8 @@ public final class CraftMetaSkull extends CraftItemMeta implements SkullMeta {
     }
 
     private static com.destroystokyo.paper.profile.PlayerProfile toPaperProfile(ResolvableProfile source) {
-        io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile result =
-                new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(source.id().orElse(null), source.name().orElse(null));
+        com.destroystokyo.paper.profile.CraftPlayerProfile result =
+                new com.destroystokyo.paper.profile.CraftPlayerProfile(source.id().orElse(null), source.name().orElse(null));
         for (Property p : source.properties().values()) {
             result.setProperty(new com.destroystokyo.paper.profile.ProfileProperty(p.name(), p.value(), p.signature()));
         }

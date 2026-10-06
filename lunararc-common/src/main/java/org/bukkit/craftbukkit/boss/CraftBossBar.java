@@ -1,4 +1,4 @@
-package io.lunararcdevs.lunararc.common.server;
+package org.bukkit.craftbukkit.boss;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerBossEvent;
@@ -25,13 +25,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 
-public final class LunarArcBossBar implements KeyedBossBar {
-    private static final Set<LunarArcBossBar> LIVE_BARS = ConcurrentHashMap.newKeySet();
+public final class CraftBossBar implements KeyedBossBar {
+    private static final Set<CraftBossBar> LIVE_BARS = ConcurrentHashMap.newKeySet();
 
     private final NamespacedKey key;
     private final ServerBossEvent handle;
 
-    private LunarArcBossBar(@Nullable NamespacedKey key, @Nullable String title,
+    private CraftBossBar(@Nullable NamespacedKey key, @Nullable String title,
             @NotNull BarColor color, @NotNull BarStyle style, BarFlag... flags) {
         this.key = key != null ? key : NamespacedKey.minecraft("lunararc_bossbar_" + UUID.randomUUID());
         this.handle = new ServerBossEvent(
@@ -45,24 +45,24 @@ public final class LunarArcBossBar implements KeyedBossBar {
     }
 
 
-    private LunarArcBossBar(@NotNull ServerBossEvent handle) {
+    private CraftBossBar(@NotNull ServerBossEvent handle) {
         this.key = NamespacedKey.minecraft("lunararc_wrapped_bossbar_" + UUID.randomUUID());
         this.handle = Objects.requireNonNull(handle, "handle");
     }
 
     /** Wraps an existing loader-owned NMS boss event without replacing it. */
     public static BossBar wrap(@NotNull ServerBossEvent handle) {
-        return new LunarArcBossBar(handle);
+        return new CraftBossBar(handle);
     }
 
     public static BossBar create(@Nullable String title, @NotNull BarColor color,
             @NotNull BarStyle style, BarFlag... flags) {
-        return new LunarArcBossBar(null, title, color, style, flags);
+        return new CraftBossBar(null, title, color, style, flags);
     }
 
     public static KeyedBossBar createKeyed(@NotNull NamespacedKey key, @Nullable String title,
             @NotNull BarColor color, @NotNull BarStyle style, BarFlag... flags) {
-        return new LunarArcBossBar(Objects.requireNonNull(key, "key"), title, color, style, flags);
+        return new CraftBossBar(Objects.requireNonNull(key, "key"), title, color, style, flags);
     }
 
     public ServerBossEvent getHandle() {
@@ -73,7 +73,7 @@ public final class LunarArcBossBar implements KeyedBossBar {
     public static Iterable<BossBar> activeFor(@NotNull Player player) {
         Objects.requireNonNull(player, "player");
         List<BossBar> result = new ArrayList<>();
-        for (LunarArcBossBar bar : LIVE_BARS) {
+        for (CraftBossBar bar : LIVE_BARS) {
             try {
                 if (bar.getPlayers().contains(player)) result.add(bar);
             } catch (Throwable ignored) {
@@ -85,7 +85,7 @@ public final class LunarArcBossBar implements KeyedBossBar {
     public static Iterable<net.kyori.adventure.bossbar.BossBar> activeAdventureFor(@NotNull Player player) {
         Objects.requireNonNull(player, "player");
         List<net.kyori.adventure.bossbar.BossBar> result = new ArrayList<>();
-        for (LunarArcBossBar bar : LIVE_BARS) {
+        for (CraftBossBar bar : LIVE_BARS) {
             try {
                 if (!bar.getPlayers().contains(player)) continue;
                 result.add(net.kyori.adventure.bossbar.BossBar.bossBar(

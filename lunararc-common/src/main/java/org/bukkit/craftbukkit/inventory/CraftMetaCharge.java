@@ -8,6 +8,7 @@ import org.bukkit.inventory.meta.FireworkEffectMeta;
 import org.jetbrains.annotations.Nullable;
 
 /** Concrete firework-star metadata over Minecraft 1.21.1 FIREWORK_EXPLOSION. */
+@org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
 public final class CraftMetaCharge extends CraftItemMeta implements FireworkEffectMeta {
     private FireworkEffect effect;
     public CraftMetaCharge() { super(); }

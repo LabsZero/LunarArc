@@ -33,22 +33,15 @@ public final class LunarArcPluginFixManager {
     }
 
     public static byte[] injectPluginFix(String className, byte[] clazz) {
+        if (className.endsWith(".cloud.paper.ModernPaperBrigadier")) {
+            return patch(clazz, LunarArcPluginFixManager::fixCloudBrigadierRemoval);
+        }
         Consumer<ClassNode> patcher = switch (className) {
             case "com.sk89q.worldedit.util.translation.TranslationManager" ->
                     LunarArcPluginFixManager::fixEmptyWorldEditTranslations;
             case "com.sk89q.worldedit.bukkit.adapter.impl.v1_21.PaperweightAdapter",
                  "com.sk89q.worldedit.bukkit.adapter.ext.fawe.v1_21_R1.PaperweightAdapter" ->
                     node -> helloWorld(node, "org.spigotmc.WatchdogThread", REPLACEMENT);
-            case "com.sk89q.worldedit.bukkit.paperlib.PaperLib" -> node -> {
-                removePaper0(node);
-                if (System.getProperty("paperlib.shown-benefits") == null) {
-                    System.setProperty("paperlib.shown-benefits", "1");
-                }
-            };
-            case "org.mvplugins.multiverse.external.paperlib.PaperLib",
-                 "me.SuperRonanCraft.BetterRTP.lib.paperlib.PaperLib",
-                 "com.plotsquared.bukkit.paperlib.PaperLib" ->
-                    LunarArcPluginFixManager::removePaper0;
             case "com.fastasyncworldedit.bukkit.util.MinecraftVersion" ->
                     node -> redirectMethodToGetNMSVersion(node, "getPackageVersion");
             case "com.ghostchu.quickshop.platform.spigot.AbstractSpigotPlatform" ->
@@ -62,6 +55,42 @@ public final class LunarArcPluginFixManager {
             default -> null;
         };
         return patcher == null ? clazz : patch(clazz, patcher);
+    }
+
+    private static void fixCloudBrigadierRemoval(ClassNode node) {
+        String self = Type.getInternalName(LunarArcPluginFixManager.class);
+        for (MethodNode method : node.methods) {
+            for (AbstractInsnNode instruction : method.instructions.toArray()) {
+                if (!(instruction instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKEVIRTUAL) continue;
+                if (call.owner.equals("java/lang/Class") && call.name.equals("getMethod")
+                        && call.desc.equals("(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;")) {
+                    method.instructions.set(call, new MethodInsnNode(Opcodes.INVOKESTATIC, self, "cloudGetMethod",
+                            "(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;", false));
+                } else if (call.owner.equals("java/lang/reflect/Method") && call.name.equals("invoke")
+                        && call.desc.equals("(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;")) {
+                    method.instructions.set(call, new MethodInsnNode(Opcodes.INVOKESTATIC, self, "cloudInvoke",
+                            "(Ljava/lang/reflect/Method;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false));
+                }
+            }
+        }
+    }
+
+    public static java.lang.reflect.Method cloudGetMethod(Class<?> type, String name, Class<?>[] parameters)
+            throws NoSuchMethodException {
+        if (type == com.mojang.brigadier.tree.CommandNode.class && name.equals("removeCommand")) {
+            return Object.class.getMethod("hashCode");
+        }
+        return type.getMethod(name, parameters);
+    }
+
+    public static Object cloudInvoke(java.lang.reflect.Method method, Object target, Object[] arguments) throws Exception {
+        if (method.getDeclaringClass() == Object.class && method.getName().equals("hashCode")
+                && target instanceof com.mojang.brigadier.tree.CommandNode<?> node
+                && arguments != null && arguments.length == 1 && arguments[0] instanceof String label) {
+            org.bukkit.craftbukkit.command.CraftCommandMap.removeBrigadierChild(node, label);
+            return null;
+        }
+        return method.invoke(target, arguments);
     }
 
     private static void fixEmptyWorldEditTranslations(ClassNode node) {
@@ -85,6 +114,24 @@ public final class LunarArcPluginFixManager {
 
     private static void fixEssentialsModdedMaterials(ClassNode node) {
         for (MethodNode method : node.methods) {
+            if (method.name.equals("getByName") && method.desc.endsWith(")Lcom/earth2me/essentials/items/FlatItemDb$ItemData;")) {
+                for (AbstractInsnNode instruction : method.instructions.toArray()) {
+                    if (instruction.getOpcode() != Opcodes.ACONST_NULL || instruction.getNext() == null
+                            || instruction.getNext().getOpcode() != Opcodes.ARETURN) continue;
+                    InsnList lookup = new InsnList();
+                    lookup.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    lookup.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                    lookup.add(new MethodInsnNode(Opcodes.INVOKESTATIC,
+                            Type.getInternalName(LunarArcEssentialsItemBridge.class), "moddedItemData",
+                            "(Ljava/lang/Object;Ljava/lang/String;)Ljava/lang/Object;", false));
+                    lookup.add(new org.objectweb.asm.tree.TypeInsnNode(Opcodes.CHECKCAST,
+                            "com/earth2me/essentials/items/FlatItemDb$ItemData"));
+                    method.instructions.insertBefore(instruction, lookup);
+                    method.instructions.remove(instruction);
+                    method.maxStack = Math.max(method.maxStack, 3);
+                }
+                continue;
+            }
             if (!method.name.equals("get")
                     || !method.desc.equals("(Ljava/lang/String;Z)Lorg/bukkit/inventory/ItemStack;")) {
                 continue;
@@ -119,7 +166,7 @@ public final class LunarArcPluginFixManager {
                         false));
                 method.instructions.insert(call, replacement);
                 method.maxStack = Math.max(method.maxStack, 2);
-                return;
+                break;
             }
         }
     }
@@ -242,11 +289,6 @@ public final class LunarArcPluginFixManager {
         String requested = itemName.trim().toLowerCase(Locale.ROOT);
         if (requested.isEmpty()) return null;
         return LunarArcEssentialsItemBridge.resolveAlias(requested);
-    }
-
-    private static void removePaper0(ClassNode node) {
-        helloWorld(node, "com.destroystokyo.paper.PaperConfig", REPLACEMENT);
-        helloWorld(node, "io.papermc.paper.configuration.Configuration", REPLACEMENT);
     }
 
     private static void redirectMethodToGetNMSVersion(ClassNode node, String methodName) {

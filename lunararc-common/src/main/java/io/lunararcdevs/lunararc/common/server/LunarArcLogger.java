@@ -27,7 +27,7 @@ public class LunarArcLogger extends java.util.logging.Logger {
         } else if (level == java.util.logging.Level.WARNING) {
             if (ex != null) slf4j.warn(msg, ex); else slf4j.warn(msg);
         } else if (level == java.util.logging.Level.INFO) {
-            if (ex != null) slf4j.debug(msg, ex); else slf4j.debug(msg);
+            if (ex != null) slf4j.info(msg, ex); else slf4j.info(msg);
         } else if (level == java.util.logging.Level.CONFIG || level == java.util.logging.Level.FINE) {
             if (ex != null) slf4j.debug(msg, ex); else slf4j.debug(msg);
         } else {

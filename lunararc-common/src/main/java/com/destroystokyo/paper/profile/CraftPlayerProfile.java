@@ -1,5 +1,6 @@
-package io.lunararcdevs.lunararc.common.server;
+package com.destroystokyo.paper.profile;
 
+import org.bukkit.craftbukkit.profile.CraftPlayerTextures;
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 import org.bukkit.profile.PlayerTextures;
@@ -18,13 +19,13 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 
-public class LunarArcPlayerProfile implements PlayerProfile {
+public class CraftPlayerProfile implements PlayerProfile {
     private UUID uuid;
     private String name;
     private final Set<ProfileProperty> properties = new HashSet<>();
     private PlayerTextures textures;
 
-    public LunarArcPlayerProfile(UUID uuid, String name) {
+    public CraftPlayerProfile(UUID uuid, String name) {
         this.uuid = uuid;
         this.name = name;
     }
@@ -46,7 +47,7 @@ public class LunarArcPlayerProfile implements PlayerProfile {
 
     @Override
     public @NotNull PlayerTextures getTextures() {
-        return textures != null ? textures : (textures = new LunarArcPlayerTextures());
+        return textures != null ? textures : (textures = new CraftPlayerTextures());
     }
 
     @Override
@@ -140,8 +141,8 @@ public class LunarArcPlayerProfile implements PlayerProfile {
     }
 
     @Override
-    public @NotNull LunarArcPlayerProfile clone() {
-        LunarArcPlayerProfile clone = new LunarArcPlayerProfile(uuid, name);
+    public @NotNull CraftPlayerProfile clone() {
+        CraftPlayerProfile clone = new CraftPlayerProfile(uuid, name);
         clone.properties.addAll(this.properties);
         clone.textures = this.textures;
         return clone;

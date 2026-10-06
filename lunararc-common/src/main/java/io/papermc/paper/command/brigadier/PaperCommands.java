@@ -1,5 +1,6 @@
-package io.lunararcdevs.lunararc.common.server;
+package io.papermc.paper.command.brigadier;
 
+import io.lunararcdevs.lunararc.common.server.LunarArcLifecycleEventRunner;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -7,7 +8,6 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.LiteralCommandNode;
-import io.lunararcdevs.lunararc.common.bridge.access.CommandNodeAccessBridge;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandRegistrationFlag;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -27,11 +27,29 @@ import java.util.Set;
  * Brigadier dispatcher. The NMS CommandSourceStack implements Paper's API via
  * a mixin, so no wrapper/proxy or platform dispatch layer is involved.
  */
-public final class LunarArcPaperCommands implements Commands {
-    private final CommandDispatcher<net.minecraft.commands.CommandSourceStack> nmsDispatcher;
+public final class PaperCommands implements Commands {
+    public static final PaperCommands INSTANCE = new PaperCommands();
 
-    public LunarArcPaperCommands(CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
+    private final CommandDispatcher<net.minecraft.commands.CommandSourceStack> nmsDispatcher;
+    private volatile net.minecraft.commands.CommandBuildContext buildContext;
+    private boolean invalid;
+
+    private PaperCommands() {
+        this.nmsDispatcher = null;
+    }
+
+    public PaperCommands(CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
         this.nmsDispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+    }
+
+    public net.minecraft.commands.CommandBuildContext getBuildContext() {
+        net.minecraft.commands.CommandBuildContext context = this.buildContext;
+        if (context == null) {
+            net.minecraft.server.MinecraftServer server = io.lunararcdevs.lunararc.common.LunarArcServerAccess.getMinecraftServer();
+            context = net.minecraft.commands.CommandBuildContext.simple(server.registryAccess(), server.getWorldData().enabledFeatures());
+            this.buildContext = context;
+        }
+        return context;
     }
 
     @Override
@@ -180,11 +198,7 @@ public final class LunarArcPaperCommands implements Commands {
         CommandNode<net.minecraft.commands.CommandSourceStack> existing = root.getChild(node.getLiteral());
         if (existing != null && !override) return false;
         if (existing != null) {
-            CommandNodeAccessBridge<net.minecraft.commands.CommandSourceStack> accessor =
-                    (CommandNodeAccessBridge<net.minecraft.commands.CommandSourceStack>) (Object) root;
-            accessor.lunararc$getChildren().remove(node.getLiteral());
-            accessor.lunararc$getLiterals().remove(node.getLiteral());
-            accessor.lunararc$getArguments().remove(node.getLiteral());
+            org.bukkit.craftbukkit.command.CraftCommandMap.removeBrigadierChild(root, node.getLiteral());
         }
         root.addChild(node);
         return true;

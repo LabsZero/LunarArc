@@ -94,14 +94,18 @@ public final class UpdateChecker {
             if (Files.exists(configPath)) {
                 try (java.io.InputStream in = Files.newInputStream(configPath)) {
                     props.load(in);
-                    if (!props.containsKey("enable_updates")) {
-                        props.setProperty("enable_updates", "true");
-                        try (java.io.OutputStream out = Files.newOutputStream(configPath)) {
-                            props.store(out, "LunarArc Server Configuration");
-                        }
-                    }
-                    enableUpdates = Boolean.parseBoolean(props.getProperty("enable_updates", "true"));
                 }
+                boolean dirty = !props.containsKey("enable_updates");
+                if (dirty) props.setProperty("enable_updates", "true");
+                dirty |= props.remove("update.current") != null;
+                dirty |= props.remove("update.latest") != null;
+                dirty |= props.remove("update.url") != null;
+                if (dirty) {
+                    try (java.io.OutputStream out = Files.newOutputStream(configPath)) {
+                        props.store(out, "LunarArc Server Configuration");
+                    }
+                }
+                enableUpdates = Boolean.parseBoolean(props.getProperty("enable_updates", "true"));
             } else {
                 props.setProperty("enable_updates", "true");
                 try (java.io.OutputStream out = Files.newOutputStream(configPath)) {
@@ -218,9 +222,11 @@ public final class UpdateChecker {
         return value.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]", "");
     }
     
+    private static final Path STATE_PATH = Paths.get(".lunararc", "update.state");
+
     private static boolean alreadyReported(String currentVersion, String tagName) {
         try {
-            Path configPath = Paths.get("lunararc.conf");
+            Path configPath = STATE_PATH;
             if (!Files.exists(configPath)) return false;
             Properties props = new Properties();
             try (java.io.InputStream in = Files.newInputStream(configPath)) {
@@ -235,21 +241,15 @@ public final class UpdateChecker {
 
     private static void saveUpdateInfo(String current, String latest, String url) {
         try {
-            Path configPath = Paths.get("lunararc.conf");
+            Path configPath = STATE_PATH;
             Properties props = new Properties();
-
-            if (Files.exists(configPath)) {
-                try (java.io.InputStream in = Files.newInputStream(configPath)) {
-                    props.load(in);
-                }
-            }
-
             props.setProperty("update.current", current);
             props.setProperty("update.latest", latest);
             props.setProperty("update.url", url);
 
+            Files.createDirectories(configPath.getParent());
             try (java.io.OutputStream out = Files.newOutputStream(configPath)) {
-                props.store(out, "LunarArc Server Configuration");
+                props.store(out, "LunarArc update state");
             }
         } catch (Exception ignored) {
         }

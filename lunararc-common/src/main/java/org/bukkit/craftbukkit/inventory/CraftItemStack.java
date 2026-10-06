@@ -260,6 +260,15 @@ public class CraftItemStack extends ItemStack {
     }
 
     @Override
+    public void removeEnchantments() {
+        CraftItemMeta meta = (CraftItemMeta) getItemMeta();
+        if (meta != null && meta.hasEnchants()) {
+            for (org.bukkit.enchantments.Enchantment ench : new java.util.ArrayList<>(meta.getEnchants().keySet())) meta.removeEnchant(ench);
+            setItemMeta(meta);
+        }
+    }
+
+    @Override
     public @NotNull java.util.Map<String, Object> serialize() {
         java.util.Map<String,Object> out = new java.util.LinkedHashMap<>();
         out.put("v", net.minecraft.SharedConstants.getCurrentVersion().getDataVersion().getVersion());

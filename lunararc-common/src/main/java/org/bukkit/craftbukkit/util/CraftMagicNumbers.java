@@ -79,12 +79,8 @@ public final class CraftMagicNumbers implements UnsafeValues {
         return "LunarArc";
     }
 
-    // Real Paper's UnsafeValues#getVersionFetcher() defaults to DummyVersionFetcher (produces
-    // "Unable to check for updates. No version provider set.") — overridden here with a real
-    // implementation checking LunarArc's actual GitHub releases. See LunarArcVersionFetcher's
-    // javadoc for the full rationale.
     private static final com.destroystokyo.paper.util.VersionFetcher VERSION_FETCHER =
-            new io.lunararcdevs.lunararc.common.server.LunarArcVersionFetcher();
+            new com.destroystokyo.paper.PaperVersionFetcher();
 
     @Override
     public com.destroystokyo.paper.util.VersionFetcher getVersionFetcher() {
@@ -373,18 +369,25 @@ public final class CraftMagicNumbers implements UnsafeValues {
     public static byte[] applyPaperPluginRewrites(PluginDescriptionFile pdf, String path, byte[] bytecode) {
         if (DISABLE_OLD_API_SUPPORT || commodoreUnavailable || pdf == null) return bytecode;
 
-        Commodore active = getCommodore();
-        if (active == null) return bytecode;
-
+        Thread thread = Thread.currentThread();
+        ClassLoader previousContext = thread.getContextClassLoader();
+        thread.setContextClassLoader(CraftMagicNumbers.class.getClassLoader());
         try {
-            // Paper disables loadCompatibilities() outright on 1.21.1, so activeCompatibilities is
-            // always empty there; passing an empty set matches that rather than inventing a config.
-            return active.convert(bytecode, pdf.getName(),
-                    ApiVersion.getOrCreateVersion(pdf.getAPIVersion()), java.util.Collections.emptySet());
-        } catch (Throwable ex) {
-            Bukkit.getLogger().log(java.util.logging.Level.SEVERE,
-                    "Fatal error trying to convert " + pdf.getFullName() + ":" + path, ex);
-            return bytecode;
+            Commodore active = getCommodore();
+            if (active == null) return bytecode;
+
+            try {
+                // Paper disables loadCompatibilities() outright on 1.21.1, so activeCompatibilities is
+                // always empty there; passing an empty set matches that rather than inventing a config.
+                return active.convert(bytecode, pdf.getName(),
+                        ApiVersion.getOrCreateVersion(pdf.getAPIVersion()), java.util.Collections.emptySet());
+            } catch (Throwable ex) {
+                Bukkit.getLogger().log(java.util.logging.Level.SEVERE,
+                        "Fatal error trying to convert " + pdf.getFullName() + ":" + path, ex);
+                return bytecode;
+            }
+        } finally {
+            thread.setContextClassLoader(previousContext);
         }
     }
 

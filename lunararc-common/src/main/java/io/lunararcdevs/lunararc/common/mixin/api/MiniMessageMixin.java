@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 /** Same reasoning as LegacyComponentSerializerMixin. */
 @Mixin(value = MiniMessage.class, remap = false)
 public interface MiniMessageMixin {
+    @SuppressWarnings("overwrite")
     @Overwrite
     static MiniMessage miniMessage() {
         return new MiniMessageProviderImpl().miniMessage();

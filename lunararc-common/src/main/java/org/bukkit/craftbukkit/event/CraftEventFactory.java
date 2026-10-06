@@ -249,12 +249,19 @@ public class CraftEventFactory {
     }
 
 
-    public static org.bukkit.event.entity.EntitySpawnEvent callEntitySpawnEvent(net.minecraft.world.entity.Entity entity) {
+    public static org.bukkit.event.Cancellable callEntitySpawnEvent(net.minecraft.world.entity.Entity entity) {
         org.bukkit.entity.Entity bukkitEntity = ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity();
         if (bukkitEntity == null) return null;
-        var event = new org.bukkit.event.entity.EntitySpawnEvent(bukkitEntity);
+        org.bukkit.event.Event event;
+        if (entity instanceof net.minecraft.world.entity.item.ItemEntity && bukkitEntity instanceof org.bukkit.entity.Item item) {
+            event = new org.bukkit.event.entity.ItemSpawnEvent(item);
+        } else if (bukkitEntity instanceof org.bukkit.entity.Vehicle vehicle) {
+            event = new org.bukkit.event.vehicle.VehicleCreateEvent(vehicle);
+        } else {
+            event = new org.bukkit.event.entity.EntitySpawnEvent(bukkitEntity);
+        }
         Bukkit.getPluginManager().callEvent(event);
-        return event;
+        return (org.bukkit.event.Cancellable) event;
     }
 
     public static org.bukkit.event.entity.CreatureSpawnEvent callCreatureSpawnEvent(net.minecraft.world.entity.LivingEntity entity, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason reason) {

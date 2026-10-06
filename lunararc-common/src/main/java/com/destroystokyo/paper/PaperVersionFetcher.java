@@ -1,4 +1,7 @@
-package io.lunararcdevs.lunararc.common.server;
+package com.destroystokyo.paper;
+
+import io.lunararcdevs.lunararc.common.server.LunarArcVersionInfo;
+import io.lunararcdevs.lunararc.common.server.LunarArcWorldVersionStamp;
 
 import com.destroystokyo.paper.util.VersionFetcher;
 import com.google.gson.JsonArray;
@@ -18,13 +21,23 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-public final class LunarArcVersionFetcher implements VersionFetcher {
+public final class PaperVersionFetcher implements VersionFetcher {
 
     private static final String API_URL = "https://api.github.com/repos/LunarArcDevs/LunarArc/releases";
     private static final int CONNECT_TIMEOUT_MILLIS = 3000;
     private static final int READ_TIMEOUT_MILLIS = 3000;
 
-    public record Release(String version, String downloadUrl) {
+    private static final java.util.regex.Pattern VERSION_NUMBER =
+            java.util.regex.Pattern.compile("\\d+(?:\\.\\d+)+(?:-[0-9A-Za-z.]+)?");
+
+    public record Release(String version, String downloadUrl, String name) {
+        public String displayVersion() {
+            for (String source : new String[] {name, version}) {
+                java.util.regex.Matcher matcher = VERSION_NUMBER.matcher(source == null ? "" : source);
+                if (matcher.find()) return matcher.group();
+            }
+            return version;
+        }
     }
 
     @Override
@@ -79,7 +92,7 @@ public final class LunarArcVersionFetcher implements VersionFetcher {
                     String tagName = stringValue(release, "tag_name");
                     String htmlUrl = stringValue(release, "html_url");
                     if (!tagName.isBlank() && !htmlUrl.isBlank()) {
-                        return Optional.of(new Release(tagName, htmlUrl));
+                        return Optional.of(new Release(tagName, htmlUrl, stringValue(release, "name")));
                     }
                 }
             }

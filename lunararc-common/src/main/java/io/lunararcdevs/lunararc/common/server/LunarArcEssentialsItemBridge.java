@@ -34,22 +34,26 @@ public final class LunarArcEssentialsItemBridge {
         if (essentials == null) return;
 
         try {
-            File itemsFile = new File(essentials.getDataFolder(), "items.json");
-            if (!itemsFile.isFile()) return;
-
-            List<String> lines = Files.readAllLines(itemsFile.toPath(), StandardCharsets.UTF_8);
-            List<String> updated = mergeModdedItems(lines);
-            if (updated == null) return;
-
-            Files.write(itemsFile.toPath(), updated, StandardCharsets.UTF_8);
-            LOGGER.info("[LunarArc] Added modded items to Essentials' items.json"
-                    + " - /give, /item and /i accept <namespace>_<path> and <namespace>:<path>.");
-            reloadEssentialsItemDb(essentials);
+            stripGeneratedEntries(essentials);
         } catch (Exception e) {
-            LOGGER.warn("[LunarArc] Could not add modded items to Essentials' items.json: {}", e.toString());
+            LOGGER.warn("[LunarArc] Could not clean up Essentials' items.json: {}", e.toString());
         } finally {
             prepareItemCommands(essentials);
         }
+    }
+
+    private static void stripGeneratedEntries(Plugin essentials) throws Exception {
+        File itemsFile = new File(essentials.getDataFolder(), "items.json");
+        if (!itemsFile.isFile()) return;
+
+        List<String> lines = Files.readAllLines(itemsFile.toPath(), StandardCharsets.UTF_8);
+        List<String> cleaned = withoutGeneratedEntries(lines);
+        if (cleaned == null) return;
+
+        Files.write(itemsFile.toPath(), cleaned, StandardCharsets.UTF_8);
+        LOGGER.info("[LunarArc] Removed {} modded item entries LunarArc used to write into Essentials' items.json;"
+                + " they are now resolved on demand.", (lines.size() - cleaned.size()) / 3);
+        reloadEssentialsItemDb(essentials);
     }
 
     private static Object getItemDb(Plugin essentials) throws ReflectiveOperationException {
@@ -61,12 +65,54 @@ public final class LunarArcEssentialsItemBridge {
         try {
             Object itemDb = getItemDb(essentials);
             itemDb.getClass().getMethod("get", String.class, boolean.class).invoke(itemDb, "stone", false);
-            itemDb.getClass().getMethod("listNames").invoke(itemDb);
             ClassLoader loader = essentials.getClass().getClassLoader();
             Class.forName("com.earth2me.essentials.commands.Commandgive", false, loader);
             Class.forName("com.earth2me.essentials.commands.Commanditem", false, loader);
         } catch (ReflectiveOperationException error) {
         }
+    }
+
+    private static volatile java.lang.reflect.Constructor<?> itemDataConstructor;
+
+    public static Object moddedItemData(Object itemDb, String name) {
+        Material material = resolveAlias(name);
+        if (material == null) return null;
+        try {
+            java.lang.reflect.Constructor<?> constructor = itemDataConstructor;
+            if (constructor == null) {
+                Class<?> data = Class.forName("com.earth2me.essentials.items.FlatItemDb$ItemData", false,
+                        itemDb.getClass().getClassLoader());
+                constructor = data.getDeclaredConstructor(Material.class);
+                constructor.setAccessible(true);
+                itemDataConstructor = constructor;
+            }
+            return constructor.newInstance(material);
+        } catch (ReflectiveOperationException error) {
+            return null;
+        }
+    }
+
+    private static final int MODDED_COMPLETION_LIMIT = 200;
+
+    public static List<String> withModdedItems(org.bukkit.command.Command command, String[] args, List<String> completions) {
+        if (args.length == 0 || !(command instanceof org.bukkit.command.PluginIdentifiableCommand owned)
+                || !ESSENTIALS_CLASS.equals(owned.getPlugin().getClass().getName())) {
+            return completions;
+        }
+        String name = command.getName();
+        int itemArgument = name.equals("give") ? 1 : name.equals("item") ? 0 : -1;
+        String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
+        if (args.length - 1 != itemArgument || prefix.length() < 2) return completions;
+
+        MODDED_ITEM_ALIASES.refresh();
+        List<String> merged = completions == null ? new ArrayList<>() : new ArrayList<>(completions);
+        List<String> matches = new ArrayList<>();
+        for (String alias : MODDED_ITEM_ALIASES.names()) {
+            if (alias.startsWith(prefix)) matches.add(alias);
+        }
+        java.util.Collections.sort(matches);
+        merged.addAll(matches.subList(0, Math.min(matches.size(), MODDED_COMPLETION_LIMIT)));
+        return merged;
     }
 
     /** Resolves Essentials' namespace_path form without scanning every registered item. */
@@ -93,6 +139,10 @@ public final class LunarArcEssentialsItemBridge {
                 return snapshot.aliases().get(alias);
             } finally {
             }
+        }
+
+        java.util.Set<String> names() {
+            return snapshot.aliases().keySet();
         }
 
         void refresh() {
@@ -129,70 +179,57 @@ public final class LunarArcEssentialsItemBridge {
         return null;
     }
 
-    private static List<String> mergeModdedItems(List<String> lines) {
-        int closingBrace = -1;
-        for (int i = lines.size() - 1; i >= 0; i--) {
-            String trimmed = lines.get(i).trim();
-            if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
-            if (trimmed.equals("}")) closingBrace = i;
-            break;
-        }
-        if (closingBrace < 0) return null;
-
-        Set<String> existingAliases = indexAliases(lines);
-        List<String> additions = new ArrayList<>();
+    private static List<String> withoutGeneratedEntries(List<String> lines) {
+        Map<String, String> generated = new java.util.HashMap<>();
         for (Map.Entry<ResourceLocation, Material> entry : LunarArcDynamicBukkitEnums.materialsById().entrySet()) {
             ResourceLocation id = entry.getKey();
-            if ("minecraft".equals(id.getNamespace())) continue;
             Material material = entry.getValue();
-            if (material == null || !material.isItem()) continue;
-
-            String alias = (id.getNamespace() + "_" + id.getPath()).toLowerCase(Locale.ROOT);
-            if (!existingAliases.add(alias)) continue;
-
-            additions.add("  \"" + alias + "\": {");
-            additions.add("    \"material\": \"" + material.name() + "\"");
-            additions.add("  },");
-        }
-        if (additions.isEmpty()) return null;
-
-        int lastContentLine = closingBrace - 1;
-        while (lastContentLine >= 0 && lines.get(lastContentLine).trim().isEmpty()) lastContentLine--;
-        if (lastContentLine >= 0) {
-            String content = lines.get(lastContentLine);
-            String trimmed = content.trim();
-            if (!trimmed.isEmpty() && !trimmed.endsWith(",") && !trimmed.endsWith("{")) {
-                lines.set(lastContentLine, content + ",");
+            if (!"minecraft".equals(id.getNamespace()) && material != null && material.isItem()) {
+                generated.put((id.getNamespace() + "_" + id.getPath()).toLowerCase(Locale.ROOT), material.name());
             }
         }
 
-        int lastAddition = additions.size() - 1;
-        String lastLine = additions.get(lastAddition);
-        additions.set(lastAddition, lastLine.substring(0, lastLine.length() - 1));
+        List<String> kept = new ArrayList<>(lines.size());
+        boolean removed = false;
+        for (int i = 0; i < lines.size(); i++) {
+            String alias = quotedKey(lines.get(i));
+            String material = alias == null ? null : generated.get(alias);
+            if (material != null && i + 2 < lines.size()
+                    && lines.get(i + 1).trim().equals("\"material\": \"" + material + "\"")
+                    && lines.get(i + 2).trim().startsWith("}")) {
+                i += 2;
+                removed = true;
+                continue;
+            }
+            kept.add(lines.get(i));
+        }
+        if (!removed) return null;
 
-        List<String> result = new ArrayList<>(lines.size() + additions.size());
-        result.addAll(lines.subList(0, closingBrace));
-        result.addAll(additions);
-        result.addAll(lines.subList(closingBrace, lines.size()));
-        return result;
+        for (int i = kept.size() - 1; i > 0; i--) {
+            String trimmed = kept.get(i).trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+            if (trimmed.equals("}")) {
+                for (int j = i - 1; j >= 0; j--) {
+                    String previous = kept.get(j);
+                    if (previous.trim().isEmpty()) continue;
+                    if (previous.trim().endsWith(",")) kept.set(j, previous.substring(0, previous.lastIndexOf(',')));
+                    break;
+                }
+            }
+            break;
+        }
+        return kept;
     }
 
-    private static Set<String> indexAliases(List<String> lines) {
-        Set<String> aliases = new HashSet<>();
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.length() < 3 || trimmed.charAt(0) != '\"') continue;
-
-            int endQuote = trimmed.indexOf('\"', 1);
-            if (endQuote <= 1) continue;
-
-            int colon = endQuote + 1;
-            while (colon < trimmed.length() && Character.isWhitespace(trimmed.charAt(colon))) colon++;
-            if (colon < trimmed.length() && trimmed.charAt(colon) == ':') {
-                aliases.add(trimmed.substring(1, endQuote));
-            }
-        }
-        return aliases;
+    private static String quotedKey(String line) {
+        String trimmed = line.trim();
+        if (trimmed.length() < 4 || trimmed.charAt(0) != '"') return null;
+        int endQuote = trimmed.indexOf('"', 1);
+        if (endQuote <= 1) return null;
+        int colon = endQuote + 1;
+        while (colon < trimmed.length() && Character.isWhitespace(trimmed.charAt(colon))) colon++;
+        return colon < trimmed.length() && trimmed.charAt(colon) == ':' && trimmed.endsWith("{")
+                ? trimmed.substring(1, endQuote) : null;
     }
 
     private static void reloadEssentialsItemDb(Plugin essentials) {

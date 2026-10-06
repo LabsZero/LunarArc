@@ -53,8 +53,7 @@ allprojects {
     version = rootProject.ext.lunarArcEffectiveVersion()
 
     ext {
-        // Reuses the same hash lunarArcEffectiveVersion() already computed above, rather than
-        // re-running git a second time with the same (previously broken) exec pattern.
+
         gitHash = lunarArcGitHash ?: 'unknown'
         gitBranch = { ->
             try {

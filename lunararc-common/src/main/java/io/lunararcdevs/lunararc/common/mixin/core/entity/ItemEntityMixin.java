@@ -20,6 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ItemEntityMixin implements ItemEntityBridge {
     @Shadow public int pickupDelay;
     @Shadow public java.util.UUID target;
+    @Shadow private int age;
     @Shadow public abstract ItemStack getItem();
     @Unique private boolean lunararc$canMobPickup = true;
     @Unique private TriState lunararc$frictionState = TriState.NOT_SET;
@@ -45,6 +46,38 @@ public abstract class ItemEntityMixin implements ItemEntityBridge {
     }
 
 
+    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "tick", require = 0,
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/item/ItemEntity;discard()V", ordinal = 1))
+    private void lunararc$despawnEvent(ItemEntity self,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> original) {
+        if (org.bukkit.event.entity.ItemDespawnEvent.getHandlerList().getRegisteredListeners().length != 0
+                && ((EntityBridge) self).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Item item) {
+            org.bukkit.event.entity.ItemDespawnEvent event =
+                    new org.bukkit.event.entity.ItemDespawnEvent(item, item.getLocation());
+            LunarArcServerAccess.getCraftServer(self.level().getServer()).getPluginManager().callEvent(event);
+            if (event.isCancelled()) {
+                this.age = 0;
+                return;
+            }
+        }
+        original.call(self);
+    }
+
+    @Inject(method = "merge(Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;"
+            + "Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;)V",
+            at = @At("HEAD"), cancellable = true, require = 0)
+    private static void lunararc$mergeEvent(ItemEntity target, ItemStack targetStack, ItemEntity source,
+            ItemStack sourceStack, CallbackInfo ci) {
+        if (org.bukkit.event.entity.ItemMergeEvent.getHandlerList().getRegisteredListeners().length == 0
+                || !(((EntityBridge) source).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Item bukkitSource)
+                || !(((EntityBridge) target).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Item bukkitTarget)) {
+            return;
+        }
+        org.bukkit.event.entity.ItemMergeEvent event = new org.bukkit.event.entity.ItemMergeEvent(bukkitSource, bukkitTarget);
+        LunarArcServerAccess.getCraftServer(target.level().getServer()).getPluginManager().callEvent(event);
+        if (event.isCancelled()) ci.cancel();
+    }
+
     @Inject(method = "playerTouch", at = @At("HEAD"), cancellable = true, require = 0)
     private void lunararc$pickupEvents(Player player, CallbackInfo ci) {
         ItemEntity self = (ItemEntity) (Object) this;
@@ -66,6 +99,15 @@ public abstract class ItemEntityMixin implements ItemEntityBridge {
         Object bukkitItemObject = ((EntityBridge) self).lunararc$getBukkitEntity();
         if (!(bukkitPlayerObject instanceof org.bukkit.entity.Player bukkitPlayer)
                 || !(bukkitItemObject instanceof org.bukkit.entity.Item bukkitItem)) {
+            return;
+        }
+
+        org.bukkit.event.player.PlayerAttemptPickupItemEvent attempt =
+                new org.bukkit.event.player.PlayerAttemptPickupItemEvent(bukkitPlayer, bukkitItem, remaining);
+        LunarArcServerAccess.getCraftServer(((net.minecraft.server.level.ServerPlayer) player).server)
+                .getPluginManager().callEvent(attempt);
+        if (attempt.isCancelled()) {
+            ci.cancel();
             return;
         }
 

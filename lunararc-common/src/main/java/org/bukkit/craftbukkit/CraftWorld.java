@@ -987,6 +987,8 @@ public class CraftWorld implements World {
     public void setStorm(boolean hasStorm) {
         if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
             data.setRaining(hasStorm);
+            setWeatherDuration(0);
+            setClearWeatherDuration(0);
         }
     }
 
@@ -1014,6 +1016,8 @@ public class CraftWorld implements World {
     public void setThundering(boolean thundering) {
         if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
             data.setThundering(thundering);
+            setThunderDuration(0);
+            setClearWeatherDuration(0);
         }
     }
 

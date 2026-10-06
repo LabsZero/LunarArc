@@ -1,5 +1,15 @@
 package io.lunararcdevs.lunararc.common.server;
 
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.HolderSet;
+import net.minecraft.core.Holder;
+import net.kyori.adventure.key.Key;
+import io.papermc.paper.registry.tag.TagKey;
+import io.papermc.paper.registry.tag.Tag;
+import io.papermc.paper.registry.TypedKey;
+import io.papermc.paper.registry.RegistryKey;
+import io.lunararcdevs.lunararc.common.LunarArcServerAccess;
 import org.bukkit.Keyed;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -17,7 +27,7 @@ import java.util.NoSuchElementException;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
+public final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
     private final Map<NamespacedKey, T> byKey;
     private final List<T> values;
 
@@ -26,7 +36,7 @@ final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
         this.values = values;
     }
 
-    static <T extends Keyed> Registry<T> forType(Class<T> type) {
+    public static <T extends Keyed> Registry<T> forType(Class<T> type) {
         if (type == null) return empty();
 
         Map<NamespacedKey, T> byKey = new LinkedHashMap<>();
@@ -44,7 +54,7 @@ final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
                 Collections.unmodifiableList(values));
     }
 
-    static <T extends Keyed> Registry<T> fromValues(java.util.Collection<T> source) {
+    public static <T extends Keyed> Registry<T> fromValues(java.util.Collection<T> source) {
         Map<NamespacedKey, T> byKey = new LinkedHashMap<>();
         List<T> values = new ArrayList<>();
         for (T value : source) {
@@ -55,12 +65,12 @@ final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
                 Collections.unmodifiableList(values));
     }
 
-    static <T extends Keyed> Registry<T> empty() {
+    public static <T extends Keyed> Registry<T> empty() {
         return new LunarArcBukkitRegistry<>(Collections.emptyMap(), Collections.emptyList());
     }
 
 
-    static <T extends Keyed> Registry<T> lazy(Supplier<Collection<T>> valuesSupplier) {
+    public static <T extends Keyed> Registry<T> lazy(Supplier<Collection<T>> valuesSupplier) {
         return new LazyRegistry<>(valuesSupplier);
     }
 
@@ -129,4 +139,96 @@ final class LunarArcBukkitRegistry<T extends Keyed> implements Registry<T> {
 
     @Override public @NotNull Iterator<T> iterator() { return values.iterator(); }
     @Override public @NotNull Stream<T> stream() { return values.stream(); }
+
+    public static final class Tagged<T extends Keyed> implements Registry<T> {
+        private final Registry<T> delegate;
+        private final RegistryKey<T> registryKey;
+
+        public Tagged(Registry<T> delegate, RegistryKey<T> registryKey) {
+            this.delegate = delegate;
+            this.registryKey = registryKey;
+        }
+
+        @Override
+        public @Nullable T get(@NotNull NamespacedKey key) {
+            return delegate.get(key);
+        }
+
+        @Override
+        public @NotNull T getOrThrow(@NotNull NamespacedKey key) {
+            return delegate.getOrThrow(key);
+        }
+
+        @Override
+        public @NotNull Stream<T> stream() {
+            return delegate.stream();
+        }
+
+        @Override
+        public @NotNull Iterator<T> iterator() {
+            return delegate.iterator();
+        }
+
+        @Override
+        public @Nullable NamespacedKey getKey(@NotNull T value) {
+            return delegate.getKey(value);
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private java.util.Optional<HolderSet.Named<Object>> nmsTag(TagKey<T> key) {
+            net.minecraft.core.Registry<Object> nms = LunarArcServerAccess.getMinecraftServer().registryAccess()
+                    .registryOrThrow((ResourceKey) io.papermc.paper.registry.PaperRegistries.registryToNms(registryKey));
+            net.minecraft.tags.TagKey<Object> nmsKey = net.minecraft.tags.TagKey.create(nms.key(),
+                    ResourceLocation.parse(key.key().asString()));
+            return nms.getTag(nmsKey);
+        }
+
+        @Override
+        public boolean hasTag(@NotNull TagKey<T> key) {
+            return nmsTag(key).isPresent();
+        }
+
+        @Override
+        public @NotNull Tag<T> getTag(@NotNull TagKey<T> key) {
+            HolderSet.Named<Object> named = nmsTag(key)
+                    .orElseThrow(() -> new java.util.NoSuchElementException("No tag " + key.key() + " in " + registryKey));
+            List<TypedKey<T>> values = new ArrayList<>();
+            for (Holder<Object> holder : named) {
+                holder.unwrapKey().ifPresent(resourceKey ->
+                        values.add(TypedKey.create(registryKey, Key.key(resourceKey.location().getNamespace(), resourceKey.location().getPath()))));
+            }
+            return new TagImpl<>(key, registryKey, List.copyOf(values));
+        }
+
+        private record TagImpl<T extends Keyed>(TagKey<T> tagKey, RegistryKey<T> registryKey, List<TypedKey<T>> keys) implements Tag<T> {
+            @Override
+            public @NotNull Collection<TypedKey<T>> values() {
+                return keys;
+            }
+
+            @Override
+            public int size() {
+                return keys.size();
+            }
+
+            @Override
+            public @NotNull Collection<T> resolve(@NotNull Registry<T> registry) {
+                List<T> resolved = new ArrayList<>(keys.size());
+                for (TypedKey<T> typed : keys) {
+                    resolved.add(registry.getOrThrow(new NamespacedKey(typed.key().namespace(), typed.key().value())));
+                }
+                return resolved;
+            }
+
+            @Override
+            public boolean contains(@NotNull TypedKey<T> key) {
+                return keys.contains(key);
+            }
+
+            @Override
+            public @NotNull Iterator<TypedKey<T>> iterator() {
+                return keys.iterator();
+            }
+        }
+    }
 }

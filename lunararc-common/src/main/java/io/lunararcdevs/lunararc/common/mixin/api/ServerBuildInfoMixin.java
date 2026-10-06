@@ -1,6 +1,6 @@
 package io.lunararcdevs.lunararc.common.mixin.api;
 
-import io.lunararcdevs.lunararc.common.server.LunarArcServerBuildInfo;
+import io.papermc.paper.ServerBuildInfoImpl;
 import io.papermc.paper.ServerBuildInfo;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -19,6 +19,6 @@ public interface ServerBuildInfoMixin {
      */
     @Overwrite
     static ServerBuildInfo buildInfo() {
-        return LunarArcServerBuildInfo.INSTANCE;
+        return ServerBuildInfoImpl.INSTANCE;
     }
 }

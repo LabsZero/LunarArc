@@ -313,6 +313,7 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         lunararc$applyInventoryOpenTitle(cir);
     }
 
+    @SuppressWarnings("target")
     @Inject(method = "openMenu(Lnet/minecraft/world/MenuProvider;Ljava/util/function/Consumer;)Ljava/util/OptionalInt;", at = @At("RETURN"), require = 0)
     private void lunararc$finishInventoryOpenWithExtraData(net.minecraft.world.MenuProvider provider,
             java.util.function.Consumer<?> extraDataWriter, CallbackInfoReturnable<java.util.OptionalInt> cir) {

@@ -25,6 +25,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /** 1.21.1 PotionMeta backed directly by the POTION_CONTENTS data component. */
+@org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
 public final class CraftMetaPotion extends CraftItemMeta implements PotionMeta {
     private PotionType baseType;
     private List<PotionEffect> customEffects = new ArrayList<>();

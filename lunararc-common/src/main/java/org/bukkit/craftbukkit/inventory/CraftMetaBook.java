@@ -20,6 +20,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /** Concrete writable-book meta backed by Minecraft 1.21.1 WRITABLE_BOOK_CONTENT. */
+@org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
 public class CraftMetaBook extends CraftItemMeta implements BookMeta, WritableBookMeta {
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
     private static final int MAX_PAGES = WritableBookContent.MAX_PAGES;

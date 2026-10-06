@@ -91,6 +91,23 @@ public class CraftServer implements Server {
         public YamlConfiguration getPaperConfig() {
             return paperGlobalConfig;
         }
+
+        @Override
+        public void restart() {
+            org.spigotmc.RestartCommand.restart();
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public void broadcast(net.md_5.bungee.api.chat.BaseComponent component) {
+            for (Player player : getOnlinePlayers()) player.spigot().sendMessage(component);
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public void broadcast(net.md_5.bungee.api.chat.BaseComponent... components) {
+            for (Player player : getOnlinePlayers()) player.spigot().sendMessage(components);
+        }
     };
     private final StandardMessenger messenger = new StandardMessenger();
     private final org.bukkit.craftbukkit.scheduler.CraftScheduler scheduler = new org.bukkit.craftbukkit.scheduler.CraftScheduler();
@@ -171,6 +188,7 @@ public class CraftServer implements Server {
     }
 
     public CraftServer(MinecraftServer console, PlayerList playerList) {
+        org.bukkit.craftbukkit.inventory.SerializableMeta.register();
         this.console = console;
         this.potionBrewer = new org.bukkit.craftbukkit.potion.CraftPotionBrewer(console);
         this.playerList = playerList;
@@ -206,7 +224,7 @@ public class CraftServer implements Server {
             existingVersion.unregister(commandMap);
             commandMap.getKnownCommands().entrySet().removeIf(e -> e.getValue() == existingVersion);
         }
-        commandMap.register("bukkit", new io.lunararcdevs.lunararc.common.server.LunarArcVersionCommand("version"));
+        commandMap.register("bukkit", new org.bukkit.command.defaults.VersionCommand("version"));
 
         org.bukkit.command.Command existingPlugins = commandMap.getCommand("plugins");
         if (existingPlugins != null) {
@@ -533,7 +551,7 @@ public class CraftServer implements Server {
     }
 
     public void disablePluginsForShutdown() {
-        if (commandMap instanceof io.lunararcdevs.lunararc.common.server.LunarArcCommandMap lunarArcMap) {
+        if (commandMap instanceof org.bukkit.craftbukkit.command.CraftCommandMap lunarArcMap) {
             lunarArcMap.beginShutdown();
         }
         disablePlugins();
@@ -548,13 +566,13 @@ public class CraftServer implements Server {
 
     public void clearPluginsForShutdown() {
         simplePluginManager.clearPlugins();
-        io.lunararcdevs.lunararc.common.server.LunarArcCommandMap.setDispatcher(null);
+        org.bukkit.craftbukkit.command.CraftCommandMap.setDispatcher(null);
         io.lunararcdevs.lunararc.common.server.LunarArcContext.clearServerReferences();
     }
 
     public void syncCommands() {
         com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher = console.getCommands().getDispatcher();
-        if (commandMap instanceof io.lunararcdevs.lunararc.common.server.LunarArcCommandMap lunarArcMap) {
+        if (commandMap instanceof org.bukkit.craftbukkit.command.CraftCommandMap lunarArcMap) {
             lunarArcMap.syncToBrigadier(dispatcher);
         }
         for (net.minecraft.server.level.ServerPlayer player : console.getPlayerList().getPlayers()) {
@@ -730,36 +748,52 @@ public class CraftServer implements Server {
 
     @Override
     public int broadcastMessage(@NotNull String message) {
-        int count = 0;
-        for (Player p : getOnlinePlayers()) { p.sendMessage(message); count++; }
-        getConsoleSender().sendMessage(message);
-        return count;
+        Set<CommandSender> recipients = new LinkedHashSet<>(getOnlinePlayers());
+        recipients.add(getConsoleSender());
+        return broadcastTo(message, recipients);
     }
 
     @Override
     public int broadcast(@NotNull String message, @NotNull String permission) {
-        int count = 0;
+        Set<CommandSender> recipients = new LinkedHashSet<>();
         for (Player p : getOnlinePlayers()) {
-            if (p.hasPermission(permission)) { p.sendMessage(message); count++; }
+            if (p.hasPermission(permission)) recipients.add(p);
         }
-        return count;
+        return broadcastTo(message, recipients);
     }
 
     @Override
     public int broadcast(@NotNull net.kyori.adventure.text.Component message, @NotNull String permission) {
-        int count = 0;
+        Set<CommandSender> recipients = new LinkedHashSet<>();
         for (Player p : getOnlinePlayers()) {
-            if (p.hasPermission(permission)) { p.sendMessage(message); count++; }
+            if (p.hasPermission(permission)) recipients.add(p);
         }
-        return count;
+        return broadcastTo(message, recipients);
+    }
+
+    private int broadcastTo(String message, Set<CommandSender> recipients) {
+        org.bukkit.event.server.BroadcastMessageEvent event =
+                new org.bukkit.event.server.BroadcastMessageEvent(!Bukkit.isPrimaryThread(), message, recipients);
+        getPluginManager().callEvent(event);
+        if (event.isCancelled()) return 0;
+        for (CommandSender recipient : event.getRecipients()) recipient.sendMessage(event.getMessage());
+        return event.getRecipients().size();
+    }
+
+    private int broadcastTo(net.kyori.adventure.text.Component message, Set<CommandSender> recipients) {
+        org.bukkit.event.server.BroadcastMessageEvent event =
+                new org.bukkit.event.server.BroadcastMessageEvent(!Bukkit.isPrimaryThread(), message, recipients);
+        getPluginManager().callEvent(event);
+        if (event.isCancelled()) return 0;
+        for (CommandSender recipient : event.getRecipients()) recipient.sendMessage(event.message());
+        return event.getRecipients().size();
     }
 
     @Override
     public int broadcast(@NotNull net.kyori.adventure.text.Component message) {
-        int count = 0;
-        for (Player p : getOnlinePlayers()) { p.sendMessage(message); count++; }
-        getConsoleSender().sendMessage(message);
-        return count;
+        Set<CommandSender> recipients = new LinkedHashSet<>(getOnlinePlayers());
+        recipients.add(getConsoleSender());
+        return broadcastTo(message, recipients);
     }
 
     @Override
@@ -925,8 +959,8 @@ public class CraftServer implements Server {
 
         com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher =
                 console.getCommands().getDispatcher();
-        io.lunararcdevs.lunararc.common.server.LunarArcPaperCommands registrar =
-                new io.lunararcdevs.lunararc.common.server.LunarArcPaperCommands(dispatcher);
+        io.papermc.paper.command.brigadier.PaperCommands registrar =
+                new io.papermc.paper.command.brigadier.PaperCommands(dispatcher);
         io.lunararcdevs.lunararc.common.server.LunarArcReloadableRegistrarEvent<io.papermc.paper.command.brigadier.Commands> lifecycle =
                 new io.lunararcdevs.lunararc.common.server.LunarArcReloadableRegistrarEvent<>(
                         registrar,
@@ -1494,7 +1528,7 @@ public class CraftServer implements Server {
             this.logger.log(java.util.logging.Level.WARNING, "Unable to reload commands.yml", ex);
             return false;
         }
-        if (this.commandMap instanceof io.lunararcdevs.lunararc.common.server.LunarArcCommandMap lunarArcCommandMap) {
+        if (this.commandMap instanceof org.bukkit.craftbukkit.command.CraftCommandMap lunarArcCommandMap) {
             return lunarArcCommandMap.reloadServerAliases(previous, this.getCommandAliases());
         }
         return false;
@@ -1597,13 +1631,13 @@ public class CraftServer implements Server {
     @Override
     public @NotNull com.destroystokyo.paper.profile.PlayerProfile createProfile(@Nullable UUID uuid,
             @Nullable String name) {
-        return new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(uuid, name);
+        return new com.destroystokyo.paper.profile.CraftPlayerProfile(uuid, name);
     }
 
     @Override
     public @NotNull com.destroystokyo.paper.profile.PlayerProfile createProfileExact(@Nullable UUID uuid,
             @Nullable String name) {
-        return new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(uuid, name);
+        return new com.destroystokyo.paper.profile.CraftPlayerProfile(uuid, name);
     }
 
     @Override
@@ -1789,7 +1823,7 @@ public class CraftServer implements Server {
     @Override
     public @Nullable <T extends Keyed> Registry<T> getRegistry(@NotNull Class<T> type) {
         if (type == null) return null;
-        return io.lunararcdevs.lunararc.common.server.LunarArcRegistryAccess.INSTANCE.getRegistry(type);
+        return io.papermc.paper.registry.PaperRegistryAccess.INSTANCE.getRegistry(type);
     }
 
     @Override
@@ -1863,7 +1897,7 @@ public class CraftServer implements Server {
             var holders = net.minecraft.core.registries.BuiltInRegistries.GAME_EVENT.getTag(key);
             if (holders.isEmpty()) return null;
             java.util.LinkedHashSet<T> values = new java.util.LinkedHashSet<>();
-            Registry<org.bukkit.GameEvent> gameEvents = io.lunararcdevs.lunararc.common.server.LunarArcRegistryAccess.INSTANCE
+            Registry<org.bukkit.GameEvent> gameEvents = io.papermc.paper.registry.PaperRegistryAccess.INSTANCE
                     .getRegistry(org.bukkit.GameEvent.class);
             for (var holder : holders.get()) {
                 var id = net.minecraft.core.registries.BuiltInRegistries.GAME_EVENT.getKey(holder.value());
@@ -1976,7 +2010,7 @@ public class CraftServer implements Server {
             @NotNull BarColor color, @NotNull BarStyle style, @NotNull BarFlag... flags) {
         Objects.requireNonNull(key, "key");
         if (bossBars.containsKey(key)) throw new IllegalArgumentException("Boss bar already exists: " + key);
-        KeyedBossBar bar = io.lunararcdevs.lunararc.common.server.LunarArcBossBar.createKeyed(key, title, color, style, flags);
+        KeyedBossBar bar = org.bukkit.craftbukkit.boss.CraftBossBar.createKeyed(key, title, color, style, flags);
         bossBars.put(key, bar);
         return bar;
     }
@@ -1984,7 +2018,7 @@ public class CraftServer implements Server {
     @Override
     public @NotNull BossBar createBossBar(@Nullable String title, @NotNull BarColor color, @NotNull BarStyle style,
             @NotNull BarFlag... flags) {
-        return io.lunararcdevs.lunararc.common.server.LunarArcBossBar.create(title, color, style, flags);
+        return org.bukkit.craftbukkit.boss.CraftBossBar.create(title, color, style, flags);
     }
 
     @Override
@@ -2049,7 +2083,7 @@ public class CraftServer implements Server {
 
     @Override
     public @NotNull PlayerProfile createPlayerProfile(@Nullable UUID uniqueId, @Nullable String name) {
-        return new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(uniqueId, name);
+        return new com.destroystokyo.paper.profile.CraftPlayerProfile(uniqueId, name);
     }
 
     @Override
@@ -2059,13 +2093,13 @@ public class CraftServer implements Server {
             var profile = console.getProfileCache().get(uniqueId);
             if (profile.isPresent()) name = profile.get().getName();
         } catch (Throwable ignored) {}
-        return new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(uniqueId, name);
+        return new com.destroystokyo.paper.profile.CraftPlayerProfile(uniqueId, name);
     }
 
     @Override
     public @NotNull PlayerProfile createPlayerProfile(@NotNull String name) {
         UUID id = getPlayerUniqueId(name);
-        return new io.lunararcdevs.lunararc.common.server.LunarArcPlayerProfile(id, name);
+        return new com.destroystokyo.paper.profile.CraftPlayerProfile(id, name);
     }
 
     @Override

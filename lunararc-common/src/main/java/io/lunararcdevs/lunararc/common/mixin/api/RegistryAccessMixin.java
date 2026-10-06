@@ -18,6 +18,6 @@ public interface RegistryAccessMixin {
      */
     @Overwrite
     static RegistryAccess registryAccess() {
-        return io.lunararcdevs.lunararc.common.server.LunarArcRegistryAccess.INSTANCE;
+        return io.papermc.paper.registry.PaperRegistryAccess.INSTANCE;
     }
 }

@@ -19,7 +19,7 @@
   "version.check_failed": "アップデートを確認できませんでした: {0}",
   "ingame.update.available": "アップデートがあります！",
   "ingame.update.current": "現在: ",
-  "ingame.update.new": "最新: ",
+  "ingame.update.new": "ビルド: ",
   "ingame.update.download_link": "ここをクリックしてアップデートをダウンロード",
   "error.invalid_selection": "無効な選択です。中止します。",
   "error.critical_failure": "重大な起動エラー:",

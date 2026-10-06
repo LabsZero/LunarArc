@@ -117,6 +117,18 @@ public abstract class ServerCommandSender implements CommandSender {
 
     public abstract @NotNull Server getServer();
 
+    @Override
+    public net.kyori.adventure.pointer.@NotNull Pointers pointers() {
+        return net.kyori.adventure.pointer.Pointers.builder()
+                .withDynamic(net.kyori.adventure.identity.Identity.NAME, this::getName)
+                .withDynamic(net.kyori.adventure.identity.Identity.DISPLAY_NAME, this::name)
+                .withDynamic(net.kyori.adventure.permission.PermissionChecker.POINTER, () -> permission ->
+                        isPermissionSet(permission)
+                                ? net.kyori.adventure.util.TriState.byBoolean(hasPermission(permission))
+                                : net.kyori.adventure.util.TriState.NOT_SET)
+                .build();
+    }
+
     public boolean isPlayer() {
         return false;
     }

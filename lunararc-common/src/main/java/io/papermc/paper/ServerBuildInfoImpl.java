@@ -1,4 +1,6 @@
-package io.lunararcdevs.lunararc.common.server;
+package io.papermc.paper;
+
+import io.lunararcdevs.lunararc.common.server.LunarArcVersionInfo;
 
 import io.papermc.paper.ServerBuildInfo;
 import net.kyori.adventure.key.Key;
@@ -8,7 +10,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalInt;
 
-public record LunarArcServerBuildInfo(
+public record ServerBuildInfoImpl(
         @NotNull Key brandId,
         @NotNull String brandName,
         @NotNull String minecraftVersionId,
@@ -19,9 +21,9 @@ public record LunarArcServerBuildInfo(
         @NotNull Optional<String> gitCommit) implements ServerBuildInfo {
 
 
-    public static final LunarArcServerBuildInfo INSTANCE = new LunarArcServerBuildInfo();
+    public static final ServerBuildInfoImpl INSTANCE = new ServerBuildInfoImpl();
 
-    private LunarArcServerBuildInfo() {
+    private ServerBuildInfoImpl() {
         this(
                 Key.key("paper", "paper"),
                 LunarArcVersionInfo.projectName(),

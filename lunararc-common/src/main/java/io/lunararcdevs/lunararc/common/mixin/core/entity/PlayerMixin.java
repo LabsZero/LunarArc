@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 
@@ -19,6 +20,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class PlayerMixin implements PlayerAffectsSpawningBridge, io.lunararcdevs.lunararc.common.bridge.PlayerExhaustionBridge {
     public org.bukkit.craftbukkit.entity.CraftHumanEntity getBukkitEntity() {
         return (org.bukkit.craftbukkit.entity.CraftHumanEntity) ((EntityBridge) (Object) this).lunararc$getBukkitEntity();
+    }
+
+    @Inject(method = "attack", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$preAttackEvent(net.minecraft.world.entity.Entity target, CallbackInfo ci) {
+        if (io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.preAttack((Player) (Object) this, target)) ci.cancel();
+    }
+
+    @Inject(method = "startAutoSpinAttack", at = @At("HEAD"), require = 0)
+    private void lunararc$riptideEvent(int ticks, float damage, ItemStack stack, CallbackInfo ci) {
+        io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.riptide((Player) (Object) this, stack);
     }
 
     @Unique

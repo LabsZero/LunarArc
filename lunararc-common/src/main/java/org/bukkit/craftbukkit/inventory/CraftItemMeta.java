@@ -23,6 +23,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+@org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
 public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damageable, org.bukkit.inventory.meta.Repairable {
 
     public boolean hasDestroyableKeys() { return !destroyableKeys.isEmpty(); }
@@ -308,44 +309,24 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
 
     private void applyEnchantments(ItemStack nms) {
         try {
-            Class<?> itemEnchantments = io.lunararcdevs.lunararc.common.mod.LunarArcReflectionBridge.forName("net.minecraft.world.item.enchantment.ItemEnchantments");
-            Object empty = itemEnchantments.getField("EMPTY").get(null);
-            Class<?> mutableClass = io.lunararcdevs.lunararc.common.mod.LunarArcReflectionBridge.forName("net.minecraft.world.item.enchantment.ItemEnchantments$Mutable");
-            Object mutable = mutableClass.getConstructor(itemEnchantments).newInstance(empty);
-
-            Object minecraftServer = ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer();
-            Object registryAccess = minecraftServer.getClass().getMethod("registryAccess").invoke(minecraftServer);
-            Object registry = registryAccess.getClass().getMethod("registryOrThrow", net.minecraft.resources.ResourceKey.class)
-                    .invoke(registryAccess, net.minecraft.core.registries.Registries.ENCHANTMENT);
-
-            java.lang.reflect.Method set = null;
-            for (java.lang.reflect.Method method : mutableClass.getMethods()) {
-                if (method.getName().equals("set") && method.getParameterCount() == 2 && method.getParameterTypes()[1] == int.class) {
-                    set = method;
-                    break;
-                }
-            }
-            if (set == null) return;
-
+            net.minecraft.core.Registry<net.minecraft.world.item.enchantment.Enchantment> registry =
+                    ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer().registryAccess()
+                            .registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
+            net.minecraft.world.item.enchantment.ItemEnchantments.Mutable mutable =
+                    new net.minecraft.world.item.enchantment.ItemEnchantments.Mutable(
+                            net.minecraft.world.item.enchantment.ItemEnchantments.EMPTY);
             for (Map.Entry<Enchantment, Integer> entry : enchantments.entrySet()) {
-                NamespacedKey key = entry.getKey().getKey();
-                net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.parse(key.toString());
-                net.minecraft.resources.ResourceKey<?> resourceKey =
-                        net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENCHANTMENT, id);
-                Object optional = registry.getClass().getMethod("getHolder", net.minecraft.resources.ResourceKey.class)
-                        .invoke(registry, resourceKey);
-                Object holder = optional instanceof java.util.Optional<?> value ? value.orElse(null) : null;
-                if (holder != null) set.invoke(mutable, holder, entry.getValue());
+                net.minecraft.resources.ResourceKey<net.minecraft.world.item.enchantment.Enchantment> key =
+                        net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ENCHANTMENT,
+                                net.minecraft.resources.ResourceLocation.parse(entry.getKey().getKey().toString()));
+                registry.getHolder(key).ifPresent(holder -> mutable.set(holder, entry.getValue()));
             }
-
-            Object immutable = mutableClass.getMethod("toImmutable").invoke(mutable);
-            setComponent(nms, "ENCHANTMENTS", immutable);
+            nms.set(DataComponents.ENCHANTMENTS, mutable.toImmutable());
         } catch (Throwable ignored) {
             Object existing = rawDataComponents.get("ENCHANTMENTS");
             if (existing != null) setComponent(nms, "ENCHANTMENTS", existing);
         }
     }
-
 
     private void applyAttributeModifiers(ItemStack nms) {
         if (attributeModifiers == null) {
@@ -353,57 +334,36 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
             return;
         }
         try {
-            Class<?> modifiersClass = io.lunararcdevs.lunararc.common.mod.LunarArcReflectionBridge.forName("net.minecraft.world.item.component.ItemAttributeModifiers");
-            Object builder = modifiersClass.getMethod("builder").invoke(null);
-
-            Object minecraftServer = ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer();
-            Object registryAccess = minecraftServer.getClass().getMethod("registryAccess").invoke(minecraftServer);
-            Object registry = registryAccess.getClass().getMethod("registryOrThrow", net.minecraft.resources.ResourceKey.class)
-                    .invoke(registryAccess, net.minecraft.core.registries.Registries.ATTRIBUTE);
-
-            java.lang.reflect.Method add = null;
-            for (java.lang.reflect.Method method : builder.getClass().getMethods()) {
-                if (method.getName().equals("add") && method.getParameterCount() == 3) {
-                    add = method;
-                    break;
-                }
-            }
-            if (add == null) return;
-
+            net.minecraft.core.Registry<net.minecraft.world.entity.ai.attributes.Attribute> registry =
+                    ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer().registryAccess()
+                            .registryOrThrow(net.minecraft.core.registries.Registries.ATTRIBUTE);
+            net.minecraft.world.item.component.ItemAttributeModifiers.Builder builder =
+                    net.minecraft.world.item.component.ItemAttributeModifiers.builder();
             for (Map.Entry<Attribute, AttributeModifier> entry : attributeModifiers.entries()) {
-                NamespacedKey key = entry.getKey().getKey();
-                net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.parse(key.toString());
-                net.minecraft.resources.ResourceKey<?> resourceKey =
-                        net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ATTRIBUTE, id);
-                Object optional = registry.getClass().getMethod("getHolder", net.minecraft.resources.ResourceKey.class)
-                        .invoke(registry, resourceKey);
-                Object holder = optional instanceof java.util.Optional<?> value ? value.orElse(null) : null;
-                if (holder == null) continue;
-
-                Object nmsModifier = org.bukkit.craftbukkit.attribute.CraftAttributeInstance.toMinecraft(entry.getValue());
-                Object nmsSlotGroup = toMinecraftSlotGroup(entry.getValue().getSlotGroup());
-                add.invoke(builder, holder, nmsModifier, nmsSlotGroup);
+                net.minecraft.resources.ResourceKey<net.minecraft.world.entity.ai.attributes.Attribute> key =
+                        net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.ATTRIBUTE,
+                                net.minecraft.resources.ResourceLocation.parse(entry.getKey().getKey().toString()));
+                java.util.Optional<net.minecraft.core.Holder.Reference<net.minecraft.world.entity.ai.attributes.Attribute>> holder =
+                        registry.getHolder(key);
+                if (holder.isEmpty()) continue;
+                builder.add(holder.get(), (net.minecraft.world.entity.ai.attributes.AttributeModifier) org.bukkit.craftbukkit.attribute.CraftAttributeInstance.toMinecraft(entry.getValue()),
+                        toMinecraftSlotGroup(entry.getValue().getSlotGroup()));
             }
-            Object built = builder.getClass().getMethod("build").invoke(builder);
-            try {
-                built = built.getClass().getMethod("withTooltip", boolean.class)
-                        .invoke(built, !hasItemFlag(org.bukkit.inventory.ItemFlag.HIDE_ATTRIBUTES));
-            } catch (ReflectiveOperationException ignored) {}
-            setComponent(nms, "ATTRIBUTE_MODIFIERS", built);
+            nms.set(DataComponents.ATTRIBUTE_MODIFIERS,
+                    builder.build().withTooltip(!hasItemFlag(org.bukkit.inventory.ItemFlag.HIDE_ATTRIBUTES)));
         } catch (Throwable ignored) {
             Object existing = rawDataComponents.get("ATTRIBUTE_MODIFIERS");
             if (existing != null) setComponent(nms, "ATTRIBUTE_MODIFIERS", existing);
         }
     }
 
-    private static Object toMinecraftSlotGroup(EquipmentSlotGroup group) throws ReflectiveOperationException {
-        Class<?> nmsGroup = io.lunararcdevs.lunararc.common.mod.LunarArcReflectionBridge.forName("net.minecraft.world.entity.EquipmentSlotGroup");
+    private static net.minecraft.world.entity.EquipmentSlotGroup toMinecraftSlotGroup(EquipmentSlotGroup group) {
         String requested = group == null ? "ANY" : group.toString().toUpperCase(Locale.ROOT)
                 .replace('-', '_').replace(' ', '_');
         try {
-            return nmsGroup.getField(requested).get(null);
-        } catch (NoSuchFieldException ignored) {
-            return nmsGroup.getField("ANY").get(null);
+            return net.minecraft.world.entity.EquipmentSlotGroup.valueOf(requested);
+        } catch (IllegalArgumentException unknown) {
+            return net.minecraft.world.entity.EquipmentSlotGroup.ANY;
         }
     }
 
@@ -1032,7 +992,11 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
         if (hasDisplayName()) map.put("display-name", getDisplayName());
         if (hasItemName()) map.put("item-name", getItemName());
         if (hasLore()) map.put("lore", getLore());
-        if (hasEnchants()) map.put("enchants", new HashMap<>(enchantments));
+        if (hasEnchants()) {
+            Map<String, Integer> enchants = new LinkedHashMap<>();
+            enchantments.forEach((enchantment, level) -> enchants.put(enchantment.getKey().toString(), level));
+            map.put("enchants", enchants);
+        }
         if (hasDamage()) map.put("damage", getDamage());
         if (hasMaxDamage()) map.put("max-damage", getMaxDamage());
         return map;

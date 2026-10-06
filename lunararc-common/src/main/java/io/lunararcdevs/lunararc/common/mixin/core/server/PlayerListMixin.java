@@ -55,6 +55,19 @@ public abstract class PlayerListMixin implements PlayerListBridge {
     @Shadow public abstract Component canPlayerLogin(SocketAddress address, GameProfile profile);
     @Shadow public abstract void broadcastSystemMessage(Component component, boolean overlay);
 
+    @org.spongepowered.asm.mixin.injection.ModifyVariable(
+            method = "broadcastSystemMessage(Lnet/minecraft/network/chat/Component;Z)V",
+            at = @At("HEAD"), argsOnly = true, ordinal = 0, require = 0)
+    private Component lunararc$rewriteAdvancementAnnouncement(Component message) {
+        return io.lunararcdevs.lunararc.common.event.LunarArcAdvancementEvents.rewrite(message);
+    }
+
+    @Inject(method = "broadcastSystemMessage(Lnet/minecraft/network/chat/Component;Z)V",
+            at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$suppressAdvancementAnnouncement(Component message, boolean overlay, CallbackInfo ci) {
+        if (io.lunararcdevs.lunararc.common.event.LunarArcAdvancementEvents.suppressed()) ci.cancel();
+    }
+
 
     @Override
     public CraftServer lunararc$getCraftServer() {

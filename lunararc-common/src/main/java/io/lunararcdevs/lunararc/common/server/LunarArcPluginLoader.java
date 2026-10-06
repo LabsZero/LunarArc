@@ -1,6 +1,7 @@
 package io.lunararcdevs.lunararc.common.server;
 
 import org.bukkit.Server;
+import org.bukkit.craftbukkit.command.CraftCommandMap;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventException;
 import org.bukkit.event.Listener;
@@ -369,7 +370,7 @@ public class LunarArcPluginLoader implements PluginLoader {
         for (org.bukkit.World world : server.getWorlds()) {
             try { world.removePluginChunkTickets(plugin); } catch (Throwable ignored) {}
         }
-        if (server.getCommandMap() instanceof LunarArcCommandMap lunarCommands) {
+        if (server.getCommandMap() instanceof CraftCommandMap lunarCommands) {
             lunarCommands.unregisterPlugin(plugin);
         }
         if (closeClassLoader) {

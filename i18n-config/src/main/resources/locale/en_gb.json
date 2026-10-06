@@ -19,7 +19,7 @@
   "version.check_failed": "Could not check for updates: {0}",
   "ingame.update.available": "Update available!",
   "ingame.update.current": "Current: ",
-  "ingame.update.new": "New: ",
+  "ingame.update.new": "Build: ",
   "ingame.update.download_link": "Click here to download the update",
   "error.invalid_selection": "Invalid selection. Aborting.",
   "error.critical_failure": "Critical startup failure:",

@@ -1,9 +1,11 @@
 package io.lunararcdevs.lunararc.common.server;
 
+import io.papermc.paper.registry.PaperRegistryAccess;
 import io.lunararcdevs.lunararc.api.Unsafe;
 import io.papermc.paper.adventure.providers.ClickCallbackProviderImpl;
 import io.papermc.paper.adventure.providers.DataComponentValueConverterProviderImpl;
-import io.papermc.paper.plugin.lifecycle.event.types.LunarArcLifecycleEventTypeProvider;
+import io.papermc.paper.adventure.providers.PlainTextComponentSerializerProviderImpl;
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEventTypeProviderImpl;
 import io.papermc.paper.registry.RegistryAccess;
 import net.kyori.adventure.text.event.DataComponentValueConverterRegistry;
 import net.kyori.adventure.text.serializer.gson.impl.GsonDataComponentValueConverterProvider;
@@ -29,10 +31,11 @@ public final class LunarArcPaperServiceBootstrap {
         attempted = true;
         seedIfBroken(RegistryAccess::registryAccess,
                 "io.papermc.paper.registry.RegistryAccessHolder", "INSTANCE",
-                Optional.of(LunarArcRegistryAccess.INSTANCE));
+                Optional.of(PaperRegistryAccess.INSTANCE));
 
-        LunarArcLifecycleEventTypeProvider.ensureInstalled();
+        LifecycleEventTypeProviderImpl.ensureInstalled();
         installAdventureProviders();
+        installPaperProviders();
     }
 
     private interface Installer {
@@ -42,10 +45,36 @@ public final class LunarArcPaperServiceBootstrap {
     private static void installAdventureProviders() {
         install("Paper's click callback provider; ClickEvent.callback stays unsupported",
                 LunarArcPaperServiceBootstrap::installClickCallbackProvider);
+        install("Paper's plain text serializer; translatable components will render as raw keys",
+                LunarArcPaperServiceBootstrap::installPlainTextProvider);
         install("adventure's JSON serializer provider; JSONComponentSerializer.json() may be unavailable",
                 LunarArcPaperServiceBootstrap::installJsonSerializerProvider);
         install("Paper's data component converters; item hover components will not convert to JSON",
                 LunarArcPaperServiceBootstrap::installDataComponentConverters);
+    }
+
+    private static void installPaperProviders() {
+        install("Paper's brigadier argument types; ArgumentTypes will be unavailable",
+                () -> seedOptional("io.papermc.paper.command.brigadier.argument.VanillaArgumentProvider", "PROVIDER",
+                        io.papermc.paper.command.brigadier.argument.VanillaArgumentProviderImpl::new));
+        install("Paper's brigadier message serializer; MessageComponentSerializer will be unavailable",
+                () -> seedOptional("io.papermc.paper.command.brigadier.MessageComponentSerializerHolder", "PROVIDER",
+                        io.papermc.paper.command.brigadier.MessageComponentSerializerImpl::new));
+        install("Paper's feature flag provider; FeatureDependant#requiredFeatures will be unavailable",
+                () -> seedOptional("io.papermc.paper.world.flag.FeatureFlagProvider", "PROVIDER",
+                        io.papermc.paper.world.flag.PaperFeatureFlagProviderImpl::new));
+        install("Paper's registry event types; RegistryEvents will be unavailable",
+                () -> seedOptional("io.papermc.paper.registry.event.RegistryEventTypeProvider", "PROVIDER",
+                        io.papermc.paper.registry.event.RegistryEventTypeProviderImpl::new));
+        install("Adventure's boss bar provider; Audience#showBossBar will be unavailable",
+                () -> seedOptional("net.kyori.adventure.bossbar.BossBarImpl$ImplementationAccessor", "SERVICE",
+                        io.papermc.paper.adventure.providers.BossBarImplementationProvider::new));
+    }
+
+    private static void seedOptional(String holderClass, String name, java.util.function.Supplier<?> provider) throws Exception {
+        Field field = staticField(holderClass, name);
+        if (readStatic(field) instanceof Optional<?> present && present.isPresent()) return;
+        writeStatic(field, Optional.of(provider.get()));
     }
 
     private static void install(String description, Installer installer) {
@@ -72,6 +101,16 @@ public final class LunarArcPaperServiceBootstrap {
         Field provider = staticField("net.kyori.adventure.text.event.ClickCallbackInternals", "PROVIDER");
         if (readStatic(provider) instanceof ClickCallbackProviderImpl) return;
         writeStatic(provider, new ClickCallbackProviderImpl());
+    }
+
+    private static void installPlainTextProvider() throws Exception {
+        String impl = "net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializerImpl";
+        Field service = staticField(impl, "SERVICE");
+        if (readStatic(service) instanceof Optional<?> present && present.isPresent()) return;
+        PlainTextComponentSerializerProviderImpl provider = new PlainTextComponentSerializerProviderImpl();
+        writeStatic(service, Optional.of(provider));
+        writeStatic(staticField(impl, "BUILDER"), provider.plainText());
+        writeStatic(staticField(impl + "$Instances", "INSTANCE"), provider.plainTextSimple());
     }
 
     private static boolean gsonVisibleToAdventure() {
