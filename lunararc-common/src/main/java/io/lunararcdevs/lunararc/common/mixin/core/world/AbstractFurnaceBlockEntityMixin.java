@@ -31,6 +31,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class AbstractFurnaceBlockEntityMixin implements io.lunararcdevs.lunararc.common.bridge.world.CookSpeedBridge {
     @Shadow @Final private it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<net.minecraft.resources.ResourceLocation> recipesUsed;
 
+    @Shadow int cookingProgress;
+    @Shadow int cookingTotalTime;
+
+    @Shadow protected abstract boolean isLit();
+
+    @Override public boolean lunararc$isLit() { return this.isLit(); }
+    @Override public int lunararc$cookingProgress() { return this.cookingProgress; }
+    @Override public int lunararc$cookingTotalTime() { return this.cookingTotalTime; }
+    @Override public void lunararc$setCookingTotalTime(int ticks) { this.cookingTotalTime = ticks; }
+
     public double cookSpeedMultiplier = 1.0D;
     @Unique private net.minecraft.world.item.crafting.RecipeType<? extends net.minecraft.world.item.crafting.AbstractCookingRecipe> lunararc$recipeType;
 
@@ -115,5 +125,22 @@ public abstract class AbstractFurnaceBlockEntityMixin implements io.lunararcdevs
             }
             result.set(changed);
         }
+    }
+
+    @WrapOperation(method = "serverTick", require = 0, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;canBurn(Lnet/minecraft/core/RegistryAccess;Lnet/minecraft/world/item/crafting/RecipeHolder;Lnet/minecraft/core/NonNullList;I)Z"))
+    private static boolean lunararc$startSmelt(net.minecraft.core.RegistryAccess access, RecipeHolder<?> recipe,
+            NonNullList<ItemStack> slots, int stackSize, Operation<Boolean> original,
+            @Local(argsOnly = true) AbstractFurnaceBlockEntity furnace, @Local(argsOnly = true) Level level,
+            @Local(argsOnly = true) BlockPos pos) {
+        boolean can = original.call(access, recipe, slots, stackSize);
+        io.lunararcdevs.lunararc.common.bridge.world.CookSpeedBridge bridge = (io.lunararcdevs.lunararc.common.bridge.world.CookSpeedBridge) furnace;
+        if (can && recipe != null && bridge.lunararc$isLit()) {
+            if (bridge.lunararc$cookingProgress() == 0) {
+                bridge.lunararc$setCookingTotalTime(io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.furnaceStart(
+                        level, pos, slots.get(0), recipe, bridge.lunararc$cookingTotalTime()));
+            }
+        }
+        return can;
     }
 }

@@ -1634,6 +1634,7 @@ public class CraftWorld implements World {
     public <T> boolean setGameRule(@NotNull org.bukkit.GameRule<T> rule, @NotNull T newValue) {
         java.util.Objects.requireNonNull(rule, "rule");
         java.util.Objects.requireNonNull(newValue, "newValue");
+        if (!io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.gameRule(this, null, rule.getName(), String.valueOf(newValue))) return false;
         net.minecraft.world.level.GameRules.Value<?> value = lunararcGameRuleValueObject(rule.getName());
         if (value instanceof net.minecraft.world.level.GameRules.BooleanValue bool && newValue instanceof Boolean b) {
             bool.set(b, world.getServer());

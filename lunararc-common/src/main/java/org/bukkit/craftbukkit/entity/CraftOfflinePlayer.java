@@ -54,60 +54,25 @@ public class CraftOfflinePlayer implements OfflinePlayer {
     @Override public boolean isWhitelisted() {
         Player player = getPlayer();
         if (player != null) return player.isWhitelisted();
-        try {
-            Object list = org.bukkit.Bukkit.getServer().getClass().getMethod("getHandle").invoke(org.bukkit.Bukkit.getServer());
-            Object playerList = list.getClass().getMethod("getPlayerList").invoke(list);
-            Object whiteList = playerList.getClass().getMethod("getWhiteList").invoke(playerList);
-            Object result = whiteList.getClass().getMethod("isWhiteListed", com.mojang.authlib.GameProfile.class)
-                    .invoke(whiteList, gameProfile());
-            return result instanceof Boolean b && b;
-        } catch (ReflectiveOperationException ignored) {
-            return false;
-        }
+        return ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer().getPlayerList().getWhiteList().isWhiteListed(gameProfile());
     }
     @Override public void setWhitelisted(boolean value) {
         Player player = getPlayer();
         if (player != null) { player.setWhitelisted(value); return; }
-        mutateStoredUserList("getWhiteList", "net.minecraft.server.players.UserWhiteListEntry", value);
+        net.minecraft.server.players.UserWhiteList list = ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer().getPlayerList().getWhiteList();
+        if (value) list.add(new net.minecraft.server.players.UserWhiteListEntry(gameProfile()));
+        else list.remove(gameProfile());
     }
     @Override public boolean isOp() {
         Player player = getPlayer();
         if (player != null) return player.isOp();
-        try {
-            Object server = org.bukkit.Bukkit.getServer().getClass().getMethod("getHandle").invoke(org.bukkit.Bukkit.getServer());
-            Object playerList = server.getClass().getMethod("getPlayerList").invoke(server);
-            Object result = playerList.getClass().getMethod("isOp", com.mojang.authlib.GameProfile.class).invoke(playerList, gameProfile());
-            return result instanceof Boolean b && b;
-        } catch (ReflectiveOperationException ignored) {
-            return false;
-        }
+        return ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer().getPlayerList().isOp(gameProfile());
     }
     @Override public void setOp(boolean value) {
         Player player = getPlayer();
         if (player != null) { player.setOp(value); return; }
-        try {
-            Object server = org.bukkit.Bukkit.getServer().getClass().getMethod("getHandle").invoke(org.bukkit.Bukkit.getServer());
-            Object playerList = server.getClass().getMethod("getPlayerList").invoke(server);
-            if (value) {
-                Class<?> entryClass = io.lunararcdevs.lunararc.common.mod.LunarArcReflectionBridge.forName("net.minecraft.server.players.ServerOpListEntry");
-                Object entry = null;
-                for (var ctor : entryClass.getConstructors()) {
-                    Class<?>[] t = ctor.getParameterTypes();
-                    if (t.length == 4 && t[0] == com.mojang.authlib.GameProfile.class) {
-                        entry = ctor.newInstance(gameProfile(), 4, false, false);
-                        break;
-                    }
-                }
-                if (entry == null) throw new ReflectiveOperationException("No ServerOpListEntry constructor");
-                Object ops = playerList.getClass().getMethod("getOps").invoke(playerList);
-                ops.getClass().getMethod("add", entryClass).invoke(ops, entry);
-            } else {
-                Object ops = playerList.getClass().getMethod("getOps").invoke(playerList);
-                ops.getClass().getMethod("remove", com.mojang.authlib.GameProfile.class).invoke(ops, gameProfile());
-            }
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("Unable to update operator state for " + uuid, ex);
-        }
+        if (value) ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer().getPlayerList().op(gameProfile());
+        else ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer().getPlayerList().deop(gameProfile());
     }
     @Override public @Nullable Location getBedSpawnLocation() { return getRespawnLocation(); }
     @Override public @Nullable Location getRespawnLocation() {
@@ -360,15 +325,8 @@ public class CraftOfflinePlayer implements OfflinePlayer {
 
     private java.nio.file.Path lunararcPlayerDataPath() {
         try {
-            Object server = org.bukkit.Bukkit.getServer();
-            if (server == null) return null;
-            Object handle = server.getClass().getMethod("getHandle").invoke(server);
-            Object minecraftServer = handle.getClass().getMethod("getServer").invoke(handle);
-            for (java.lang.reflect.Method method : minecraftServer.getClass().getMethods()) {
-                if (!method.getName().equals("getWorldPath") || method.getParameterCount() != 1) continue;
-                Object playerDataDir = net.minecraft.world.level.storage.LevelResource.class.getField("PLAYER_DATA_DIR").get(null);
-                Object path = method.invoke(minecraftServer, playerDataDir);
-                if (path instanceof java.nio.file.Path p) return p.resolve(uuid + ".dat");
+            if (org.bukkit.Bukkit.getServer() instanceof org.bukkit.craftbukkit.CraftServer craft) {
+                return craft.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.PLAYER_DATA_DIR).resolve(uuid + ".dat");
             }
         } catch (Throwable ignored) {}
         for (String worldName : java.util.List.of("world", ".")) {
@@ -398,22 +356,7 @@ public class CraftOfflinePlayer implements OfflinePlayer {
         return new com.mojang.authlib.GameProfile(uuid, name == null ? "" : name);
     }
 
-    private void mutateStoredUserList(String accessor, String entryClassName, boolean add) {
-        try {
-            Object server = org.bukkit.Bukkit.getServer().getClass().getMethod("getHandle").invoke(org.bukkit.Bukkit.getServer());
-            Object playerList = server.getClass().getMethod("getPlayerList").invoke(server);
-            Object list = playerList.getClass().getMethod(accessor).invoke(playerList);
-            if (add) {
-                Class<?> entryClass = Class.forName(entryClassName);
-                Object entry = entryClass.getConstructor(com.mojang.authlib.GameProfile.class).newInstance(gameProfile());
-                list.getClass().getMethod("add", entryClass).invoke(list, entry);
-            } else {
-                list.getClass().getMethod("remove", com.mojang.authlib.GameProfile.class).invoke(list, gameProfile());
-            }
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("Unable to update stored player list for " + uuid, ex);
-        }
-    }
+    
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static BanEntry<PlayerProfile> castBanEntry(BanEntry entry) {

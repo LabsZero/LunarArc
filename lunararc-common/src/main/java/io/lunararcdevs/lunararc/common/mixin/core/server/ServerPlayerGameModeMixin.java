@@ -1,5 +1,8 @@
 package io.lunararcdevs.lunararc.common.mixin.core.server;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import io.lunararcdevs.lunararc.common.bridge.ServerPlayerGameModeBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -103,6 +106,10 @@ public abstract class ServerPlayerGameModeMixin implements ServerPlayerGameModeB
             CallbackInfo ci) {
 
 
+        if (action == net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK) {
+            io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.blockDamageAbort(this.player, pos);
+            return;
+        }
         if (action != net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK) {
             return;
         }
@@ -132,6 +139,15 @@ public abstract class ServerPlayerGameModeMixin implements ServerPlayerGameModeB
         }
     }
 
+    @WrapOperation(method = "handleBlockBreakAction", at = @At(value = "INVOKE", ordinal = 0,
+            target = "Lnet/minecraft/world/level/block/state/BlockState;getDestroyProgress(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;)F"), require = 0)
+    private float lunararc$blockDamage(net.minecraft.world.level.block.state.BlockState state,
+            net.minecraft.world.entity.player.Player player, net.minecraft.world.level.BlockGetter level, BlockPos pos,
+            Operation<Float> original, @Local(argsOnly = true) net.minecraft.core.Direction direction) {
+        return io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.blockDamage(
+                this.player, pos, direction, original.call(state, player, level, pos));
+    }
+
     @Inject(method = "destroyBlock", at = @At("HEAD"), cancellable = true)
     private void lunararc$onDestroyBlock(net.minecraft.core.BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
         org.bukkit.event.block.BlockBreakEvent event =
@@ -145,11 +161,14 @@ public abstract class ServerPlayerGameModeMixin implements ServerPlayerGameModeB
         if (event.isCancelled() && !loaderOwnsCancellation) {
             player.connection.send(new net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(player.serverLevel(), pos));
             cir.setReturnValue(false);
+        } else {
+            io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.beginBlockDrops(player, pos);
         }
     }
 
     @Inject(method = "destroyBlock", at = @At("RETURN"))
     private void lunararc$clearBlockBreakCapture(net.minecraft.core.BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
+        io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.endBlockDrops();
         io.lunararcdevs.lunararc.common.mod.util.LunarArcBlockBreakCapture.clear();
     }
 

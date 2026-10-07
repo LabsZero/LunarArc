@@ -2276,12 +2276,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public void setFirstPlayed(long firstPlayed) { ((ServerPlayerBukkitDataBridge) getHandle()).lunararc$setFirstPlayed(firstPlayed); }
 
     private Object getNmsStatsCounter() {
-        try {
-            java.lang.reflect.Method method = getHandle().getClass().getMethod("getStats");
-            return method.invoke(getHandle());
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("Unable to access the Minecraft ServerStatsCounter for " + getName(), ex);
-        }
+        return getHandle().getStats();
     }
 
     private static final java.util.Map<Class<?>, Class<?>> STATISTIC_BOXED_PRIMITIVES = java.util.Map.of(

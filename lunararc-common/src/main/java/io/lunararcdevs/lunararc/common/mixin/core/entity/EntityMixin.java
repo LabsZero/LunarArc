@@ -325,7 +325,29 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
 
     @Inject(method = "remove", at = @At("HEAD"), require = 0)
     private void lunararc$markRemoved(Entity.RemovalReason reason, CallbackInfo ci) {
+        io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.removed((Entity) (Object) this, reason);
         this.lunararc$inWorld = false;
+    }
+
+    @Shadow @org.spongepowered.asm.mixin.Final private static net.minecraft.network.syncher.EntityDataAccessor<Integer> DATA_AIR_SUPPLY_ID;
+    @Shadow @org.spongepowered.asm.mixin.Final protected net.minecraft.network.syncher.SynchedEntityData entityData;
+
+    @Inject(method = "setPose", at = @At("HEAD"), require = 0)
+    private void lunararc$poseChange(net.minecraft.world.entity.Pose pose, CallbackInfo ci) {
+        io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.poseChange((Entity) (Object) this, pose);
+    }
+
+    @Inject(method = "setAirSupply", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$airChange(int amount, CallbackInfo ci) {
+        int changed = io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.airChange((Entity) (Object) this, amount);
+        if (changed == amount) return;
+        ci.cancel();
+        this.entityData.set(DATA_AIR_SUPPLY_ID, changed);
+    }
+
+    @Inject(method = "setSwimming", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$toggleSwim(boolean swimming, CallbackInfo ci) {
+        if (io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.toggleSwim((Entity) (Object) this, swimming)) ci.cancel();
     }
 
 

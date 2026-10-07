@@ -40,7 +40,8 @@ public abstract class BrewingStandBlockEntityMixin implements BrewingStandBridge
 
     @ModifyExpressionValue(method = "serverTick", at = @At(value = "CONSTANT", args = "intValue=400"))
     private static int lunararc$recipeBrewTime(int original, Level level, BlockPos pos, BlockState state, BrewingStandBlockEntity stand) {
-        return ((BrewingStandBridge) stand).lunararc$getRecipeBrewTime();
+        return io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.brewingStart(
+                level, pos, stand.getItem(3), ((BrewingStandBridge) stand).lunararc$getRecipeBrewTime());
     }
 
     @Override public int lunararc$getFuel() { return fuel; }

@@ -19,5 +19,6 @@ public abstract class ServerHandshakePacketListenerImplMixin {
     @Inject(method = "handleIntention", at = @At("HEAD"))
     private void lunararc$captureHostname(ClientIntentionPacket packet, CallbackInfo ci) {
         ((ConnectionBridge) this.connection).lunararc$setHostname(packet.hostName() + ":" + packet.port());
+        ((ConnectionBridge) this.connection).lunararc$setProtocolVersion(packet.protocolVersion());
     }
 }

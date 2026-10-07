@@ -16,7 +16,7 @@ LunarArc also provides native [EssentialsX](https://essentialsx.net) integration
 
 | Release | Forge | NeoForge | Fabric | QuiltMC | Status | Build Status |
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Trial Zenith (1.21.1) | 52.1.16 | 21.1.255 | 0.19.5 | 0.30.1 | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3ATrial-Zenith) |
+| Trial Zenith (1.21.1) | 52.1.16 | 21.1.256 | 0.19.5 | 0.30.1 | ACTIVE | [![1.21.1 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=Trial-Zenith&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3ATrial-Zenith) |
 
 ---
 
@@ -52,7 +52,7 @@ LunarArc uses the following upstream projects as runtime platforms, API contract
 
 - **[Arclight](https://github.com/IzzelAliz/Arclight)** - Primary architecture reference for the hybrid server structure, loader-specific mixins, lifecycle hooks, event coexistence, and concrete Bukkit/Craft integration.
 - **[Paper](https://github.com/PaperMC/Paper)** - Bukkit/Paper API and server-behavior contract used to match Paper 1.21.1 plugin compatibility.
-- **[Minecraft Forge](https://github.com/MinecraftForge/MinecraftForge)** — Forge runtime and loader APIs used by LunarArc's Forge module.
+- **[Minecraft Forge](https://github.com/MinecraftForge/MinecraftForge)** - Forge runtime and loader APIs used by LunarArc's Forge module.
 - **[NeoForge](https://github.com/neoforged/NeoForge)** - NeoForge runtime and loader APIs used by LunarArc's NeoForge module.
 - **[Fabric](https://github.com/FabricMC/fabric)**  - Fabric loader/API lifecycle and integration hooks used by LunarArc's Fabric module.
 - **[Quilt](https://github.com/QuiltMC/quilt-loader)** - Quilt runtime/loader support used by LunarArc's Quilt module.

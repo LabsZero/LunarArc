@@ -1,14 +1,3 @@
-# CraftBukkit's added Minecraft members: owner|method|returnType
-#
-# Generated from MohistMC/Youer's 1.21.1 patches to net/minecraft (patches/net/minecraft/**),
-# which are CraftBukkit's own source patches. CraftBukkit adds these by editing Minecraft;
-# LunarArc cannot, and supplies them by mixin instead. Paper's CraftBukkit classes - the ones
-# LunarArc donates verbatim rather than reimplementing - are compiled against these exact
-# signatures, so a mixin-added member whose return type differs does not satisfy their call
-# sites: the JVM resolves on the full descriptor and throws NoSuchMethodError while the method
-# visibly exists. verifyCraftBukkitMemberParity checks ours against this list.
-#
-# Regenerate by re-deriving from the upstream patches; do not hand-edit.
 net.minecraft.CrashReportCategory|applyStackTrace|void
 net.minecraft.CrashReportCategory|setStackTrace|void
 net.minecraft.Util|makeDescriptionId|String

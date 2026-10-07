@@ -42,6 +42,18 @@ public abstract class ConnectionMixin implements ConnectionBridge {
         this.lunararc$rawAddress = this.channel.remoteAddress();
     }
 
+    @Unique private int lunararc$protocolVersion = -1;
+
+    @Override
+    public int lunararc$getProtocolVersion() {
+        return this.lunararc$protocolVersion;
+    }
+
+    @Override
+    public void lunararc$setProtocolVersion(int protocolVersion) {
+        this.lunararc$protocolVersion = protocolVersion;
+    }
+
     @Override
     public String lunararc$getHostname() {
         return this.lunararc$hostname;

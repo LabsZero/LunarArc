@@ -25,6 +25,7 @@ public final class SerializableMeta implements ConfigurationSerializable {
 
     public static void register() {
         ConfigurationSerialization.registerClass(SerializableMeta.class);
+        ConfigurationSerialization.registerClass(org.bukkit.inventory.ItemStack.class, "org.bukkit.craftbukkit.inventory.CraftItemStack");
         for (String type : LEGACY_TYPES) {
             ConfigurationSerialization.registerClass(SerializableMeta.class, "org.bukkit.craftbukkit.inventory." + type);
         }
