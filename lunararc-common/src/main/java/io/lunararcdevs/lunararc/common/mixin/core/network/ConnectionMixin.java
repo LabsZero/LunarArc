@@ -36,6 +36,13 @@ public abstract class ConnectionMixin implements ConnectionBridge {
     @Unique private Property[] lunararc$spoofedProfile;
     @Unique private ServerPlayer lunararc$loginPlayer;
 
+    @Inject(method = "channelInactive", at = @At("HEAD"), require = 0)
+    private void lunararc$closed(ChannelHandlerContext ctx, CallbackInfo ci) {
+        net.minecraft.server.level.ServerPlayer closing = ((net.minecraft.network.Connection) (Object) this).getPacketListener() instanceof net.minecraft.server.network.ServerGamePacketListenerImpl listener
+                ? listener.player : this.lunararc$loginPlayer;
+        io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.connectionClose(closing, this.lunararc$rawAddress);
+    }
+
     @Inject(method = "channelActive", at = @At("TAIL"))
     private void lunararc$channelActive(ChannelHandlerContext ctx, CallbackInfo ci) {
         this.n = this.channel;

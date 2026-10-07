@@ -71,4 +71,12 @@ public abstract class ExperienceOrbMixin {
         }
         player.giveExperiencePoints(awarded);
     }
+
+    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "playerTouch", require = 0,
+            at = @At(value = "FIELD", opcode = org.objectweb.asm.Opcodes.PUTFIELD,
+                    target = "Lnet/minecraft/world/entity/player/Player;takeXpDelay:I"))
+    private void lunararc$cooldown(Player player, int cooldown,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> original) {
+        original.call(player, io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.expCooldown(player, cooldown));
+    }
 }

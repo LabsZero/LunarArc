@@ -222,6 +222,8 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
                 new org.bukkit.event.player.PlayerSpawnChangeEvent(player, newSpawn, forced, cause);
         org.bukkit.Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
+        if (!io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.setSpawn(player, event.getNewSpawn(), event.isForced(), sendMessage,
+                String.valueOf(cause).equals("RESET") ? "PLAYER_RESPAWN" : String.valueOf(cause))) return;
 
         org.bukkit.Location selected = event.getNewSpawn();
         boolean selectedForced = event.isForced();

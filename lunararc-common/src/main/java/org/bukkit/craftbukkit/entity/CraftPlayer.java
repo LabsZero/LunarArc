@@ -492,7 +492,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public void hideEntity(@NotNull Plugin plugin, @NotNull Entity target) {
         if (plugin == null) throw new IllegalArgumentException("plugin cannot be null");
         if (target == null) throw new IllegalArgumentException("entity cannot be null");
+        boolean wasVisible = canSee(target);
         pluginHiddenEntities.computeIfAbsent(target.getUniqueId(), ignored -> ConcurrentHashMap.newKeySet()).add(plugin);
+        if (wasVisible) io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.hideShow(this, target, true);
     }
 
     @Override
@@ -502,7 +504,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         Set<Plugin> plugins = pluginHiddenEntities.get(target.getUniqueId());
         if (plugins == null) return;
         plugins.remove(plugin);
-        if (plugins.isEmpty()) pluginHiddenEntities.remove(target.getUniqueId(), plugins);
+        if (plugins.isEmpty()) {
+            pluginHiddenEntities.remove(target.getUniqueId(), plugins);
+            if (canSee(target)) io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.hideShow(this, target, false);
+        }
     }
 
     @Override

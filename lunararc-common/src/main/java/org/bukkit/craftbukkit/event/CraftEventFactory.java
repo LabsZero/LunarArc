@@ -839,7 +839,18 @@ public class CraftEventFactory {
         org.bukkit.event.block.TNTPrimeEvent event = new org.bukkit.event.block.TNTPrimeEvent(
                 CraftBlock.at(level, pos), cause, bukkitEntity, causeBlock);
         Bukkit.getPluginManager().callEvent(event);
-        return !event.isCancelled();
+        if (event.isCancelled()) return false;
+        com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason reason = switch (cause) {
+            case FIRE -> com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.FIRE;
+            case REDSTONE -> com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.REDSTONE;
+            case PROJECTILE -> com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.PROJECTILE;
+            case EXPLOSION -> com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.EXPLOSION;
+            default -> com.destroystokyo.paper.event.block.TNTPrimeEvent.PrimeReason.ITEM;
+        };
+        com.destroystokyo.paper.event.block.TNTPrimeEvent paperEvent =
+                new com.destroystokyo.paper.event.block.TNTPrimeEvent(CraftBlock.at(level, pos), reason, bukkitEntity);
+        Bukkit.getPluginManager().callEvent(paperEvent);
+        return !paperEvent.isCancelled();
     }
 
     public static org.bukkit.event.block.BlockIgniteEvent callBlockIgniteEvent(

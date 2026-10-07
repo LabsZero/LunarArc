@@ -504,11 +504,14 @@ public final class LunarArcPaperEvents {
         return !call(villager, new VillagerCareerChangeEvent(bukkit, profession, reason));
     }
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public static int furnaceStart(net.minecraft.world.level.Level level, BlockPos pos, ItemStack source,
-                                   net.minecraft.world.item.crafting.RecipeHolder<?> recipe, int totalTime) {
-        if (recipe == null || !listened(FurnaceStartSmeltEvent.getHandlerList()) || !(level instanceof ServerLevel serverLevel)
-                || !org.bukkit.Bukkit.isPrimaryThread()
-                || !(org.bukkit.craftbukkit.inventory.CraftRecipeAdapter.toBukkit(recipe) instanceof org.bukkit.inventory.CookingRecipe<?> cooking)) return totalTime;
+                                   net.minecraft.world.item.crafting.RecipeType recipeType, int totalTime) {
+        if (source.isEmpty() || recipeType == null || !listened(FurnaceStartSmeltEvent.getHandlerList())
+                || !(level instanceof ServerLevel serverLevel) || !org.bukkit.Bukkit.isPrimaryThread()) return totalTime;
+        net.minecraft.world.item.crafting.RecipeHolder<?> recipe = (net.minecraft.world.item.crafting.RecipeHolder<?>) serverLevel.getRecipeManager()
+                .getRecipeFor(recipeType, new net.minecraft.world.item.crafting.SingleRecipeInput(source), serverLevel).orElse(null);
+        if (recipe == null || !(org.bukkit.craftbukkit.inventory.CraftRecipeAdapter.toBukkit(recipe) instanceof org.bukkit.inventory.CookingRecipe<?> cooking)) return totalTime;
         FurnaceStartSmeltEvent event = new FurnaceStartSmeltEvent(CraftBlock.at(serverLevel, pos),
                 CraftItemStack.asCraftMirror(source), cooking, totalTime);
         callGlobal(event);
@@ -656,6 +659,14 @@ public final class LunarArcPaperEvents {
         if (call(target, event)) {
             target.setDeltaMovement(before);
             return;
+        }
+        if (listened(com.destroystokyo.paper.event.entity.EntityKnockbackByEntityEvent.getHandlerList())) {
+            com.destroystokyo.paper.event.entity.EntityKnockbackByEntityEvent paper = new com.destroystokyo.paper.event.entity.EntityKnockbackByEntityEvent(
+                    bukkit, source, io.papermc.paper.event.entity.EntityKnockbackEvent.Cause.ENTITY_ATTACK, (float) strength, event.getKnockback().clone());
+            if (call(target, paper)) {
+                target.setDeltaMovement(before);
+                return;
+            }
         }
         Vector changed = event.getKnockback();
         target.setDeltaMovement(before.x + changed.getX(), before.y + changed.getY(), before.z + changed.getZ());

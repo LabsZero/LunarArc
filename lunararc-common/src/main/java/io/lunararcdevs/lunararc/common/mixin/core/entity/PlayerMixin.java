@@ -32,6 +32,11 @@ public abstract class PlayerMixin implements PlayerAffectsSpawningBridge, io.lun
         io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.riptide((Player) (Object) this, stack);
     }
 
+    @com.llamalad7.mixinextras.injector.ModifyReturnValue(method = "getProjectile", at = @At("RETURN"), require = 0)
+    private ItemStack lunararc$readyArrow(ItemStack arrow, ItemStack weapon) {
+        return io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.readyArrow((Player) (Object) this, weapon, arrow);
+    }
+
     @Unique private net.minecraft.world.entity.LivingEntity lunararc$shieldAttacker;
 
     @Inject(method = "blockUsingShield", at = @At("HEAD"), require = 0)

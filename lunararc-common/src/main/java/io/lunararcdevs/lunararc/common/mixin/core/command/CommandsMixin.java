@@ -32,6 +32,7 @@ public abstract class CommandsMixin {
                     target = "Lnet/minecraft/server/network/ServerGamePacketListenerImpl;send(Lnet/minecraft/network/protocol/Packet;)V"))
     private void lunararc$commandSendEvent(net.minecraft.server.level.ServerPlayer player, CallbackInfo ci,
             @com.llamalad7.mixinextras.sugar.Local com.mojang.brigadier.tree.RootCommandNode<net.minecraft.commands.SharedSuggestionProvider> root) {
+        io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.asyncCommands(player, root);
         if (org.bukkit.event.player.PlayerCommandSendEvent.getHandlerList().getRegisteredListeners().length == 0
                 || !(((io.lunararcdevs.lunararc.common.bridge.EntityBridge) player).lunararc$getBukkitEntity()
                         instanceof org.bukkit.entity.Player bukkitPlayer)) {
