@@ -472,4 +472,67 @@ public final class LunarArcMoreEvents {
                 || !(bukkit(turtle) instanceof org.bukkit.entity.Turtle found)) return true;
         return !fire(new com.destroystokyo.paper.event.entity.TurtleGoHomeEvent(found));
     }
+
+    private static final java.util.Map<net.minecraft.world.Container, net.minecraft.world.level.block.entity.LecternBlockEntity> LECTERNS =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    public static void registerLectern(net.minecraft.world.Container access, net.minecraft.world.level.block.entity.LecternBlockEntity lectern) {
+        LECTERNS.put(access, lectern);
+    }
+
+    private static org.bukkit.block.Lectern lectern(net.minecraft.world.Container access) {
+        net.minecraft.world.level.block.entity.LecternBlockEntity entity = LECTERNS.get(access);
+        if (entity == null || !(entity.getLevel() instanceof ServerLevel level)) return null;
+        return CraftBlock.at(level, entity.getBlockPos()).getState() instanceof org.bukkit.block.Lectern found ? found : null;
+    }
+
+    public static boolean lecternTake(net.minecraft.world.entity.player.Player who, net.minecraft.world.Container access) {
+        org.bukkit.entity.Player player = player(who);
+        if (player == null || !listened(org.bukkit.event.player.PlayerTakeLecternBookEvent.getHandlerList())) return true;
+        org.bukkit.block.Lectern lectern = lectern(access);
+        return lectern == null || !fire(new org.bukkit.event.player.PlayerTakeLecternBookEvent(player, lectern));
+    }
+
+    public static boolean lecternPage(net.minecraft.world.entity.player.Player who, net.minecraft.world.Container access, int oldPage, int newPage) {
+        org.bukkit.entity.Player player = player(who);
+        if (player == null || oldPage == newPage || !listened(io.papermc.paper.event.player.PlayerLecternPageChangeEvent.getHandlerList())) return true;
+        org.bukkit.block.Lectern lectern = lectern(access);
+        if (lectern == null) return true;
+        return !fire(new io.papermc.paper.event.player.PlayerLecternPageChangeEvent(player, lectern,
+                CraftItemStack.asBukkitCopy(access.getItem(0)),
+                newPage > oldPage ? io.papermc.paper.event.player.PlayerLecternPageChangeEvent.PageChangeDirection.RIGHT
+                        : io.papermc.paper.event.player.PlayerLecternPageChangeEvent.PageChangeDirection.LEFT, oldPage, newPage));
+    }
+
+    public static void entitiesLoaded(ServerLevel level, net.minecraft.world.level.ChunkPos pos, List<net.minecraft.world.entity.Entity> entities) {
+        if (!listened(org.bukkit.event.world.EntitiesLoadEvent.getHandlerList()) || !org.bukkit.Bukkit.isPrimaryThread() || entities.isEmpty()) return;
+        org.bukkit.craftbukkit.CraftWorld world = LunarArcServerAccess.getCraftWorld(level);
+        if (world == null) return;
+        List<org.bukkit.entity.Entity> list = new ArrayList<>();
+        for (net.minecraft.world.entity.Entity entity : entities) if (bukkit(entity) != null) list.add(bukkit(entity));
+        fire(new org.bukkit.event.world.EntitiesLoadEvent(new org.bukkit.craftbukkit.CraftChunk(world, pos.x, pos.z), java.util.Collections.unmodifiableList(list)));
+    }
+
+    public static void entitiesUnloaded(ServerLevel level, net.minecraft.world.level.ChunkPos pos, List<net.minecraft.world.entity.Entity> entities) {
+        if (!listened(org.bukkit.event.world.EntitiesUnloadEvent.getHandlerList()) || !org.bukkit.Bukkit.isPrimaryThread() || entities.isEmpty()) return;
+        org.bukkit.craftbukkit.CraftWorld world = LunarArcServerAccess.getCraftWorld(level);
+        if (world == null) return;
+        List<org.bukkit.entity.Entity> list = new ArrayList<>();
+        for (net.minecraft.world.entity.Entity entity : entities) if (bukkit(entity) != null) list.add(bukkit(entity));
+        fire(new org.bukkit.event.world.EntitiesUnloadEvent(new org.bukkit.craftbukkit.CraftChunk(world, pos.x, pos.z), java.util.Collections.unmodifiableList(list)));
+    }
+
+    public static void bedFailed(net.minecraft.server.level.ServerPlayer who, BlockPos pos, String problem, net.minecraft.network.chat.Component message) {
+        org.bukkit.entity.Player player = player(who);
+        if (player == null || !listened(io.papermc.paper.event.player.PlayerBedFailEnterEvent.getHandlerList())) return;
+        io.papermc.paper.event.player.PlayerBedFailEnterEvent.FailReason reason;
+        try {
+            reason = io.papermc.paper.event.player.PlayerBedFailEnterEvent.FailReason.valueOf(problem);
+        } catch (IllegalArgumentException unknown) {
+            reason = io.papermc.paper.event.player.PlayerBedFailEnterEvent.FailReason.OTHER_PROBLEM;
+        }
+        boolean explode = reason == io.papermc.paper.event.player.PlayerBedFailEnterEvent.FailReason.NOT_POSSIBLE_HERE;
+        fire(new io.papermc.paper.event.player.PlayerBedFailEnterEvent(player, reason, CraftBlock.at(who.serverLevel(), pos), explode,
+                message == null ? null : io.papermc.paper.adventure.PaperAdventure.asAdventure(message)));
+    }
 }

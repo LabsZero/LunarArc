@@ -268,6 +268,8 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         Either<Player.BedSleepingProblem, Unit> eventResult =
                 org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerBedEnterEvent(
                         (ServerPlayer) (Object) this, bedPos, vanillaResult);
+        eventResult.left().ifPresent(problem -> io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.bedFailed(
+                (ServerPlayer) (Object) this, bedPos, problem.name(), problem.getMessage()));
         @SuppressWarnings("unchecked")
         Either<L, R> converted = (Either<L, R>) eventResult;
         return converted.ifRight(successConsumer);
