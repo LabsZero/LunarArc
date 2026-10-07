@@ -3,11 +3,10 @@
 architectury-loom = "1.14.476"
 # loom builds: https://maven.architectury.dev/dev/architectury/architectury-loom/
 # Spigot BuildData: https://hub.spigotmc.org/stash/projects/SPIGOT/repos/builddata/commits
-# Paper: https://papermc.io/downloads/paper
 
 # common
 jetbrains-annotations = "26.1.0"
-asm = "9.7"
+asm = "9.10.1"
 mixin = "0.8.7"
 mixinextras = "0.5.5"
 
@@ -21,7 +20,7 @@ java-runtime = "21"
 minecraft = "1.21.1"
 parchment = "2024.11.17"
 forge = "52.1.16"
-neoforge = "21.1.255"
+neoforge = "21.1.256"
 fabric-loader = "0.19.5"
 fabric-api = "0.116.17+1.21.1"
 fabric-permissions-api = "0.3.1"

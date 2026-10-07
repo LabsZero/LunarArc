@@ -23,13 +23,32 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(BeaconBlockEntity.class)
-public abstract class BeaconBlockEntityMixin implements BeaconRangeBridge {
+public abstract class BeaconBlockEntityMixin implements BeaconRangeBridge, io.lunararcdevs.lunararc.common.bridge.BeaconLevelBridge {
     private static final String RANGE_KEY = "Paper.Range";
 
     @Unique private static double lunararc$activeRange = -1.0D;
     @Unique private double lunararc$effectRange = -1.0D;
 
     @Shadow int levels;
+
+    @Override public int lunararc$levels() { return this.levels; }
+
+    @org.spongepowered.asm.mixin.Unique private static int lunararc$levelsBefore;
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "tick", at = @org.spongepowered.asm.mixin.injection.At("HEAD"), require = 0)
+    private static void lunararc$tickStart(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState state, net.minecraft.world.level.block.entity.BeaconBlockEntity beacon,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        lunararc$levelsBefore = ((io.lunararcdevs.lunararc.common.bridge.BeaconLevelBridge) beacon).lunararc$levels();
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "tick", at = @org.spongepowered.asm.mixin.injection.At("RETURN"), require = 0)
+    private static void lunararc$tickEnd(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pos,
+            net.minecraft.world.level.block.state.BlockState state, net.minecraft.world.level.block.entity.BeaconBlockEntity beacon,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.beacon(level, pos, lunararc$levelsBefore,
+                ((io.lunararcdevs.lunararc.common.bridge.BeaconLevelBridge) beacon).lunararc$levels());
+    }
     @Shadow Holder<MobEffect> primaryPower;
     @Shadow Holder<MobEffect> secondaryPower;
 

@@ -167,6 +167,26 @@ public abstract class ServerGamePacketListenerImplMixin {
             return;
         }
 
+        if (org.bukkit.event.player.PlayerChatEvent.getHandlerList().getRegisteredListeners().length != 0) {
+            org.bukkit.event.player.PlayerChatEvent[] sync = new org.bukkit.event.player.PlayerChatEvent[1];
+            Runnable fireSync = () -> {
+                org.bukkit.event.player.PlayerChatEvent syncEvent = new org.bukkit.event.player.PlayerChatEvent(bukkitPlayer,
+                        legacyEvent.getMessage(), legacyEvent.getFormat(), new LinkedHashSet<>(legacyEvent.getRecipients()));
+                craftServer.getPluginManager().callEvent(syncEvent);
+                sync[0] = syncEvent;
+            };
+            if (async) this.player.server.executeBlocking(fireSync);
+            else fireSync.run();
+            if (sync[0].isCancelled()) {
+                ci.cancel();
+                return;
+            }
+            legacyEvent.setMessage(sync[0].getMessage());
+            legacyEvent.setFormat(sync[0].getFormat());
+            legacyEvent.getRecipients().clear();
+            legacyEvent.getRecipients().addAll(sync[0].getRecipients());
+        }
+
         boolean legacyMessageChanged = !originalMessage.equals(legacyEvent.getMessage());
         boolean legacyFormatChanged = !legacyDefaultFormat.equals(legacyEvent.getFormat());
 
@@ -188,13 +208,30 @@ public abstract class ServerGamePacketListenerImplMixin {
 
         java.util.Set<net.kyori.adventure.audience.Audience> viewers =
                 new LinkedHashSet<>(legacyEvent.getRecipients());
+        LunarArcSignedChatMessage signedMessage = new LunarArcSignedChatMessage(message);
         io.papermc.paper.event.player.AsyncChatEvent modernEvent = new io.papermc.paper.event.player.AsyncChatEvent(
-                async, bukkitPlayer, viewers, renderer, modernMessage, originalComponent,
-                new LunarArcSignedChatMessage(message));
+                async, bukkitPlayer, viewers, renderer, modernMessage, originalComponent, signedMessage);
         craftServer.getPluginManager().callEvent(modernEvent);
         if (modernEvent.isCancelled()) {
             ci.cancel();
             return;
+        }
+        if (io.papermc.paper.event.player.ChatEvent.getHandlerList().getRegisteredListeners().length != 0) {
+            io.papermc.paper.event.player.ChatEvent[] sync = new io.papermc.paper.event.player.ChatEvent[1];
+            Runnable fireSync = () -> {
+                io.papermc.paper.event.player.ChatEvent syncEvent = new io.papermc.paper.event.player.ChatEvent(bukkitPlayer,
+                        modernEvent.viewers(), modernEvent.renderer(), modernEvent.message(), originalComponent, signedMessage);
+                craftServer.getPluginManager().callEvent(syncEvent);
+                sync[0] = syncEvent;
+            };
+            if (async) this.player.server.executeBlocking(fireSync);
+            else fireSync.run();
+            if (sync[0].isCancelled()) {
+                ci.cancel();
+                return;
+            }
+            modernEvent.message(sync[0].message());
+            modernEvent.renderer(sync[0].renderer());
         }
 
         io.papermc.paper.chat.ChatRenderer finalRenderer = modernEvent.renderer();
@@ -1003,6 +1040,13 @@ public abstract class ServerGamePacketListenerImplMixin {
                 .lunararc$setNextInventoryCloseReason(org.bukkit.event.inventory.InventoryCloseEvent.Reason.PLAYER);
     }
 
+    @Inject(method = "handlePlaceRecipe", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$recipeClick(net.minecraft.network.protocol.game.ServerboundPlaceRecipePacket packet, CallbackInfo ci) {
+        if (!io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.recipeBookClick(this.player, packet.getRecipe(), packet.isShiftDown())) ci.cancel();
+    }
 
-
+    @Inject(method = "handleRecipeBookChangeSettingsPacket", at = @At("HEAD"), require = 0)
+    private void lunararc$recipeSettings(net.minecraft.network.protocol.game.ServerboundRecipeBookChangeSettingsPacket packet, CallbackInfo ci) {
+        io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.recipeBookSettings(this.player, packet.getBookType(), packet.isOpen(), packet.isFiltering());
+    }
 }

@@ -120,6 +120,7 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         ServerPlayer self = (ServerPlayer) (Object) this;
         Object bukkit = ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) self).lunararc$getBukkitEntity();
         if (!(bukkit instanceof org.bukkit.entity.Player player)) return;
+        io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.clientOptions(self, options);
 
         if (self.getMainArm() != options.mainHand()) {
             org.bukkit.inventory.MainHand previous = self.getMainArm() == net.minecraft.world.entity.HumanoidArm.LEFT
@@ -221,6 +222,8 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
                 new org.bukkit.event.player.PlayerSpawnChangeEvent(player, newSpawn, forced, cause);
         org.bukkit.Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
+        if (!io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.setSpawn(player, event.getNewSpawn(), event.isForced(), sendMessage,
+                String.valueOf(cause).equals("RESET") ? "PLAYER_RESPAWN" : String.valueOf(cause))) return;
 
         org.bukkit.Location selected = event.getNewSpawn();
         boolean selectedForced = event.isForced();
@@ -265,6 +268,8 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         Either<Player.BedSleepingProblem, Unit> eventResult =
                 org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerBedEnterEvent(
                         (ServerPlayer) (Object) this, bedPos, vanillaResult);
+        eventResult.left().ifPresent(problem -> io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.bedFailed(
+                (ServerPlayer) (Object) this, bedPos, problem.name(), problem.getMessage()));
         @SuppressWarnings("unchecked")
         Either<L, R> converted = (Either<L, R>) eventResult;
         return converted.ifRight(successConsumer);
@@ -600,5 +605,12 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         if (!overlay && component != null) {
             io.lunararcdevs.lunararc.common.server.LunarArcCommandLogger.capture(((ServerPlayer) (Object) this).getUUID(), component.getString());
         }
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "setCamera", at = @org.spongepowered.asm.mixin.injection.At("HEAD"),
+            cancellable = true, require = 0)
+    private void lunararc$spectate(net.minecraft.world.entity.Entity camera,
+            org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        if (io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.spectate((ServerPlayer) (Object) this, camera)) ci.cancel();
     }
 }

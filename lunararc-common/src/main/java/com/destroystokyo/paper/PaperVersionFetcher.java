@@ -30,7 +30,7 @@ public final class PaperVersionFetcher implements VersionFetcher {
     private static final java.util.regex.Pattern VERSION_NUMBER =
             java.util.regex.Pattern.compile("\\d+(?:\\.\\d+)+(?:-[0-9A-Za-z.]+)?");
 
-    public record Release(String version, String downloadUrl, String name) {
+    public record Release(String version, String downloadUrl, String name, int behind) {
         public String displayVersion() {
             for (String source : new String[] {name, version}) {
                 java.util.regex.Matcher matcher = VERSION_NUMBER.matcher(source == null ? "" : source);
@@ -59,8 +59,10 @@ public final class PaperVersionFetcher implements VersionFetcher {
                 return latestVersionMessage(currentVersion);
             }
 
-            return Component.text(TranslationManager.get(
-                    "version.update.available", release.version(), currentVersion), NamedTextColor.YELLOW)
+            String behindText = release.behind() > 0
+                    ? TranslationManager.get("version.update.behind", release.behind())
+                    : TranslationManager.get("version.update.behind.unknown", release.displayVersion());
+            return Component.text(behindText, NamedTextColor.YELLOW)
                     .append(Component.newline())
                     .append(Component.text(TranslationManager.get(
                             "version.update.download", release.downloadUrl()), NamedTextColor.YELLOW));
@@ -85,16 +87,23 @@ public final class PaperVersionFetcher implements VersionFetcher {
             try (InputStream input = connection.getInputStream();
                  InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
                 JsonArray releases = JsonParser.parseReader(reader).getAsJsonArray();
+                String current = LunarArcVersionInfo.lunarArcVersion();
+                Release latest = null;
+                int index = 0;
                 for (JsonElement element : releases) {
                     JsonObject release = element.getAsJsonObject();
                     if (release.has("draft") && release.get("draft").getAsBoolean()) continue;
 
                     String tagName = stringValue(release, "tag_name");
                     String htmlUrl = stringValue(release, "html_url");
-                    if (!tagName.isBlank() && !htmlUrl.isBlank()) {
-                        return Optional.of(new Release(tagName, htmlUrl, stringValue(release, "name")));
+                    if (tagName.isBlank() || htmlUrl.isBlank()) continue;
+                    if (latest == null) latest = new Release(tagName, htmlUrl, stringValue(release, "name"), -1);
+                    if (isSameVersion(current, tagName)) {
+                        return Optional.of(new Release(latest.version(), latest.downloadUrl(), latest.name(), index));
                     }
+                    index++;
                 }
+                if (latest != null) return Optional.of(latest);
             }
             return Optional.empty();
         } catch (Exception ignored) {

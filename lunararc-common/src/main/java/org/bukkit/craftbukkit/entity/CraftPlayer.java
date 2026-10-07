@@ -492,7 +492,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public void hideEntity(@NotNull Plugin plugin, @NotNull Entity target) {
         if (plugin == null) throw new IllegalArgumentException("plugin cannot be null");
         if (target == null) throw new IllegalArgumentException("entity cannot be null");
+        boolean wasVisible = canSee(target);
         pluginHiddenEntities.computeIfAbsent(target.getUniqueId(), ignored -> ConcurrentHashMap.newKeySet()).add(plugin);
+        if (wasVisible) io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.hideShow(this, target, true);
     }
 
     @Override
@@ -502,7 +504,10 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         Set<Plugin> plugins = pluginHiddenEntities.get(target.getUniqueId());
         if (plugins == null) return;
         plugins.remove(plugin);
-        if (plugins.isEmpty()) pluginHiddenEntities.remove(target.getUniqueId(), plugins);
+        if (plugins.isEmpty()) {
+            pluginHiddenEntities.remove(target.getUniqueId(), plugins);
+            if (canSee(target)) io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.hideShow(this, target, false);
+        }
     }
 
     @Override
@@ -2276,12 +2281,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public void setFirstPlayed(long firstPlayed) { ((ServerPlayerBukkitDataBridge) getHandle()).lunararc$setFirstPlayed(firstPlayed); }
 
     private Object getNmsStatsCounter() {
-        try {
-            java.lang.reflect.Method method = getHandle().getClass().getMethod("getStats");
-            return method.invoke(getHandle());
-        } catch (ReflectiveOperationException ex) {
-            throw new IllegalStateException("Unable to access the Minecraft ServerStatsCounter for " + getName(), ex);
-        }
+        return getHandle().getStats();
     }
 
     private static final java.util.Map<Class<?>, Class<?>> STATISTIC_BOXED_PRIMITIVES = java.util.Map.of(

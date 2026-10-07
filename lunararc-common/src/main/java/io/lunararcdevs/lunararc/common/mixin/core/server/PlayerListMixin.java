@@ -428,4 +428,9 @@ public abstract class PlayerListMixin implements PlayerListBridge {
                 PlayerQuitEvent.QuitReason.DISCONNECTED);
         this.lunararc$getCraftServer().getPluginManager().callEvent(event);
     }
+
+    @Inject(method = "setUsingWhiteList", at = @At("HEAD"), require = 0)
+    private void lunararc$whitelistToggle(boolean enabled, CallbackInfo ci) {
+        io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.whitelistToggle(enabled);
+    }
 }

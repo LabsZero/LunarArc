@@ -120,13 +120,11 @@ public abstract class ServerLevelMixin implements ServerLevelBridge {
     @Inject(method = "addFreshEntity", at = @At("HEAD"), cancellable = true, require = 0)
     private void lunararc$nativeFreshEntity(Entity entity, CallbackInfoReturnable<Boolean> cir) {
         if (entity instanceof ServerPlayer) return;
-        // addFreshEntity is the core method structure population (dungeons, villages,
-        // outposts — anything that spawns entities) uses to add entities to the world, and
-        // that generation genuinely happens on worker threads even in vanilla. Same class of
-        // risk as a real, confirmed crash in LivingEntity.addEffect() during structure
-        // population, but this method is even more centrally on that path. Skip firing the
-        // Bukkit spawn event off-thread rather than let PaperEventManager's safety check throw
-        // and abort the underlying vanilla/modded entity placement.
+        if (io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.captureDrop(entity)) {
+            cir.setReturnValue(true);
+            return;
+        }
+
         if (!org.bukkit.Bukkit.isPrimaryThread()) return;
         ServerLevel level = (ServerLevel) (Object) this;
         boolean loaderOwnsCancellation = ((io.lunararcdevs.lunararc.common.bridge.MinecraftServerBridge) (Object) level.getServer())
@@ -151,6 +149,31 @@ public abstract class ServerLevelMixin implements ServerLevelBridge {
         if (event != null && event.isCancelled()) {
             cir.setReturnValue(false);
         }
+    }
+
+    @org.spongepowered.asm.mixin.Unique private net.minecraft.core.BlockPos lunararc$previousSpawn;
+
+    @Inject(method = "setDefaultSpawnPos", at = @At("HEAD"), require = 0)
+    private void lunararc$captureSpawn(net.minecraft.core.BlockPos pos, float angle, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        this.lunararc$previousSpawn = ((ServerLevel) (Object) this).getSharedSpawnPos();
+    }
+
+    @Inject(method = "setDefaultSpawnPos", at = @At("RETURN"), require = 0)
+    private void lunararc$spawnChanged(net.minecraft.core.BlockPos pos, float angle, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        net.minecraft.core.BlockPos previous = this.lunararc$previousSpawn;
+        this.lunararc$previousSpawn = null;
+        if (previous != null && !previous.equals(pos)) {
+            io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.spawnChange((ServerLevel) (Object) this, previous);
+        }
+    }
+
+    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "tick", require = 0,
+            at = @At(value = "INVOKE", ordinal = 0, target = "Lnet/minecraft/server/level/ServerLevel;setDayTime(J)V"))
+    private void lunararc$nightSkip(ServerLevel level, long time,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> original) {
+        long skip = io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.timeSkip(
+                level, org.bukkit.event.world.TimeSkipEvent.SkipReason.NIGHT_SKIP, time - level.getDayTime());
+        if (skip != 0L) original.call(level, level.getDayTime() + skip);
     }
 
     @Inject(method = "addEntity", at = @At("RETURN"), require = 0)

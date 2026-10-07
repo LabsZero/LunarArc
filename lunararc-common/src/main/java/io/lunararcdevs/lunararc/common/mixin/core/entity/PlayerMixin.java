@@ -32,6 +32,47 @@ public abstract class PlayerMixin implements PlayerAffectsSpawningBridge, io.lun
         io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.riptide((Player) (Object) this, stack);
     }
 
+    @com.llamalad7.mixinextras.injector.ModifyReturnValue(method = "getProjectile", at = @At("RETURN"), require = 0)
+    private ItemStack lunararc$readyArrow(ItemStack arrow, ItemStack weapon) {
+        return io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.readyArrow((Player) (Object) this, weapon, arrow);
+    }
+
+    @org.spongepowered.asm.mixin.Shadow private int sleepCounter;
+
+    @Inject(method = "tick", at = @At("HEAD"), require = 0)
+    private void lunararc$deepSleep(CallbackInfo ci) {
+        Player self = (Player) (Object) this;
+        if (this.sleepCounter == 99 && self.isSleeping() && !self.level().isClientSide
+                && !io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.deepSleep(self)) {
+            this.sleepCounter = Integer.MIN_VALUE;
+        }
+    }
+
+    @Unique private net.minecraft.world.entity.LivingEntity lunararc$shieldAttacker;
+
+    @Inject(method = "blockUsingShield", at = @At("HEAD"), require = 0)
+    private void lunararc$shieldAttacker(net.minecraft.world.entity.LivingEntity attacker, CallbackInfo ci) {
+        this.lunararc$shieldAttacker = attacker;
+    }
+
+    @Inject(method = "blockUsingShield", at = @At("RETURN"), require = 0)
+    private void lunararc$clearShieldAttacker(net.minecraft.world.entity.LivingEntity attacker, CallbackInfo ci) {
+        this.lunararc$shieldAttacker = null;
+    }
+
+    @Inject(method = "disableShield", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$disableShield(CallbackInfo ci) {
+        Player self = (Player) (Object) this;
+        if (this.lunararc$shieldAttacker == null) return;
+        int cooldown = io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.shieldDisable(self, this.lunararc$shieldAttacker);
+        if (cooldown == 100) return;
+        ci.cancel();
+        if (cooldown < 0) return;
+        self.getCooldowns().addCooldown(self.getUseItem().getItem(), cooldown);
+        self.stopUsingItem();
+        self.level().broadcastEntityEvent(self, (byte) 30);
+    }
+
     @Unique
     private boolean lunararc$affectsSpawning = true;
     @Unique private org.bukkit.event.entity.EntityExhaustionEvent.ExhaustionReason lunararc$exhaustionReason = org.bukkit.event.entity.EntityExhaustionEvent.ExhaustionReason.UNKNOWN;
@@ -85,9 +126,7 @@ public abstract class PlayerMixin implements PlayerAffectsSpawningBridge, io.lun
         if (!event.isCancelled()) {
             return;
         }
-
-        // Keep loader/mod drop processing intact; cancellation only removes the
-        // resulting vanilla item entity and restores the dropped Bukkit stack.
+        
         dropped.discard();
 
         org.bukkit.inventory.ItemStack restore = bukkitItem.getItemStack();

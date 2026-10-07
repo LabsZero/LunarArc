@@ -32,6 +32,7 @@ public abstract class LevelMixin implements io.lunararcdevs.lunararc.common.brid
     private boolean lunararc$antiXrayOnSetBlock(
             BlockPos pos, BlockState newState, int flags, int maxUpdateDepth, Operation<Boolean> original) {
         Level level = (Level) (Object) this;
+        if (io.lunararcdevs.lunararc.common.event.LunarArcBlockCapture.intercept(level, pos, newState, flags)) return true;
         BlockState oldState = level instanceof ServerLevel ? level.getBlockState(pos) : null;
         boolean result = original.call(pos, newState, flags, maxUpdateDepth);
         if (oldState != null) {
@@ -39,6 +40,13 @@ public abstract class LevelMixin implements io.lunararcdevs.lunararc.common.brid
                     .onBlockChange((ServerLevel) level, pos, newState, oldState);
         }
         return result;
+    }
+
+    @Inject(method = "getBlockState(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;",
+            at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$capturedState(BlockPos pos, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<BlockState> cir) {
+        BlockState captured = io.lunararcdevs.lunararc.common.event.LunarArcBlockCapture.read((Level) (Object) this, pos);
+        if (captured != null) cir.setReturnValue(captured);
     }
 
     @Override

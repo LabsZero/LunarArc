@@ -23,6 +23,34 @@ public abstract class ExperienceOrbMixin {
         if (io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.pickupExperience(player, (ExperienceOrb) (Object) this)) ci.cancel();
     }
 
+    @org.spongepowered.asm.mixin.Shadow
+    protected abstract int repairPlayerItems(ServerPlayer player, int experience);
+
+    @Inject(method = "repairPlayerItems", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$mend(ServerPlayer player, int experience, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Integer> cir) {
+        if (!io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.mendListened()) return;
+        java.util.Optional<net.minecraft.world.item.enchantment.EnchantedItemInUse> optional =
+                net.minecraft.world.item.enchantment.EnchantmentHelper.getRandomItemWith(
+                        net.minecraft.world.item.enchantment.EnchantmentEffectComponents.REPAIR_WITH_XP,
+                        player, net.minecraft.world.item.ItemStack::isDamaged);
+        if (optional.isEmpty()) return;
+        net.minecraft.world.item.ItemStack stack = optional.get().itemStack();
+        int durability = net.minecraft.world.item.enchantment.EnchantmentHelper.modifyDurabilityToRepairFromXp(player.serverLevel(), stack, experience);
+        int repair = io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.mend((ServerPlayer) player,
+                (ExperienceOrb) (Object) this, stack, optional.get().inSlot(), Math.min(durability, stack.getDamageValue()), experience);
+        if (repair < 0) {
+            cir.setReturnValue(experience);
+            return;
+        }
+        stack.setDamageValue(stack.getDamageValue() - repair);
+        int remaining = 0;
+        if (repair > 0 && durability > 0) {
+            int left = experience - repair * experience / durability;
+            if (left > 0) remaining = this.repairPlayerItems(player, left);
+        }
+        cir.setReturnValue(remaining);
+    }
+
     @Redirect(
             method = "playerTouch",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/player/Player;giveExperiencePoints(I)V"),
@@ -42,5 +70,13 @@ public abstract class ExperienceOrbMixin {
             }
         }
         player.giveExperiencePoints(awarded);
+    }
+
+    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "playerTouch", require = 0,
+            at = @At(value = "FIELD", opcode = org.objectweb.asm.Opcodes.PUTFIELD,
+                    target = "Lnet/minecraft/world/entity/player/Player;takeXpDelay:I"))
+    private void lunararc$cooldown(Player player, int cooldown,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> original) {
+        original.call(player, io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.expCooldown(player, cooldown));
     }
 }
