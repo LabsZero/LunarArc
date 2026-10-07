@@ -403,4 +403,73 @@ public final class LunarArcMoreEvents {
         if (player == null || !listened(com.destroystokyo.paper.event.brigadier.AsyncPlayerSendCommandsEvent.getHandlerList())) return;
         fire(new com.destroystokyo.paper.event.brigadier.AsyncPlayerSendCommandsEvent(player, root, false));
     }
+
+    public static boolean pickItem(net.minecraft.server.level.ServerPlayer who, int sourceSlot) {
+        org.bukkit.entity.Player player = player(who);
+        if (player == null || !listened(io.papermc.paper.event.player.PlayerPickItemEvent.getHandlerList())) return true;
+        return !fire(new io.papermc.paper.event.player.PlayerPickItemEvent(player, who.getInventory().getSuitableHotbarSlot(), sourceSlot));
+    }
+
+    public static boolean toggleSit(net.minecraft.world.entity.Entity entity, boolean sitting) {
+        if (!listened(io.papermc.paper.event.entity.EntityToggleSitEvent.getHandlerList()) || !mobReady(entity) || bukkit(entity) == null) return true;
+        return !fire(new io.papermc.paper.event.entity.EntityToggleSitEvent(bukkit(entity), sitting));
+    }
+
+    public static boolean arrowCount(LivingEntity entity, int oldCount, int newCount) {
+        if (oldCount == newCount || !listened(org.bukkit.event.entity.ArrowBodyCountChangeEvent.getHandlerList()) || !mobReady(entity)
+                || !(bukkit(entity) instanceof org.bukkit.entity.LivingEntity living)) return true;
+        return !fire(new org.bukkit.event.entity.ArrowBodyCountChangeEvent(living, oldCount, newCount, newCount == 0));
+    }
+
+    public static boolean blockDestroy(Level level, BlockPos pos, boolean drop) {
+        if (!listened(com.destroystokyo.paper.event.block.BlockDestroyEvent.getHandlerList()) || !ready(level)) return true;
+        ServerLevel serverLevel = (ServerLevel) level;
+        net.minecraft.world.level.block.state.BlockState state = serverLevel.getBlockState(pos);
+        if (state.isAir()) return true;
+        net.minecraft.world.level.block.state.BlockState replacement = serverLevel.getFluidState(pos).createLegacyBlock();
+        return !fire(new com.destroystokyo.paper.event.block.BlockDestroyEvent(CraftBlock.at(serverLevel, pos),
+                org.bukkit.craftbukkit.block.data.CraftBlockData.fromData(state), org.bukkit.craftbukkit.block.data.CraftBlockData.fromData(replacement), 3, drop));
+    }
+
+    public static boolean endermanLooked(net.minecraft.world.entity.Entity enderman, net.minecraft.world.entity.player.Player who) {
+        org.bukkit.entity.Player player = player(who);
+        if (player == null || !listened(com.destroystokyo.paper.event.entity.EndermanAttackPlayerEvent.getHandlerList()) || !mobReady(enderman)
+                || !(bukkit(enderman) instanceof org.bukkit.entity.Enderman found)) return true;
+        return !fire(new com.destroystokyo.paper.event.entity.EndermanAttackPlayerEvent(found, player));
+    }
+
+    public static boolean pufferState(net.minecraft.world.entity.Entity fish, int state) {
+        if (!listened(io.papermc.paper.event.entity.PufferFishStateChangeEvent.getHandlerList()) || !mobReady(fish)
+                || !(bukkit(fish) instanceof org.bukkit.entity.PufferFish found)) return true;
+        return !fire(new io.papermc.paper.event.entity.PufferFishStateChangeEvent(found, state));
+    }
+
+    public static boolean dragonPhase(net.minecraft.world.entity.boss.enderdragon.EnderDragon dragon, int from, int to) {
+        if (from == to || !listened(org.bukkit.event.entity.EnderDragonChangePhaseEvent.getHandlerList()) || !mobReady(dragon)
+                || !(bukkit(dragon) instanceof org.bukkit.entity.EnderDragon found)) return true;
+        org.bukkit.entity.EnderDragon.Phase[] phases = org.bukkit.entity.EnderDragon.Phase.values();
+        if (from < 0 || from >= phases.length || to < 0 || to >= phases.length) return true;
+        return !fire(new org.bukkit.event.entity.EnderDragonChangePhaseEvent(found, phases[from], phases[to]));
+    }
+
+    public static int piglinAnger(net.minecraft.world.entity.monster.ZombifiedPiglin piglin, int anger) {
+        if (!listened(org.bukkit.event.entity.PigZombieAngerEvent.getHandlerList()) || !(piglin.level() instanceof ServerLevel level)
+                || !org.bukkit.Bukkit.isPrimaryThread() || !(bukkit(piglin) instanceof org.bukkit.entity.PigZombie found)) return anger;
+        java.util.UUID targetId = piglin.getPersistentAngerTarget();
+        net.minecraft.world.entity.Entity target = targetId == null ? null : level.getEntity(targetId);
+        org.bukkit.event.entity.PigZombieAngerEvent event = new org.bukkit.event.entity.PigZombieAngerEvent(found, bukkit(target), anger);
+        return fire(event) ? -1 : event.getNewAnger();
+    }
+
+    public static boolean deepSleep(net.minecraft.world.entity.player.Player who) {
+        org.bukkit.entity.Player player = player(who);
+        if (player == null || !listened(io.papermc.paper.event.player.PlayerDeepSleepEvent.getHandlerList())) return true;
+        return !fire(new io.papermc.paper.event.player.PlayerDeepSleepEvent(player));
+    }
+
+    public static boolean turtleGoHome(net.minecraft.world.entity.Entity turtle) {
+        if (!listened(com.destroystokyo.paper.event.entity.TurtleGoHomeEvent.getHandlerList()) || !mobReady(turtle)
+                || !(bukkit(turtle) instanceof org.bukkit.entity.Turtle found)) return true;
+        return !fire(new com.destroystokyo.paper.event.entity.TurtleGoHomeEvent(found));
+    }
 }

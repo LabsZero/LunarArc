@@ -37,6 +37,17 @@ public abstract class PlayerMixin implements PlayerAffectsSpawningBridge, io.lun
         return io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.readyArrow((Player) (Object) this, weapon, arrow);
     }
 
+    @org.spongepowered.asm.mixin.Shadow private int sleepCounter;
+
+    @Inject(method = "tick", at = @At("HEAD"), require = 0)
+    private void lunararc$deepSleep(CallbackInfo ci) {
+        Player self = (Player) (Object) this;
+        if (this.sleepCounter == 99 && self.isSleeping() && !self.level().isClientSide
+                && !io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.deepSleep(self)) {
+            this.sleepCounter = Integer.MIN_VALUE;
+        }
+    }
+
     @Unique private net.minecraft.world.entity.LivingEntity lunararc$shieldAttacker;
 
     @Inject(method = "blockUsingShield", at = @At("HEAD"), require = 0)
