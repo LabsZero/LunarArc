@@ -17,7 +17,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Captures the real End-platform block writes so PortalCreateEvent can cancel them atomically. */
 @Mixin(EndPlatformFeature.class)
 public abstract class EndPlatformFeatureMixin {
     @Unique private static final ThreadLocal<BlockStateListPopulator> LUNARARC_POPULATOR = new ThreadLocal<>();
@@ -71,15 +70,6 @@ public abstract class EndPlatformFeatureMixin {
         }
 
         boolean accepted = true;
-        // createEndPlatform is a real vanilla worldgen Feature, guaranteed to run during chunk
-        // generation on worker threads — same class of risk as a real confirmed crash
-        // elsewhere on this exact pattern. Unlike the simpler cases, this method must still
-        // actually place the captured blocks even when skipping the event (the real
-        // setBlock/destroyBlock calls were redirected into the populator earlier in this same
-        // method, so skipping placement here would silently break end-platform generation
-        // entirely, not just skip a notification). Folding the thread check into the existing
-        // "couldn't resolve a Bukkit world" fallback below achieves that correctly — it already
-        // defaults to accepted = true and proceeds to place blocks unconditionally.
         if (world != null && trigger != null && org.bukkit.Bukkit.isPrimaryThread()) {
             java.util.List<org.bukkit.block.BlockState> states = populator.getCapturedStates().stream()
                     .map(BlockStateListPopulator.CapturedState::state)
@@ -91,6 +81,10 @@ public abstract class EndPlatformFeatureMixin {
             accepted = !event.isCancelled();
         }
         if (!accepted) return;
+        if (!Bukkit.isPrimaryThread()) {
+            populator.placeInto(level);
+            return;
+        }
 
         if (drop) {
             for (BlockStateListPopulator.CapturedState captured : populator.getCapturedStates()) {

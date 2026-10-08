@@ -16,6 +16,7 @@ public abstract class PickItemEventMixin {
 
     @Inject(method = "handlePickItem", at = @At("HEAD"), cancellable = true, require = 0)
     private void lunararc$pick(ServerboundPickItemPacket packet, CallbackInfo ci) {
+        if (!this.player.server.isSameThread()) return;
         if (!LunarArcMoreEvents.pickItem(this.player, packet.getSlot())) ci.cancel();
     }
 }

@@ -268,11 +268,18 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
         Either<Player.BedSleepingProblem, Unit> eventResult =
                 org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerBedEnterEvent(
                         (ServerPlayer) (Object) this, bedPos, vanillaResult);
-        eventResult.left().ifPresent(problem -> io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.bedFailed(
-                (ServerPlayer) (Object) this, bedPos, problem.name(), problem.getMessage()));
         @SuppressWarnings("unchecked")
         Either<L, R> converted = (Either<L, R>) eventResult;
         return converted.ifRight(successConsumer);
+    }
+
+    @com.llamalad7.mixinextras.injector.ModifyReturnValue(method = "startSleepInBed", at = @At("RETURN"), require = 0)
+    private Either<Player.BedSleepingProblem, Unit> lunararc$bedFailed(
+            Either<Player.BedSleepingProblem, Unit> result,
+            @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) BlockPos bedPos) {
+        result.left().ifPresent(problem -> io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.bedFailed(
+                (ServerPlayer) (Object) this, bedPos, problem.name(), problem.getMessage()));
+        return result;
     }
 
     @Inject(method = "stopSleepInBed", at = @At("HEAD"), cancellable = true, require = 0)

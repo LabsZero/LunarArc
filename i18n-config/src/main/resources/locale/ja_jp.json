@@ -17,6 +17,7 @@
   "version.update.available": "ルナアークのアップデートがあります: {0}\nインストール済み: {1}",
   "version.update.behind": "{0} バージョン遅れています",
   "version.update.behind.unknown": "最新バージョン ({0}) ではありません",
+  "version.newer": "より新しいバージョンのルナアーク ({0}) を実行しています",
   "version.update.download": "新しいバージョンのダウンロード: {0}",
   "version.check_failed": "アップデートを確認できませんでした: {0}",
   "ingame.update.available": "アップデートがあります！",

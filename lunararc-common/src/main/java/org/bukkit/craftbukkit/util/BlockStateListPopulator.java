@@ -104,6 +104,12 @@ public final class BlockStateListPopulator extends DummyGeneratorAccess {
         }
     }
 
+    public void placeInto(LevelAccessor target) {
+        for (Map.Entry<BlockPos, CapturedBlock> entry : blocks.entrySet()) {
+            target.setBlock(entry.getKey(), entry.getValue().state, entry.getValue().flags);
+        }
+    }
+
     public ServerLevel getMinecraftWorld() {
         if (world instanceof ServerLevel serverLevel) return serverLevel;
         if (world instanceof net.minecraft.server.level.WorldGenRegion region) return region.getLevel();

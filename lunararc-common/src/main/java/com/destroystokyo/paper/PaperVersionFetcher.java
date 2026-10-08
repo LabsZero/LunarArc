@@ -30,6 +30,8 @@ public final class PaperVersionFetcher implements VersionFetcher {
     private static final java.util.regex.Pattern VERSION_NUMBER =
             java.util.regex.Pattern.compile("\\d+(?:\\.\\d+)+(?:-[0-9A-Za-z.]+)?");
 
+    private static final java.util.regex.Pattern VERSION_CORE = java.util.regex.Pattern.compile("\\d+(?:\\.\\d+)*");
+
     public record Release(String version, String downloadUrl, String name, int behind) {
         public String displayVersion() {
             for (String source : new String[] {name, version}) {
@@ -57,6 +59,10 @@ public final class PaperVersionFetcher implements VersionFetcher {
             Release release = latest.get();
             if (isSameVersion(currentVersion, release.version())) {
                 return latestVersionMessage(currentVersion);
+            }
+
+            if (release.behind() < 0 && isNewerThan(currentVersion, release)) {
+                return Component.text(TranslationManager.get("version.newer", currentVersion), NamedTextColor.AQUA);
             }
 
             String behindText = release.behind() > 0
@@ -116,6 +122,32 @@ public final class PaperVersionFetcher implements VersionFetcher {
     private static String stringValue(JsonObject object, String key) {
         JsonElement value = object.get(key);
         return value == null || value.isJsonNull() ? "" : value.getAsString();
+    }
+
+    static boolean isNewerThan(String current, Release release) {
+        int[] mine = numericCore(current);
+        int[] latest = numericCore(release.displayVersion());
+        for (int i = 0; i < Math.max(mine.length, latest.length); i++) {
+            int a = i < mine.length ? mine[i] : 0;
+            int b = i < latest.length ? latest[i] : 0;
+            if (a != b) return a > b;
+        }
+        String lower = current.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("snapshot") || lower.contains("dev") || lower.contains("+");
+    }
+
+    private static int[] numericCore(String version) {
+        java.util.regex.Matcher matcher = VERSION_CORE.matcher(version == null ? "" : version);
+        if (!matcher.find()) return new int[0];
+        String[] parts = matcher.group().split("\\.");
+        int[] numbers = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            try {
+                numbers[i] = Integer.parseInt(parts[i]);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return numbers;
     }
 
     public static boolean isSameVersion(String serverVersion, String tagName) {
