@@ -189,6 +189,12 @@ public class CraftServer implements Server {
 
     public CraftServer(MinecraftServer console, PlayerList playerList) {
         org.bukkit.craftbukkit.inventory.SerializableMeta.register();
+        for (String driver : new String[] {"com.mysql.cj.jdbc.Driver", "org.sqlite.JDBC"}) {
+            try {
+                Class.forName(driver, true, CraftServer.class.getClassLoader());
+            } catch (Throwable ignored) {
+            }
+        }
         this.console = console;
         this.potionBrewer = new org.bukkit.craftbukkit.potion.CraftPotionBrewer(console);
         this.playerList = playerList;

@@ -1042,11 +1042,13 @@ public abstract class ServerGamePacketListenerImplMixin {
 
     @Inject(method = "handlePlaceRecipe", at = @At("HEAD"), cancellable = true, require = 0)
     private void lunararc$recipeClick(net.minecraft.network.protocol.game.ServerboundPlaceRecipePacket packet, CallbackInfo ci) {
+        if (!this.player.server.isSameThread()) return;
         if (!io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.recipeBookClick(this.player, packet.getRecipe(), packet.isShiftDown())) ci.cancel();
     }
 
     @Inject(method = "handleRecipeBookChangeSettingsPacket", at = @At("HEAD"), require = 0)
     private void lunararc$recipeSettings(net.minecraft.network.protocol.game.ServerboundRecipeBookChangeSettingsPacket packet, CallbackInfo ci) {
+        if (!this.player.server.isSameThread()) return;
         io.lunararcdevs.lunararc.common.event.LunarArcMoreEvents.recipeBookSettings(this.player, packet.getBookType(), packet.isOpen(), packet.isFiltering());
     }
 }

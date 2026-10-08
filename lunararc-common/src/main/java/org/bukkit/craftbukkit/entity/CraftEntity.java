@@ -49,6 +49,9 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         if (entity instanceof net.minecraft.server.level.ServerPlayer sp) {
             return new CraftPlayer(server, sp);
         }
+        if (entity instanceof net.minecraft.world.entity.boss.EnderDragonPart part) {
+            return new CraftEnderDragonPart(server, part);
+        }
         org.bukkit.entity.Entity typed = fromPaperEntityTypes(server, entity);
         if (typed != null) {
             return typed;
@@ -265,7 +268,9 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
             CraftEntityTypes.EntityTypeData data = CraftEntityTypes.getEntityTypeData(CraftEntityType.minecraftToBukkit(entity.getType()));
             if (data == null || data.convertFunction() == null) return null;
             return (org.bukkit.entity.Entity) ((java.util.function.BiFunction) data.convertFunction()).apply(server, entity);
-        } catch (LinkageError | ClassCastException | IllegalArgumentException failure) {
+        } catch (ClassCastException failure) {
+            return null;
+        } catch (LinkageError | IllegalArgumentException failure) {
             paperEntityTypesBroken = true;
             org.slf4j.LoggerFactory.getLogger(CraftEntity.class).error("Paper entity type registry unavailable, using fallback wrappers", failure);
             return null;

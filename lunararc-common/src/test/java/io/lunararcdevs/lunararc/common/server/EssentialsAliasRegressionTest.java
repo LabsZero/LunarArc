@@ -22,6 +22,11 @@ public final class EssentialsAliasRegressionTest {
         materials.put(ResourceLocation.parse("example:cog"), "cog");
         if (!"cog".equals(index.get("example_cog"))) throw new AssertionError("new registration not indexed");
         if (scans.get() != 3) throw new AssertionError("unexpected index rebuilds");
+        materials.put(ResourceLocation.parse("example:cogwheel"), "cogwheel");
+        index.get("example_cog");
+        if (!java.util.List.of("example_cog", "example_cogwheel").equals(index.withPrefix("example_co", 10))) throw new AssertionError("prefix search wrong");
+        if (index.withPrefix("example_co", 1).size() != 1) throw new AssertionError("prefix limit ignored");
+        if (!index.withPrefix("zzz", 10).isEmpty()) throw new AssertionError("prefix matched nothing expected");
         System.out.println("Essentials alias regressions passed");
     }
 }

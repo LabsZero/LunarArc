@@ -46,14 +46,40 @@ public final class LunarArcEssentialsItemBridge {
         File itemsFile = new File(essentials.getDataFolder(), "items.json");
         if (!itemsFile.isFile()) return;
 
+        File marker = new File(essentials.getDataFolder(), ".lunararc-items-checked");
+        if (stamp(itemsFile).equals(readMarker(marker))) return;
+
         List<String> lines = Files.readAllLines(itemsFile.toPath(), StandardCharsets.UTF_8);
         List<String> cleaned = withoutGeneratedEntries(lines);
-        if (cleaned == null) return;
+        if (cleaned == null) {
+            writeMarker(marker, stamp(itemsFile));
+            return;
+        }
 
         Files.write(itemsFile.toPath(), cleaned, StandardCharsets.UTF_8);
         LOGGER.info("[LunarArc] Removed {} modded item entries LunarArc used to write into Essentials' items.json;"
                 + " they are now resolved on demand.", (lines.size() - cleaned.size()) / 3);
         reloadEssentialsItemDb(essentials);
+        writeMarker(marker, stamp(itemsFile));
+    }
+
+    private static String stamp(File file) {
+        return file.length() + ":" + file.lastModified();
+    }
+
+    private static String readMarker(File marker) {
+        try {
+            return marker.isFile() ? Files.readString(marker.toPath(), StandardCharsets.UTF_8).trim() : "";
+        } catch (java.io.IOException error) {
+            return "";
+        }
+    }
+
+    private static void writeMarker(File marker, String value) {
+        try {
+            Files.writeString(marker.toPath(), value, StandardCharsets.UTF_8);
+        } catch (java.io.IOException ignored) {
+        }
     }
 
     private static Object getItemDb(Plugin essentials) throws ReflectiveOperationException {
@@ -105,13 +131,11 @@ public final class LunarArcEssentialsItemBridge {
         if (args.length - 1 != itemArgument || prefix.length() < 2) return completions;
 
         MODDED_ITEM_ALIASES.refresh();
-        List<String> merged = completions == null ? new ArrayList<>() : new ArrayList<>(completions);
-        List<String> matches = new ArrayList<>();
-        for (String alias : MODDED_ITEM_ALIASES.names()) {
-            if (alias.startsWith(prefix)) matches.add(alias);
-        }
-        java.util.Collections.sort(matches);
-        merged.addAll(matches.subList(0, Math.min(matches.size(), MODDED_COMPLETION_LIMIT)));
+        List<String> matches = MODDED_ITEM_ALIASES.withPrefix(prefix, MODDED_COMPLETION_LIMIT);
+        if (matches.isEmpty()) return completions;
+        List<String> merged = new ArrayList<>(completions == null ? matches.size() : completions.size() + matches.size());
+        if (completions != null) merged.addAll(completions);
+        merged.addAll(matches);
         return merged;
     }
 
@@ -125,7 +149,7 @@ public final class LunarArcEssentialsItemBridge {
     static final class AliasIndex<T> {
         private final java.util.function.Supplier<Map<ResourceLocation, T>> source;
         private final java.util.function.Predicate<T> isItem;
-        private volatile Snapshot<T> snapshot = new Snapshot<>(-1, Map.of());
+        private volatile Snapshot<T> snapshot = new Snapshot<>(-1, Map.of(), new String[0]);
 
         AliasIndex(java.util.function.Supplier<Map<ResourceLocation, T>> source, java.util.function.Predicate<T> isItem) {
             this.source = source;
@@ -133,41 +157,40 @@ public final class LunarArcEssentialsItemBridge {
         }
 
         T get(String alias) {
-            long start = System.nanoTime();
-            try {
-                refresh();
-                return snapshot.aliases().get(alias);
-            } finally {
-            }
+            refresh();
+            return snapshot.aliases().get(alias);
         }
 
-        java.util.Set<String> names() {
-            return snapshot.aliases().keySet();
+        List<String> withPrefix(String prefix, int limit) {
+            String[] sorted = snapshot.sorted();
+            int index = java.util.Arrays.binarySearch(sorted, prefix);
+            if (index < 0) index = -index - 1;
+            List<String> matches = new ArrayList<>(Math.min(limit, 16));
+            for (; index < sorted.length && matches.size() < limit && sorted[index].startsWith(prefix); index++) {
+                matches.add(sorted[index]);
+            }
+            return matches;
         }
 
         void refresh() {
-            long start = System.nanoTime();
-            boolean rebuilt = false;
-            try {
-                Map<ResourceLocation, T> materials = source.get();
-                if (snapshot.materialCount() == materials.size()) return;
-                synchronized (this) {
-                    int count = materials.size();
-                    if (snapshot.materialCount() == count) return;
-                    rebuilt = true;
-                    Map<String, T> aliases = new java.util.HashMap<>();
-                    materials.forEach((id, material) -> {
-                        if (id != null && material != null && !"minecraft".equals(id.getNamespace()) && isItem.test(material)) {
-                            aliases.putIfAbsent(id.getNamespace() + "_" + id.getPath(), material);
-                        }
-                    });
-                    snapshot = new Snapshot<>(count, Map.copyOf(aliases));
-                }
-            } finally {
+            Map<ResourceLocation, T> materials = source.get();
+            if (snapshot.materialCount() == materials.size()) return;
+            synchronized (this) {
+                int count = materials.size();
+                if (snapshot.materialCount() == count) return;
+                Map<String, T> aliases = new java.util.HashMap<>();
+                materials.forEach((id, material) -> {
+                    if (id != null && material != null && !"minecraft".equals(id.getNamespace()) && isItem.test(material)) {
+                        aliases.putIfAbsent(id.getNamespace() + "_" + id.getPath(), material);
+                    }
+                });
+                String[] sorted = aliases.keySet().toArray(new String[0]);
+                java.util.Arrays.sort(sorted);
+                snapshot = new Snapshot<>(count, Map.copyOf(aliases), sorted);
             }
         }
 
-        private record Snapshot<T>(int materialCount, Map<String, T> aliases) {}
+        private record Snapshot<T>(int materialCount, Map<String, T> aliases, String[] sorted) {}
     }
 
     private static Plugin findEssentials(CraftServer craftServer) {

@@ -17,6 +17,7 @@
   "version.update.available": "LunarArc update available: {0}\nInstalled: {1}",
   "version.update.behind": "You are {0} version(s) behind",
   "version.update.behind.unknown": "You are behind the latest version ({0})",
+  "version.newer": "You are running a newer version of LunarArc ({0})",
   "version.update.download": "Download the new version at {0}",
   "version.check_failed": "Could not check for updates: {0}",
   "ingame.update.available": "Update available!",

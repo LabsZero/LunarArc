@@ -290,7 +290,7 @@ def createFatJar(String platform) {
 
         configurations = []
         if (platform == 'forge') dependsOn rootProject.tasks.named('verifyNoRuntimeProxies')
-        def cleanVersion = project.version.toString()
+        def cleanVersion = "${libs.versions.minecraft.get()}-${project.version.toString().replace('+', '-')}"
         archiveBaseName.set("${rootProject.name.toLowerCase(Locale.ROOT).replaceAll('[^a-z0-9._-]+', '-')}-${platform}")
         archiveVersion.set(cleanVersion)
         archiveClassifier.set('')
@@ -443,9 +443,7 @@ def createFatJar(String platform) {
             def providedByPlatform = id.group.startsWith('org.apache.commons') ||
                 (id.group.startsWith('org.apache.maven') && !(id.group == 'org.apache.maven.resolver' || id.group == 'org.apache.maven')) ||
                 id.group.startsWith('org.apache.logging') ||
-                // Forge's own launch args file never puts slf4j-api on the classpath, unlike
-                // NeoForge/Fabric/Quilt - the jar reaching libraries/ there is a transitive
-                // download only, so Forge needs its own copy shaded in.
+
                 (id.group.startsWith('org.slf4j') && platform != 'forge') ||
                 id.group.startsWith('com.google.guava') ||
                 id.group.startsWith('com.google.code.findbugs') ||
