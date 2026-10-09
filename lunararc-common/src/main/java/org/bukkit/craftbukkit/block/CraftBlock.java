@@ -48,6 +48,13 @@ public class CraftBlock implements Block {
         return new CraftBlock(world, position);
     }
 
+    public static CraftBlock at(net.minecraft.world.level.LevelAccessor world, BlockPos position) {
+        ServerLevel level = world instanceof ServerLevel serverLevel ? serverLevel
+                : world instanceof net.minecraft.world.level.ServerLevelAccessor accessor ? accessor.getLevel() : null;
+        if (level == null) throw new IllegalArgumentException("LevelAccessor is not backed by a ServerLevel: " + world.getClass().getName());
+        return new CraftBlock(level, position);
+    }
+
 
     public static Block create(ServerLevel world, BlockPos position) {
         return new CraftBlock(world, position);

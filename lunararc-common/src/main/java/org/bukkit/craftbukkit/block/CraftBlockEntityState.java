@@ -32,6 +32,7 @@ public class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockStat
         this.snapshotDisabled = DISABLE_SNAPSHOT;
         this.snapshot = this.snapshotDisabled ? this.tileEntity : createSnapshot(this.tileEntity);
         this.persistentDataContainer = copyPersistentData(this.snapshot);
+        load(this.snapshot);
     }
 
     /** Existing LunarArc constructor retained for source compatibility. */
@@ -41,6 +42,7 @@ public class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockStat
         this.snapshotDisabled = !snapshot;
         this.snapshot = snapshot ? createSnapshot(blockEntity) : blockEntity;
         this.persistentDataContainer = copyPersistentData(this.snapshot);
+        load(this.snapshot);
     }
 
     /** CraftBukkit ABI copy constructor used by specialized state copy methods. */
@@ -71,6 +73,7 @@ public class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockStat
         if (loaded == null) {
             throw new IllegalStateException("Could not snapshot block entity " + source.getType());
         }
+        if (source.getLevel() != null) loaded.setLevel(source.getLevel());
         return (T) loaded;
     }
 

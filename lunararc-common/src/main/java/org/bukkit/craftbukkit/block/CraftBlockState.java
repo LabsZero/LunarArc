@@ -320,7 +320,8 @@ public class CraftBlockState implements BlockState {
         if (!this.placed || this.serverLevel == null) return true;
         net.minecraft.world.level.block.state.BlockState live = this.serverLevel.getBlockState(this.position);
         if (!force && live.getBlock() != this.data.getBlock()) return false;
-        return this.serverLevel.setBlock(this.position, this.data, applyPhysics ? this.flag : (this.flag & ~1));
+        this.serverLevel.setBlock(this.position, this.data, applyPhysics ? this.flag : (this.flag & ~1));
+        return true;
     }
 
     @Override public byte getRawData() {

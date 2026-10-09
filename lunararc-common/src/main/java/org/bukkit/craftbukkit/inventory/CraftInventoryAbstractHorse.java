@@ -14,6 +14,16 @@ public class CraftInventoryAbstractHorse extends CraftNMSInventory implements Ab
         this.bodyArmor = java.util.Objects.requireNonNull(bodyArmor, "bodyArmor");
     }
 
+    public CraftInventoryAbstractHorse(Container main, Container bodyArmor) {
+        this(main, bodyArmor, ownerOf(main));
+    }
+
+    private static AbstractHorse ownerOf(Container main) {
+        net.minecraft.world.entity.Entity owner = io.lunararcdevs.lunararc.common.event.LunarArcContainerOwners.owner(main);
+        return owner == null ? null
+                : ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) owner).lunararc$getBukkitEntity() instanceof AbstractHorse horse ? horse : null;
+    }
+
     protected Container main() { return getHandle(); }
     protected Container armor() { return bodyArmor; }
 

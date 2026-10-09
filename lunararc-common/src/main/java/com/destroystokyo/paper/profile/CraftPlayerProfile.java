@@ -19,17 +19,26 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 
-public class CraftPlayerProfile implements PlayerProfile {
+public class CraftPlayerProfile implements PlayerProfile, SharedPlayerProfile {
     private UUID uuid;
     private String name;
     private final Set<ProfileProperty> properties = new HashSet<>();
-    private PlayerTextures textures;
+    private CraftPlayerTextures textures;
 
     public CraftPlayerProfile(UUID uuid, String name) {
         this.uuid = uuid;
         this.name = name;
     }
 
+
+    public CraftPlayerProfile(net.minecraft.world.item.component.ResolvableProfile profile) {
+        com.mojang.authlib.GameProfile game = profile.gameProfile();
+        this.uuid = game.getId();
+        this.name = game.getName();
+        for (com.mojang.authlib.properties.Property property : game.getProperties().values()) {
+            this.properties.add(new ProfileProperty(property.name(), property.value(), property.signature()));
+        }
+    }
 
     @Override public @Nullable UUID getUniqueId() { return uuid; }
 
@@ -38,7 +47,7 @@ public class CraftPlayerProfile implements PlayerProfile {
     @Override public @Nullable String setName(@Nullable String name) { String old = this.name; this.name = name; return old; }
     @Override public @Nullable UUID getId() { return uuid; }
     @Override public @Nullable UUID setId(@Nullable UUID uuid) { UUID old = this.uuid; this.uuid = uuid; return old; }
-    @Override public @NotNull Set<ProfileProperty> getProperties() { return properties; }
+    @Override public @NotNull Set<ProfileProperty> getProperties() { syncTextures(); return properties; }
     @Override public void setProperties(@NotNull Collection<ProfileProperty> properties) { this.properties.clear(); this.properties.addAll(properties); }
     @Override public void setProperty(@NotNull ProfileProperty property) { properties.removeIf(p -> p.getName().equals(property.getName())); properties.add(property); }
     @Override public void clearProperties() { properties.clear(); }
@@ -47,12 +56,65 @@ public class CraftPlayerProfile implements PlayerProfile {
 
     @Override
     public @NotNull PlayerTextures getTextures() {
-        return textures != null ? textures : (textures = new CraftPlayerTextures());
+        return craftTextures();
+    }
+
+    private CraftPlayerTextures craftTextures() {
+        return textures != null ? textures : (textures = new CraftPlayerTextures(this));
     }
 
     @Override
     public void setTextures(@Nullable PlayerTextures textures) {
-        this.textures = textures;
+        if (textures == null) {
+            craftTextures().clear();
+        } else {
+            craftTextures().copyFrom(textures);
+        }
+    }
+
+    private void syncTextures() {
+        if (textures != null) textures.rebuildPropertyIfDirty();
+    }
+
+    @Override
+    public @Nullable com.mojang.authlib.properties.Property getProperty(String name) {
+        syncTextures();
+        for (ProfileProperty property : properties) {
+            if (property.getName().equals(name)) {
+                return new com.mojang.authlib.properties.Property(property.getName(), property.getValue(), property.getSignature());
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void setProperty(String name, com.mojang.authlib.properties.Property property) {
+        properties.removeIf(existing -> existing.getName().equals(name));
+        if (property != null) properties.add(new ProfileProperty(property.name(), property.value(), property.signature()));
+    }
+
+    @Override
+    public com.mojang.authlib.GameProfile buildGameProfile() {
+        syncTextures();
+        com.mojang.authlib.GameProfile game = new com.mojang.authlib.GameProfile(
+                uuid != null ? uuid : new UUID(0L, 0L), name != null ? name : "");
+        for (ProfileProperty property : properties) {
+            game.getProperties().put(property.getName(),
+                    new com.mojang.authlib.properties.Property(property.getName(), property.getValue(), property.getSignature()));
+        }
+        return game;
+    }
+
+    @Override
+    public net.minecraft.world.item.component.ResolvableProfile buildResolvableProfile() {
+        return new net.minecraft.world.item.component.ResolvableProfile(buildGameProfile());
+    }
+
+    public static net.minecraft.world.item.component.ResolvableProfile asResolvableProfileCopy(PlayerProfile profile) {
+        if (profile instanceof SharedPlayerProfile shared) return shared.buildResolvableProfile();
+        CraftPlayerProfile copy = new CraftPlayerProfile(profile.getId(), profile.getName());
+        copy.properties.addAll(profile.getProperties());
+        return copy.buildResolvableProfile();
     }
 
     @Override
@@ -144,7 +206,7 @@ public class CraftPlayerProfile implements PlayerProfile {
     public @NotNull CraftPlayerProfile clone() {
         CraftPlayerProfile clone = new CraftPlayerProfile(uuid, name);
         clone.properties.addAll(this.properties);
-        clone.textures = this.textures;
+        if (this.textures != null) clone.craftTextures().copyFrom(this.textures);
         return clone;
     }
 }

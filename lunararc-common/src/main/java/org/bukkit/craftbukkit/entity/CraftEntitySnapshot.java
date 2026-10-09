@@ -69,6 +69,16 @@ public final class CraftEntitySnapshot implements EntitySnapshot {
         return new CraftEntitySnapshot(tag, entity.getType());
     }
 
+    public static @Nullable CraftEntitySnapshot create(CompoundTag tag) {
+        if (tag == null) {
+            return null;
+        }
+        return net.minecraft.world.entity.EntityType.by(tag)
+                .map(org.bukkit.craftbukkit.entity.CraftEntityType::minecraftToBukkit)
+                .map(type -> create(tag, type))
+                .orElse(null);
+    }
+
     public static @Nullable CraftEntitySnapshot create(CompoundTag tag, EntityType type) {
         if (tag == null || tag.isEmpty() || type == null) {
             return null;

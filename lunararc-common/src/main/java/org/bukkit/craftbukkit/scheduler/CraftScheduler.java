@@ -37,7 +37,7 @@ public class CraftScheduler implements BukkitScheduler {
         executor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
         return executor;
     }
-    private volatile int currentTick;
+    protected volatile int currentTick;
 
     public void mainThreadHeartbeat(int tick) {
         this.currentTick = tick;

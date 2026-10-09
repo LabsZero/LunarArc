@@ -25,7 +25,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 
-public final class CraftBossBar implements KeyedBossBar {
+public class CraftBossBar implements KeyedBossBar {
     private static final Set<CraftBossBar> LIVE_BARS = ConcurrentHashMap.newKeySet();
 
     private final NamespacedKey key;
@@ -45,7 +45,7 @@ public final class CraftBossBar implements KeyedBossBar {
     }
 
 
-    private CraftBossBar(@NotNull ServerBossEvent handle) {
+    public CraftBossBar(@NotNull ServerBossEvent handle) {
         this.key = NamespacedKey.minecraft("lunararc_wrapped_bossbar_" + UUID.randomUUID());
         this.handle = Objects.requireNonNull(handle, "handle");
     }

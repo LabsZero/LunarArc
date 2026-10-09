@@ -417,13 +417,13 @@ public class CraftEventFactory {
     }
 
     public static org.bukkit.event.entity.EntityDeathEvent callEntityDeathEvent(
-            net.minecraft.world.entity.LivingEntity entity, net.minecraft.world.damagesource.DamageSource source) {
+            net.minecraft.world.entity.LivingEntity entity, net.minecraft.world.damagesource.DamageSource source,
+            java.util.List<org.bukkit.inventory.ItemStack> drops, int droppedExp) {
         org.bukkit.entity.Entity bukkitEntity = ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity();
         if (!(bukkitEntity instanceof org.bukkit.entity.LivingEntity living)) return null;
 
         var event = new org.bukkit.event.entity.EntityDeathEvent(
-                living, new org.bukkit.craftbukkit.damage.CraftDamageSource(source),
-                new ArrayList<org.bukkit.inventory.ItemStack>());
+                living, new org.bukkit.craftbukkit.damage.CraftDamageSource(source), drops, droppedExp);
         double maxHealth = living.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH) == null
                 ? living.getMaxHealth()
                 : living.getAttribute(org.bukkit.attribute.Attribute.GENERIC_MAX_HEALTH).getValue();
@@ -806,6 +806,13 @@ public class CraftEventFactory {
                 ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) other).lunararc$getBukkitEntity());
         Bukkit.getPluginManager().callEvent(event);
         return event.isCancelled();
+    }
+
+    public static boolean callPlayerSignOpenEvent(org.bukkit.entity.Player player, org.bukkit.block.Sign sign,
+            org.bukkit.block.sign.Side side, org.bukkit.event.player.PlayerSignOpenEvent.Cause cause) {
+        org.bukkit.event.player.PlayerSignOpenEvent event = new org.bukkit.event.player.PlayerSignOpenEvent(player, sign, side, cause);
+        Bukkit.getPluginManager().callEvent(event);
+        return !event.isCancelled();
     }
 
     public static boolean callPlayerShearEntityCancelled(net.minecraft.world.entity.player.Player player, net.minecraft.world.entity.Entity sheared,

@@ -358,21 +358,65 @@ public abstract class LivingEntityMixin implements LivingEntityBridge {
         return original.call(source, (float) Math.max(0.0D, adjusted));
     }
 
+    @org.spongepowered.asm.mixin.Shadow protected boolean dead;
+
     @WrapMethod(method = "die")
     private void lunararc$onDeath(DamageSource source, Operation<Void> original) {
         LivingEntity entity = (LivingEntity) (Object) this;
-        if (entity instanceof net.minecraft.server.level.ServerPlayer) {
-            original.call(source);
+        original.call(source);
+        if (lunararc$deathCancelled) {
+            lunararc$deathCancelled = false;
+            entity.setPose(net.minecraft.world.entity.Pose.STANDING);
+        }
+    }
+
+    @Unique private boolean lunararc$deathCancelled;
+
+    @WrapMethod(method = "dropAllDeathLoot")
+    private void lunararc$dropAllDeathLoot(net.minecraft.server.level.ServerLevel level, DamageSource source, Operation<Void> original) {
+        LivingEntity entity = (LivingEntity) (Object) this;
+        if (entity instanceof net.minecraft.server.level.ServerPlayer || !org.bukkit.Bukkit.isPrimaryThread()) {
+            original.call(level, source);
             return;
         }
-        org.bukkit.event.entity.EntityDeathEvent event = CraftEventFactory.callEntityDeathEvent(entity, source);
+        io.lunararcdevs.lunararc.common.event.LunarArcDeathCapture.Capture previous = io.lunararcdevs.lunararc.common.event.LunarArcDeathCapture.current();
+        io.lunararcdevs.lunararc.common.event.LunarArcDeathCapture.Capture capture = io.lunararcdevs.lunararc.common.event.LunarArcDeathCapture.begin(entity);
+        try {
+            original.call(level, source);
+        } finally {
+            io.lunararcdevs.lunararc.common.event.LunarArcDeathCapture.end(previous);
+        }
+
+        java.util.List<org.bukkit.inventory.ItemStack> drops = new java.util.ArrayList<>(capture.items.size());
+        for (net.minecraft.world.item.ItemStack stack : capture.items) {
+            drops.add(org.bukkit.craftbukkit.inventory.CraftItemStack.asBukkitCopy(stack));
+        }
+        int dragonBase = 0;
+        if (entity instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon dragon) {
+            net.minecraft.world.level.dimension.end.EndDragonFight fight = dragon.getDragonFight();
+            dragonBase = fight != null && !fight.hasPreviouslyKilledDragon() ? 12000 : 500;
+            capture.exp = dragonBase;
+        }
+        org.bukkit.event.entity.EntityDeathEvent event = CraftEventFactory.callEntityDeathEvent(entity, source, drops, capture.exp);
         if (event != null && event.isCancelled()) {
             double revive = event.getReviveHealth();
             if (revive <= 0.0D) revive = entity.getMaxHealth();
             entity.setHealth((float) Math.min(revive, entity.getMaxHealth()));
+            this.dead = false;
+            this.lunararc$deathCancelled = true;
             return;
         }
-        original.call(source);
+        java.util.List<org.bukkit.inventory.ItemStack> finalDrops = event == null ? drops : event.getDrops();
+        for (org.bukkit.inventory.ItemStack drop : finalDrops) {
+            if (drop == null || drop.getType().isAir() || drop.getAmount() <= 0) continue;
+            entity.spawnAtLocation(org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(drop));
+        }
+        int exp = event == null ? capture.exp : event.getDroppedExp();
+        if (dragonBase > 0) {
+            io.lunararcdevs.lunararc.common.event.LunarArcDeathCapture.setExpScale(entity, (double) exp / dragonBase);
+            return;
+        }
+        if (exp > 0) net.minecraft.world.entity.ExperienceOrb.award(level, entity.position(), exp);
     }
 
     @WrapOperation(method = "updateFallFlying", at = @At(value = "INVOKE",

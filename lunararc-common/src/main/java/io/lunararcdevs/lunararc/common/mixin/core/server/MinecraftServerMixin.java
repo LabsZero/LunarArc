@@ -229,20 +229,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
 
     @Override
     public double[] lunararc$getTps() {
-        // Built element by element rather than with recentTps.clone(). An array's clone() is an
-        // INVOKEVIRTUAL whose owner is the array descriptor itself, "[D", and Mixin's applicator
-        // resolves every method owner it rewrites through ClassInfo.forName - which has no class
-        // to return for an array type. It NPEs there and the whole mixin fails to apply, taking
-        // the server down before it starts:
-        //
-        //   Apply Methods -> ()[D:lunararc$getTps -> Transform Instructions
-        //   -> INVOKEVIRTUAL [D::clone()Ljava/lang/Object;
-        //   Caused by: NullPointerException: ... ClassInfo.forName(String) is null
-        //
-        // This is also what CraftServer.getTPS() does with the same field, so the shape matches
-        // CraftBukkit rather than merely avoiding the crash. Copying still matters: the array is
-        // published to plugins, and handing out the live one lets a caller rewrite the server's
-        // own TPS record.
+
         return new double[] { this.recentTps[0], this.recentTps[1], this.recentTps[2] };
     }
 
@@ -339,10 +326,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         try {
             craftServer.loadPlugins();
         } catch (io.lunararcdevs.lunararc.common.config.IncompatibleSoftwareException fatal) {
-            // The plugin provider layer has already printed the operator-facing fatal block.
-            // Mark the Minecraft server as no longer running as well as rethrowing so that
-            // higher-level loader/crash guards cannot accidentally continue world startup
-            // with an empty/partially populated Bukkit plugin registry.
+
             ((MinecraftServer) (Object) this).halt(false);
             throw fatal;
         }

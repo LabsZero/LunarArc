@@ -37,7 +37,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class CraftItemFactory implements ItemFactory {
-    private static final Color DEFAULT_LEATHER_COLOR = Color.fromRGB(0xA06540);
+    public static final Color DEFAULT_LEATHER_COLOR = Color.fromRGB(0xA06540);
     private static final CraftItemFactory INSTANCE = new CraftItemFactory();
     private static final RandomSource RANDOM = RandomSource.create();
 
@@ -47,8 +47,6 @@ public final class CraftItemFactory implements ItemFactory {
         return INSTANCE;
     }
 
-    // Built from the item's own default data components (not a blank meta), so metas derived
-    // from it (below) keep defaults like TOOL/ATTRIBUTE_MODIFIERS instead of writing them out.
     private static net.minecraft.world.item.ItemStack prototypeStack(Material material) {
         Item item = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
                 ResourceLocation.parse(material.getKey().toString()));
