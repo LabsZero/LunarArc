@@ -31,12 +31,12 @@ public abstract class ExtraPacketEventsMixin {
     private void lunararc$uncheckedSignChange(ServerboundSignUpdatePacket packet, List<FilteredText> lines, CallbackInfo ci) {
         if (io.papermc.paper.event.packet.UncheckedSignChangeEvent.getHandlerList().getRegisteredListeners().length == 0) return;
         ServerLevel level = this.player.level();
-        if (!level.hasChunkAt(packet.getPos())
+        if (!level.hasChunkAt(packet.pos())
                 || !(((EntityBridge) this.player).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Player bukkit)) return;
         List<Component> text = lines.stream().<Component>map(line -> Component.text(line.raw())).toList();
         io.papermc.paper.math.BlockPosition position = io.papermc.paper.math.Position.block(
-                packet.getPos().getX(), packet.getPos().getY(), packet.getPos().getZ());
-        org.bukkit.block.sign.Side side = packet.isFrontText() ? org.bukkit.block.sign.Side.FRONT : org.bukkit.block.sign.Side.BACK;
+                packet.pos().getX(), packet.pos().getY(), packet.pos().getZ());
+        org.bukkit.block.sign.Side side = packet.slot() == net.minecraft.world.level.block.entity.SignTextSlot.FRONT ? org.bukkit.block.sign.Side.FRONT : org.bukkit.block.sign.Side.BACK;
         if (!new io.papermc.paper.event.packet.UncheckedSignChangeEvent(bukkit, position, side, text).callEvent()) ci.cancel();
     }
 }

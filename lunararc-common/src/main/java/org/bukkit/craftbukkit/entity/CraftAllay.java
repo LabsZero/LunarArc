@@ -34,7 +34,7 @@ public final class CraftAllay extends CraftCreature implements org.bukkit.entity
     @Override public void stopDancing() { b().lunararc$setForceDancing(false); a().lunararc$setJukeboxPos(null); getHandle().setDancing(false); }
     @Override public org.bukkit.entity.Allay duplicateAllay() {
         if (!(getHandle().level() instanceof ServerLevel level)) return null;
-        net.minecraft.world.entity.animal.allay.Allay duplicate = EntityType.ALLAY.create(level, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+        net.minecraft.world.entity.animal.allay.Allay duplicate = net.minecraft.world.entity.EntityTypes.ALLAY.create(level, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
         if (duplicate == null) return null;
         duplicate.snapTo(getHandle().position());
         duplicate.setPersistenceRequired();

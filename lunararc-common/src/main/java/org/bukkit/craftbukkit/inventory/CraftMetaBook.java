@@ -86,19 +86,12 @@ public class CraftMetaBook extends CraftItemMeta implements BookMeta, WritableBo
     @Override public @NotNull Component page(int page) { return LEGACY.deserialize(getPage(page)); }
     @Override public void page(int page, @NotNull Component data) { setPage(page, LEGACY.serialize(data)); }
     @Override public void addPages(@NotNull Component @NotNull ... pages) { for (Component page : pages) addInternal(LEGACY.serialize(page == null ? Component.empty() : page)); }
+    @Override public net.kyori.adventure.inventory.@NotNull Book asBook() {
+        return net.kyori.adventure.inventory.Book.book(pages());
+    }
     @Override public @NotNull List<Component> pages() { return getPages().stream().<Component>map(LEGACY::deserialize).toList(); }
     @Override public @NotNull BookMeta pages(@NotNull List<Component> pages) { this.pages = null; for (Component page : pages) addInternal(LEGACY.serialize(page == null ? Component.empty() : page)); return this; }
 
-    protected static class CraftMetaBookBuilder implements BookMeta.BookMetaBuilder {
-        protected final List<Component> pages = new ArrayList<>();
-        @Override public BookMeta.BookMetaBuilder title(Component title) { return this; }
-        @Override public BookMeta.BookMetaBuilder author(Component author) { return this; }
-        @Override public BookMeta.BookMetaBuilder addPage(Component page) { this.pages.add(page == null ? Component.empty() : page); return this; }
-        @Override public BookMeta.BookMetaBuilder pages(Component... pages) { if (pages != null) for (Component page : pages) addPage(page); return this; }
-        @Override public BookMeta.BookMetaBuilder pages(java.util.Collection<Component> pages) { if (pages != null) for (Component page : pages) addPage(page); return this; }
-        @Override public BookMeta build() { CraftMetaBook meta = new CraftMetaBook(); meta.pages(this.pages); return meta; }
-    }
-    @Override public BookMeta.BookMetaBuilder toBuilder() { return new CraftMetaBookBuilder(); }
 
     @Override public CraftMetaBook clone() {
         CraftMetaBook clone = (CraftMetaBook) super.clone();

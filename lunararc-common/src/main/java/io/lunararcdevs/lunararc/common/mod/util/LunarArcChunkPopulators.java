@@ -26,8 +26,8 @@ public final class LunarArcChunkPopulators {
 
         CraftLimitedRegion limited = new CraftLimitedRegion(level, chunk.getPos());
         try {
-            int x = chunk.getPos().x;
-            int z = chunk.getPos().z;
+            int x = chunk.getPos().x();
+            int z = chunk.getPos().z();
             for (BlockPopulator populator : List.copyOf(populators)) {
                 WorldgenRandom seeded = new WorldgenRandom(new LegacyRandomSource(level.getSeed()));
                 long populationSeed = seeded.setDecorationSeed(level.getSeed(), x, z);

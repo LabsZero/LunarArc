@@ -34,4 +34,30 @@ public final class CraftChicken extends CraftAnimals implements Chicken {
             super(holder);
         }
     }
+
+    @Override
+    public Chicken.SoundVariant getSoundVariant() {
+        return CraftSoundVariant.minecraftHolderToBukkit(this.getHandle().getSoundVariant());
+    }
+
+    @Override
+    public void setSoundVariant(Chicken.SoundVariant soundVariant) {
+        com.google.common.base.Preconditions.checkArgument(soundVariant != null, "soundVariant cannot be null");
+        this.getHandle().setSoundVariant(CraftSoundVariant.bukkitToMinecraftHolder(soundVariant));
+    }
+
+    public static class CraftSoundVariant extends io.papermc.paper.registry.HolderableBase<net.minecraft.world.entity.animal.chicken.ChickenSoundVariant> implements Chicken.SoundVariant {
+
+        public static Chicken.SoundVariant minecraftHolderToBukkit(net.minecraft.core.Holder<net.minecraft.world.entity.animal.chicken.ChickenSoundVariant> minecraft) {
+            return org.bukkit.craftbukkit.CraftRegistry.minecraftHolderToBukkit(minecraft, net.minecraft.core.registries.Registries.CHICKEN_SOUND_VARIANT);
+        }
+
+        public static net.minecraft.core.Holder<net.minecraft.world.entity.animal.chicken.ChickenSoundVariant> bukkitToMinecraftHolder(Chicken.SoundVariant bukkit) {
+            return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraftHolder(bukkit);
+        }
+
+        public CraftSoundVariant(final net.minecraft.core.Holder<net.minecraft.world.entity.animal.chicken.ChickenSoundVariant> holder) {
+            super(holder);
+        }
+    }
 }

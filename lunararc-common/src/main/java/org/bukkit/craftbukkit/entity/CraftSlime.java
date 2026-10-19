@@ -2,8 +2,10 @@ package org.bukkit.craftbukkit.entity;
 import io.lunararcdevs.lunararc.common.bridge.entity.SlimeBridge;
 import org.bukkit.craftbukkit.CraftServer;
 public class CraftSlime extends CraftMob implements org.bukkit.entity.Slime, org.bukkit.entity.Enemy {
-    public CraftSlime(CraftServer server, net.minecraft.world.entity.monster.Slime entity) { super(server, entity); }
-    @Override public net.minecraft.world.entity.monster.Slime getHandle() { return (net.minecraft.world.entity.monster.Slime) entity; }
+    public CraftSlime(CraftServer server, net.minecraft.world.entity.monster.cubemob.AbstractCubeMob entity) { super(server, entity); }
+    /** Constructor shape Paper's CraftEntityTypes registry (constructor references) expects. */
+    public CraftSlime(CraftServer server, net.minecraft.world.entity.monster.cubemob.Slime entity) { super(server, entity); }
+    @Override public net.minecraft.world.entity.monster.cubemob.AbstractCubeMob getHandle() { return (net.minecraft.world.entity.monster.cubemob.AbstractCubeMob) entity; }
     private SlimeBridge slimeBridge() { return (SlimeBridge)(Object)getHandle(); }
     @Override public int getSize() { return getHandle().getSize(); }
     @Override public void setSize(int size) { if (size < 1) throw new IllegalArgumentException("size must be >= 1"); getHandle().setSize(size, getHandle().isAlive()); }

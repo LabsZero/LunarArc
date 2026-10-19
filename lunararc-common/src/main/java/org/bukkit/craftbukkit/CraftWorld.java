@@ -52,7 +52,7 @@ public class CraftWorld implements World {
     }
 
     private void lunararc$removePluginRegionTicketIfUnused(int x, int z) {
-        long key = net.minecraft.world.level.ChunkPos.asLong(x, z);
+        long key = net.minecraft.world.level.ChunkPos.pack(x, z);
         if (lunararcHeldChunks.contains(key) || lunararcSpawnHeldChunks.contains(key)) return;
         java.util.Set<org.bukkit.plugin.Plugin> plugins = lunararcPluginChunkTickets.get(key);
         if (plugins != null && !plugins.isEmpty()) return;
@@ -390,7 +390,7 @@ public class CraftWorld implements World {
         // /forceload set. This keeps the chunk resident until unloadChunk releases
         // LunarArc's ownership without permanently pinning RTP/pregen destinations.
         world.getChunk(x, z);
-        long key = net.minecraft.world.level.ChunkPos.asLong(x, z);
+        long key = net.minecraft.world.level.ChunkPos.pack(x, z);
         if (lunararcHeldChunks.add(key)) lunararc$addPluginRegionTicket(x, z);
         return true;
     }
@@ -413,7 +413,7 @@ public class CraftWorld implements World {
     @Override
     public boolean unloadChunk(int x, int z, boolean save) {
         boolean wasLoaded = isChunkLoaded(x, z);
-        long key = net.minecraft.world.level.ChunkPos.asLong(x, z);
+        long key = net.minecraft.world.level.ChunkPos.pack(x, z);
         if (lunararcHeldChunks.remove(key)) lunararc$removePluginRegionTicketIfUnused(x, z);
         return wasLoaded;
     }
@@ -433,7 +433,7 @@ public class CraftWorld implements World {
     @Override
     public boolean isChunkInUse(int x, int z) {
         if (!isChunkLoaded(x, z)) return false;
-        long key = net.minecraft.world.level.ChunkPos.asLong(x, z);
+        long key = net.minecraft.world.level.ChunkPos.pack(x, z);
         return !getPlayersSeeingChunk(x, z).isEmpty() || lunararcHeldChunks.contains(key)
                 || lunararcSpawnHeldChunks.contains(key) || !getPluginChunkTickets(x, z).isEmpty();
     }
@@ -449,13 +449,62 @@ public class CraftWorld implements World {
     }
 
     @Override
+    public io.papermc.paper.world.chunk.ChunkGenerationState getChunkGenerationState(final int x, final int z) {
+        return io.papermc.paper.FeatureHooks.getChunkGenerationState(this.world, x, z);
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<io.papermc.paper.world.chunk.ChunkGenerationState> getChunkGenerationStateAsync(final int x, final int z) {
+        return io.papermc.paper.FeatureHooks.getChunkGenerationStateAsync(this.world, x, z);
+    }
+
+    @Override
+    public void setAllowMonsterSpawning(final boolean allowMonsters) {
+        this.world.getChunkSource().setSpawnSettings(allowMonsters);
+    }
+
+    @Override
+    public org.bukkit.Location locateNearestPoi(@NotNull final org.bukkit.Location origin, @NotNull final io.papermc.paper.entity.poi.PoiType poiType, final int radius, final io.papermc.paper.entity.poi.PoiType.@NotNull Occupancy occupancy) {
+        com.google.common.base.Preconditions.checkArgument(origin != null, "Location cannot be null");
+        com.google.common.base.Preconditions.checkArgument(this.equals(origin.getWorld()), "The provided location must be in the same world");
+        com.google.common.base.Preconditions.checkArgument(poiType != null, "PoiType cannot be null");
+        com.google.common.base.Preconditions.checkArgument(radius > 0, "The provided radius must be greater than 0");
+        com.google.common.base.Preconditions.checkArgument(occupancy != null, "Occupancy cannot be null");
+
+        final net.minecraft.core.Holder<net.minecraft.world.entity.ai.village.poi.PoiType> nms = io.papermc.paper.entity.poi.PaperPoiType.bukkitToMinecraftHolder(poiType);
+        final net.minecraft.world.entity.ai.village.poi.PoiManager.Occupancy nmsOccupancy = io.papermc.paper.entity.poi.PaperPoiType.PaperOccupancy.bukkitToMinecraft(occupancy);
+        final net.minecraft.core.BlockPos sourcePos = new net.minecraft.core.BlockPos(origin.getBlockX(), origin.getBlockY(), origin.getBlockZ());
+
+        return this.getHandle().getPoiManager().findClosestWithType(holder -> holder.is(nms), sourcePos, radius, nmsOccupancy)
+            .map(found -> new org.bukkit.Location(this, found.getSecond().getX(), found.getSecond().getY(), found.getSecond().getZ()))
+            .orElse(null);
+    }
+
+    @Override
+    public @NotNull java.util.List<io.papermc.paper.entity.poi.PoiSearchResult> locateAllPoiInRange(@NotNull final org.bukkit.Location origin, @NotNull final java.util.function.Predicate<io.papermc.paper.entity.poi.PoiType> poiTypePredicate, final int radius, final io.papermc.paper.entity.poi.PoiType.@NotNull Occupancy occupancy) {
+        com.google.common.base.Preconditions.checkArgument(origin != null, "Location cannot be null");
+        com.google.common.base.Preconditions.checkArgument(this.equals(origin.getWorld()), "The provided location must be in the same world");
+        com.google.common.base.Preconditions.checkArgument(poiTypePredicate != null, "The predicate filter must not be null");
+        com.google.common.base.Preconditions.checkArgument(radius > 0, "The provided radius must be greater than 0");
+        com.google.common.base.Preconditions.checkArgument(occupancy != null, "Occupancy cannot be null");
+
+        final java.util.function.Predicate<net.minecraft.core.Holder<net.minecraft.world.entity.ai.village.poi.PoiType>> predicate = type -> poiTypePredicate.test(io.papermc.paper.entity.poi.PaperPoiType.minecraftHolderToBukkit(type));
+        final net.minecraft.world.entity.ai.village.poi.PoiManager.Occupancy nmsOccupancy = io.papermc.paper.entity.poi.PaperPoiType.PaperOccupancy.bukkitToMinecraft(occupancy);
+        final net.minecraft.core.BlockPos sourcePos = new net.minecraft.core.BlockPos(origin.getBlockX(), origin.getBlockY(), origin.getBlockZ());
+
+        return this.getHandle().getPoiManager().getInRange(predicate, sourcePos, radius, nmsOccupancy)
+            .map(record -> io.papermc.paper.entity.poi.PaperPoiSearchResult.from(record, this))
+            .toList();
+    }
+
+    @Override
     public @NotNull org.bukkit.Chunk[] getLoadedChunks() {
         // Read the loader-owned visible chunk map instead of using a permanent
         // CraftChunk wrapper cache or reconstructing an approximation from players.
         return ((io.lunararcdevs.lunararc.common.bridge.access.ChunkMapAccessBridge)
                 world.getChunkSource().chunkMap).lunararc$getVisibleChunkMap().values().stream()
                 .map(net.minecraft.server.level.ChunkHolder::getPos)
-                .map(pos -> world.getChunkSource().getChunkNow(pos.x, pos.z))
+                .map(pos -> world.getChunkSource().getChunkNow(pos.x(), pos.z()))
                 .filter(java.util.Objects::nonNull)
                 .map(chunk -> (org.bukkit.Chunk) new CraftChunk(chunk, this))
                 .toArray(org.bukkit.Chunk[]::new);
@@ -505,7 +554,7 @@ public class CraftWorld implements World {
             throw new IllegalArgumentException("Tree location belongs to another world");
         }
 
-        net.minecraft.resources.ResourceKey<net.minecraft.world.level.levelgen.feature.ConfiguredFeature<?, ?>> feature = switch (type) {
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.levelgen.feature.Feature> feature = switch (type) {
             case BIG_TREE -> net.minecraft.data.worldgen.features.TreeFeatures.FANCY_OAK;
             case BIRCH -> net.minecraft.data.worldgen.features.TreeFeatures.BIRCH;
             case REDWOOD -> net.minecraft.data.worldgen.features.TreeFeatures.SPRUCE;
@@ -545,7 +594,7 @@ public class CraftWorld implements World {
 
     private boolean generateTreeCaptured(Location location, Random random, TreeType type,
             net.minecraft.world.level.WorldGenLevel access) {
-        net.minecraft.resources.ResourceKey<net.minecraft.world.level.levelgen.feature.ConfiguredFeature<?, ?>> feature = switch (type) {
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.levelgen.feature.Feature> feature = switch (type) {
             case BIG_TREE -> net.minecraft.data.worldgen.features.TreeFeatures.FANCY_OAK;
             case BIRCH -> net.minecraft.data.worldgen.features.TreeFeatures.BIRCH;
             case REDWOOD -> net.minecraft.data.worldgen.features.TreeFeatures.SPRUCE;
@@ -582,10 +631,10 @@ public class CraftWorld implements World {
     }
 
     private boolean placeConfiguredTree(
-            net.minecraft.resources.ResourceKey<net.minecraft.world.level.levelgen.feature.ConfiguredFeature<?, ?>> feature,
+            net.minecraft.resources.ResourceKey<net.minecraft.world.level.levelgen.feature.Feature> feature,
             net.minecraft.world.level.WorldGenLevel access, Random random, Location location) {
-        net.minecraft.core.Holder<net.minecraft.world.level.levelgen.feature.ConfiguredFeature<?, ?>> holder =
-                world.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.CONFIGURED_FEATURE)
+        net.minecraft.core.Holder<net.minecraft.world.level.levelgen.feature.Feature> holder =
+                world.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.FEATURE)
                         .get(feature).orElse(null);
         if (holder == null) return false;
         return holder.value().place(
@@ -813,8 +862,8 @@ public class CraftWorld implements World {
     public @NotNull Collection<org.bukkit.Chunk> getForceLoadedChunks() {
         java.util.List<org.bukkit.Chunk> chunks = new java.util.ArrayList<>();
         for (long packed : world.getForceLoadedChunks()) {
-            net.minecraft.world.level.ChunkPos pos = new net.minecraft.world.level.ChunkPos(packed);
-            chunks.add(getChunkAt(pos.x, pos.z));
+            net.minecraft.world.level.ChunkPos pos = net.minecraft.world.level.ChunkPos.unpack(packed);
+            chunks.add(getChunkAt(pos.x(), pos.z()));
         }
         return java.util.List.copyOf(chunks);
     }
@@ -826,7 +875,7 @@ public class CraftWorld implements World {
 
     @Override
     public boolean isChunkForceLoaded(int x, int z) {
-        return world.getForceLoadedChunks().contains(net.minecraft.world.level.ChunkPos.asLong(x, z));
+        return world.getForceLoadedChunks().contains(net.minecraft.world.level.ChunkPos.pack(x, z));
     }
 
     @Override
@@ -955,70 +1004,82 @@ public class CraftWorld implements World {
 
     @Override
     public long getTime() {
-        return Math.floorMod(world.getDayTime(), 24000L);
+        long time = this.getFullTime() % net.minecraft.SharedConstants.TICKS_PER_GAME_DAY;
+        if (time < 0) time += net.minecraft.SharedConstants.TICKS_PER_GAME_DAY;
+        return time;
     }
 
     @Override
     public void setTime(long time) {
-        long current = world.getDayTime();
-        long currentDay = Math.floorDiv(current, 24000L);
-        long requested = Math.floorMod(time, 24000L);
-        long next = currentDay * 24000L + requested;
-        if (next < current) next += 24000L;
-        world.setDayTime(next);
+        long margin = (time - this.getFullTime()) % net.minecraft.SharedConstants.TICKS_PER_GAME_DAY;
+        if (margin < 0) margin += net.minecraft.SharedConstants.TICKS_PER_GAME_DAY;
+        this.setFullTime(this.getFullTime() + margin);
     }
 
     @Override
     public long getFullTime() {
-        return world.getDayTime();
+        return world.getDefaultClockTime();
     }
 
     @Override
     public void setFullTime(long time) {
-        world.setDayTime(time);
+        if (world.dimensionType().defaultClock().isEmpty()) {
+            throw new IllegalArgumentException("Cannot set time in world without world clock");
+        }
+        final long currentClockTime = world.getDefaultClockTime();
+        final org.bukkit.event.world.ClockTimeSkipEvent event = new org.bukkit.event.world.TimeSkipEvent(this, org.bukkit.event.world.ClockTimeSkipEvent.SkipReason.CUSTOM, time - currentClockTime);
+        org.bukkit.Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            return;
+        }
+        // Updates the clock for all players
+        world.clockManager().setTotalTicks(world.dimensionType().defaultClock().get(), currentClockTime + event.getSkipAmount());
     }
 
     @Override
     public boolean hasStorm() {
-        return world.getLevelData().isRaining();
+        return world.getWeatherData().isRaining();
     }
 
     @Override
     public void setStorm(boolean hasStorm) {
-        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
-            data.setRaining(hasStorm);
-            setWeatherDuration(0);
-            setClearWeatherDuration(0);
+        if (world.getWeatherData().isRaining() != hasStorm) {
+            org.bukkit.event.weather.WeatherChangeEvent event = new org.bukkit.event.weather.WeatherChangeEvent(
+                    this, hasStorm, org.bukkit.event.weather.WeatherChangeEvent.Cause.PLUGIN);
+            org.bukkit.Bukkit.getPluginManager().callEvent(event);
+            if (event.isCancelled()) return;
         }
+        world.getWeatherData().setRaining(hasStorm);
+        setWeatherDuration(0);
+        setClearWeatherDuration(0);
     }
 
     @Override
     public int getWeatherDuration() {
-        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
-            return data.getRainTime();
-        }
-        return 0;
+        return world.getWeatherData().getRainTime();
     }
 
     @Override
     public void setWeatherDuration(int duration) {
-        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
-            data.setRainTime(Math.max(0, duration));
-        }
+        world.getWeatherData().setRainTime(Math.max(0, duration));
     }
 
     @Override
     public boolean isThundering() {
-        return world.getLevelData().isThundering();
+        return world.getWeatherData().isThundering();
     }
 
     @Override
     public void setThundering(boolean thundering) {
-        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
-            data.setThundering(thundering);
-            setThunderDuration(0);
-            setClearWeatherDuration(0);
+        if (world.getWeatherData().isThundering() != thundering) {
+            org.bukkit.event.weather.ThunderChangeEvent event = new org.bukkit.event.weather.ThunderChangeEvent(
+                    this, thundering, org.bukkit.event.weather.ThunderChangeEvent.Cause.PLUGIN);
+            org.bukkit.Bukkit.getPluginManager().callEvent(event);
+            if (event.isCancelled()) return;
         }
+        world.getWeatherData().setThundering(thundering);
+        setThunderDuration(0);
+        setClearWeatherDuration(0);
     }
 
     @Override
@@ -1069,7 +1130,6 @@ public class CraftWorld implements World {
             case HARD -> net.minecraft.world.Difficulty.HARD;
             default -> net.minecraft.world.Difficulty.NORMAL;
         };
-        // Difficulty is server-wide in vanilla 1.21.11, so this applies to every world.
         world.getServer().setDifficulty(nms, true);
     }
 
@@ -1106,9 +1166,9 @@ public class CraftWorld implements World {
         }
 
 
-        double x = location.getX() + world.random.nextFloat() * 0.5D + 0.25D;
-        double y = location.getY() + world.random.nextFloat() * 0.5D + 0.25D;
-        double z = location.getZ() + world.random.nextFloat() * 0.5D + 0.25D;
+        double x = location.getX() + world.getRandom().nextFloat() * 0.5D + 0.25D;
+        double y = location.getY() + world.getRandom().nextFloat() * 0.5D + 0.25D;
+        double z = location.getZ() + world.getRandom().nextFloat() * 0.5D + 0.25D;
         return dropItem(new Location(this, x, y, z), item, function);
     }
 
@@ -1301,8 +1361,7 @@ public class CraftWorld implements World {
     @Override
     public @NotNull java.util.Collection<org.bukkit.Material> getInfiniburn() {
         java.util.LinkedHashSet<org.bukkit.Material> materials = new java.util.LinkedHashSet<>();
-        var tag = world.dimensionType().infiniburn();
-        for (var holder : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getTagOrEmpty(tag)) {
+        for (var holder : world.dimensionType().infiniburn()) {
             var id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(holder.value());
             if (id == null) continue;
             org.bukkit.Material material = org.bukkit.Material.matchMaterial(id.toString());
@@ -1455,13 +1514,12 @@ public class CraftWorld implements World {
 
     private @NotNull Collection<org.bukkit.generator.structure.GeneratedStructure> lunararcGeneratedStructures(
             int x, int z, @Nullable org.bukkit.generator.structure.Structure filter) {
-        net.minecraft.world.level.ChunkPos chunkPos = new net.minecraft.world.level.ChunkPos(x, z);
         net.minecraft.world.level.levelgen.structure.Structure filterHandle = filter == null
                 ? null
                 : org.bukkit.craftbukkit.generator.structure.CraftStructure.bukkitToMinecraft(filter);
         java.util.List<org.bukkit.generator.structure.GeneratedStructure> structures = new java.util.ArrayList<>();
         for (net.minecraft.world.level.levelgen.structure.StructureStart start :
-                world.structureManager().startsForStructure(chunkPos,
+                world.structureManager().startsForStructure(x, z,
                         nms -> filterHandle == null || nms == filterHandle)) {
             structures.add(new org.bukkit.craftbukkit.generator.structure.CraftGeneratedStructure(start));
         }
@@ -1494,6 +1552,22 @@ public class CraftWorld implements World {
     @Override public <T> void spawnParticle(@NotNull org.bukkit.Particle particle,double x,double y,double z,int count,@Nullable T data){spawnParticle(particle,x,y,z,count,0,0,0,0,data,false);}
     @Override public <T> void spawnParticle(@NotNull org.bukkit.Particle particle,@NotNull Location location,int count,@Nullable T data){spawnParticle(particle,location,count,0,0,0,0,data,false);}
     @Override public void spawnParticle(@NotNull org.bukkit.Particle particle,double x,double y,double z,int count){spawnParticle(particle,x,y,z,count,0,0,0,0,null,false);}
+    @Override public <T> void spawnParticle(@NotNull org.bukkit.Particle particle, @Nullable java.util.List<org.bukkit.entity.Player> receivers, @Nullable org.bukkit.entity.Player sender, double x, double y, double z, int count, double offsetX, double offsetY, double offsetZ, double speedX, double speedY, double speedZ, @Nullable T data, boolean force, org.bukkit.Particle.@NotNull RandomizationType randomizationType) {
+        final net.minecraft.core.particles.ParticleOptions options = lunararcParticle(particle, data);
+        final net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket.RandomizationType randomization =
+                net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket.RandomizationType.valueOf(randomizationType.name());
+        if (receivers == null) {
+            world.sendParticles(options, force, false, x, y, z, count, offsetX, offsetY, offsetZ, speedX, speedY, speedZ, randomization);
+            return;
+        }
+        final net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket packet = new net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket(
+                options, force, false, x, y, z, (float) offsetX, (float) offsetY, (float) offsetZ,
+                (float) speedX, (float) speedY, (float) speedZ, count, randomization);
+        for (org.bukkit.entity.Player receiver : receivers) {
+            if (!(receiver instanceof org.bukkit.craftbukkit.entity.CraftPlayer craft) || craft.getHandle().level() != world || craft.getHandle().connection == null) continue;
+            craft.getHandle().connection.send(packet);
+        }
+    }
     @Override public <T> void spawnParticle(@NotNull org.bukkit.Particle particle,@NotNull java.util.List<org.bukkit.entity.Player> receivers,@Nullable org.bukkit.entity.Player source,double x,double y,double z,int count,double offsetX,double offsetY,double offsetZ,double extra,@Nullable T data,boolean force){lunararcSpawnParticles(particle,receivers,x,y,z,count,offsetX,offsetY,offsetZ,extra,data,force);}
 
     @Override
@@ -1663,7 +1737,7 @@ public class CraftWorld implements World {
         world.playSound(null,loc.getX(),loc.getY(),loc.getZ(),holder,lunararcSoundSource(category),volume,pitch);
     }
     @Override public void playSound(@NotNull org.bukkit.Location loc,@NotNull org.bukkit.Sound sound,@NotNull org.bukkit.SoundCategory category,float volume,float pitch,long seed){ playSound(loc,lunararcSoundName(sound),category,volume,pitch,seed); }
-    @Override public void playSound(@NotNull org.bukkit.Location loc,@NotNull String sound,@NotNull org.bukkit.SoundCategory category,float volume,float pitch){ playSound(loc,sound,category,volume,pitch,world.random.nextLong()); }
+    @Override public void playSound(@NotNull org.bukkit.Location loc,@NotNull String sound,@NotNull org.bukkit.SoundCategory category,float volume,float pitch){ playSound(loc,sound,category,volume,pitch,world.getRandom().nextLong()); }
     @Override public void playSound(@NotNull org.bukkit.Location loc,@NotNull org.bukkit.Sound sound,@NotNull org.bukkit.SoundCategory category,float volume,float pitch){ playSound(loc,lunararcSoundName(sound),category,volume,pitch); }
     @Override public void playSound(@NotNull org.bukkit.Location loc,@NotNull String sound,float volume,float pitch){ playSound(loc,sound,org.bukkit.SoundCategory.MASTER,volume,pitch); }
 
@@ -1744,20 +1818,19 @@ public class CraftWorld implements World {
             throw new IllegalStateException("World data does not expose mutable primary level settings");
         }
 
-        PrimaryLevelDataAccessBridge accessor = (PrimaryLevelDataAccessBridge) (Object) primaryLevelData;
-        net.minecraft.world.level.LevelSettings settings = accessor.lunararc$getSettings();
-        accessor.lunararc$setSettings(new net.minecraft.world.level.LevelSettings(
+        net.minecraft.world.level.LevelSettings settings = primaryLevelData.settings;
+        net.minecraft.world.level.LevelSettings.DifficultySettings difficulty = settings.difficultySettings();
+        primaryLevelData.settings = new net.minecraft.world.level.LevelSettings(
                 settings.levelName(),
                 settings.gameType(),
-                hardcore,
-                hardcore ? net.minecraft.world.Difficulty.HARD : settings.difficulty(),
+                new net.minecraft.world.level.LevelSettings.DifficultySettings(
+                        hardcore ? net.minecraft.world.Difficulty.HARD : difficulty.difficulty(), hardcore, difficulty.locked()),
                 settings.allowCommands(),
-                settings.gameRules(),
-                settings.getDataConfiguration()));
+                settings.dataConfiguration());
     }
 
     @Override public boolean isHardcore() { return world.getServer().getWorldData().isHardcore(); }
-    @Override public boolean canGenerateStructures() { return world.getServer().getWorldData().worldGenOptions().generateStructures(); }
+    @Override public boolean canGenerateStructures() { return world.getServer().getWorldGenSettings().options().generateStructures(); }
 
     @Override
     public org.bukkit.WorldType getWorldType() {
@@ -1794,7 +1867,7 @@ public class CraftWorld implements World {
         int spawnZ = getSpawnLocation().getBlockZ() >> 4;
         try {
             world.setChunkForced(spawnX, spawnZ, value);
-            long key = net.minecraft.world.level.ChunkPos.asLong(spawnX, spawnZ);
+            long key = net.minecraft.world.level.ChunkPos.pack(spawnX, spawnZ);
             if (value) {
                 if (lunararcSpawnHeldChunks.add(key)) lunararc$addPluginRegionTicket(spawnX, spawnZ);
             } else if (lunararcSpawnHeldChunks.remove(key)) {
@@ -1827,7 +1900,7 @@ public class CraftWorld implements World {
     @Override public boolean hasSkyLight() { return world.dimensionType().hasSkyLight(); }
     @Override public boolean isBedWorks() {
         net.minecraft.world.attribute.BedRule bedRule = world.environmentAttributes().getDimensionValue(net.minecraft.world.attribute.EnvironmentAttributes.BED_RULE);
-        return !bedRule.explodes() && bedRule.canSleep().test(world);
+        return !bedRule.destroyOnUse() && bedRule.canSleep().test(world);
     }
     @Override public boolean isNatural() { throw new UnsupportedOperationException("Dimension natural flag no longer exists in 1.21.11"); }
     @Override public int getLogicalHeight() { return world.dimensionType().logicalHeight(); }
@@ -2124,7 +2197,7 @@ public class CraftWorld implements World {
     public @NotNull org.bukkit.generator.BiomeProvider vanillaBiomeProvider() {
         net.minecraft.server.level.ServerChunkCache serverCache = world.getChunkSource();
         net.minecraft.world.level.biome.BiomeSource biomeSource = serverCache.getGenerator().getBiomeSource();
-        net.minecraft.world.level.biome.Climate.Sampler sampler = serverCache.randomState().sampler();
+        net.minecraft.world.level.biome.BiomeResolver resolver = biomeSource.createUncachedResolver(serverCache.randomState());
 
         java.util.List<org.bukkit.block.Biome> possible = biomeSource.possibleBiomes().stream()
                 .map(holder -> holder.unwrapKey().map(net.minecraft.resources.ResourceKey::identifier).orElse(null))
@@ -2139,7 +2212,7 @@ public class CraftWorld implements World {
             public @NotNull org.bukkit.block.Biome getBiome(@NotNull org.bukkit.generator.WorldInfo worldInfo,
                     int x, int y, int z) {
                 net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> holder =
-                        biomeSource.getNoiseBiome(x >> 2, y >> 2, z >> 2, sampler);
+                        resolver.getNoiseBiome(x >> 2, y >> 2, z >> 2);
                 net.minecraft.resources.Identifier id = holder.unwrapKey()
                         .map(net.minecraft.resources.ResourceKey::identifier)
                         .orElseThrow(() -> new IllegalStateException("Biome is not registered"));
@@ -2211,17 +2284,12 @@ public class CraftWorld implements World {
 
     @Override
     public int getClearWeatherDuration() {
-        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
-            return data.getClearWeatherTime();
-        }
-        return 0;
+        return world.getWeatherData().getClearWeatherTime();
     }
 
     @Override
     public void setClearWeatherDuration(int duration) {
-        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
-            data.setClearWeatherTime(Math.max(0, duration));
-        }
+        world.getWeatherData().setClearWeatherTime(Math.max(0, duration));
     }
 
     @Override
@@ -2231,17 +2299,12 @@ public class CraftWorld implements World {
 
     @Override
     public void setThunderDuration(int duration) {
-        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
-            data.setThunderTime(Math.max(0, duration));
-        }
+        world.getWeatherData().setThunderTime(Math.max(0, duration));
     }
 
     @Override
     public int getThunderDuration() {
-        if (world.getLevelData() instanceof net.minecraft.world.level.storage.ServerLevelData data) {
-            return data.getThunderTime();
-        }
-        return 0;
+        return world.getWeatherData().getThunderTime();
     }
 
     @Override
@@ -2659,7 +2722,7 @@ public class CraftWorld implements World {
             throw new IllegalArgumentException("Location belongs to another world");
         }
         net.minecraft.world.entity.LightningBolt bolt =
-                net.minecraft.world.entity.EntityType.LIGHTNING_BOLT.create(world, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+                net.minecraft.world.entity.EntityTypes.LIGHTNING_BOLT.create(world, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
         if (bolt == null) throw new IllegalStateException("Unable to create lightning entity");
         bolt.snapTo(location.getX(), location.getY(), location.getZ());
         ((io.lunararcdevs.lunararc.common.bridge.LightningBoltBridge) bolt).lunararc$setEffect(effect);
@@ -2696,8 +2759,8 @@ public class CraftWorld implements World {
     public @NotNull Map<org.bukkit.plugin.Plugin, Collection<org.bukkit.Chunk>> getPluginChunkTickets() {
         java.util.Map<org.bukkit.plugin.Plugin, java.util.Collection<org.bukkit.Chunk>> result = new java.util.LinkedHashMap<>();
         for (var entry : lunararcPluginChunkTickets.entrySet()) {
-            net.minecraft.world.level.ChunkPos pos = new net.minecraft.world.level.ChunkPos(entry.getKey());
-            org.bukkit.Chunk chunk = lunararcChunk(pos.x, pos.z);
+            net.minecraft.world.level.ChunkPos pos = net.minecraft.world.level.ChunkPos.unpack(entry.getKey());
+            org.bukkit.Chunk chunk = lunararcChunk(pos.x(), pos.z());
             for (org.bukkit.plugin.Plugin plugin : entry.getValue()) {
                 result.computeIfAbsent(plugin, ignored -> new java.util.ArrayList<>()).add(chunk);
             }
@@ -2708,7 +2771,7 @@ public class CraftWorld implements World {
 
     @Override
     public @NotNull Collection<org.bukkit.plugin.Plugin> getPluginChunkTickets(int x, int z) {
-        java.util.Set<org.bukkit.plugin.Plugin> plugins = lunararcPluginChunkTickets.get(net.minecraft.world.level.ChunkPos.asLong(x, z));
+        java.util.Set<org.bukkit.plugin.Plugin> plugins = lunararcPluginChunkTickets.get(net.minecraft.world.level.ChunkPos.pack(x, z));
         return plugins == null ? java.util.List.of() : java.util.List.copyOf(plugins);
     }
 
@@ -2716,7 +2779,7 @@ public class CraftWorld implements World {
     public boolean addPluginChunkTicket(int x, int z, @NotNull org.bukkit.plugin.Plugin plugin) {
         java.util.Objects.requireNonNull(plugin, "plugin");
         if (!plugin.isEnabled()) throw new IllegalStateException("Plugin " + plugin.getName() + " is not enabled");
-        long key = net.minecraft.world.level.ChunkPos.asLong(x, z);
+        long key = net.minecraft.world.level.ChunkPos.pack(x, z);
         java.util.Set<org.bukkit.plugin.Plugin> set = lunararcPluginChunkTickets.computeIfAbsent(
                 key, ignored -> java.util.concurrent.ConcurrentHashMap.newKeySet());
         boolean added = set.add(plugin);
@@ -2733,7 +2796,7 @@ public class CraftWorld implements World {
     @Override
     public boolean removePluginChunkTicket(int x, int z, @NotNull org.bukkit.plugin.Plugin plugin) {
         java.util.Objects.requireNonNull(plugin, "plugin");
-        long key = net.minecraft.world.level.ChunkPos.asLong(x, z);
+        long key = net.minecraft.world.level.ChunkPos.pack(x, z);
         java.util.Set<org.bukkit.plugin.Plugin> set = lunararcPluginChunkTickets.get(key);
         if (set == null || !set.remove(plugin)) return false;
         if (set.isEmpty()) {
@@ -2747,14 +2810,14 @@ public class CraftWorld implements World {
     public void removePluginChunkTickets(@NotNull org.bukkit.plugin.Plugin plugin) {
         java.util.Objects.requireNonNull(plugin, "plugin");
         for (var entry : java.util.List.copyOf(lunararcPluginChunkTickets.entrySet())) {
-            net.minecraft.world.level.ChunkPos pos = new net.minecraft.world.level.ChunkPos(entry.getKey());
-            removePluginChunkTicket(pos.x, pos.z, plugin);
+            net.minecraft.world.level.ChunkPos pos = net.minecraft.world.level.ChunkPos.unpack(entry.getKey());
+            removePluginChunkTicket(pos.x(), pos.z(), plugin);
         }
     }
 
     @Override
     public boolean hasBonusChest() {
-        return getHandle().getServer().getWorldData().worldGenOptions().generateBonusChest();
+        return getHandle().getServer().getWorldGenSettings().options().generateBonusChest();
     }
 
     @Override

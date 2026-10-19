@@ -8,7 +8,7 @@ public final class CraftSkeleton extends CraftAbstractSkeleton implements Skelet
     public CraftSkeleton(CraftServer server, net.minecraft.world.entity.monster.skeleton.Skeleton entity) { super(server, entity); }
     @Override public net.minecraft.world.entity.monster.skeleton.Skeleton getHandle() { return (net.minecraft.world.entity.monster.skeleton.Skeleton) this.entity; }
     private SkeletonBridge skeletonBridge() { return (SkeletonBridge) (Object) getHandle(); }
-    @Override public boolean isConverting() { return getHandle().isFreezeConverting(); }
+    @Override public boolean isConverting() { return getHandle().isShaking(); }
     @Override public int getConversionTime() {
         if (!isConverting()) throw new IllegalStateException("Entity is not converting");
         return skeletonBridge().lunararc$getConversionTime();

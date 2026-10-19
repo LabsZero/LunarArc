@@ -16,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Set;
 
 
-public final class CraftMenuType<V extends InventoryView, B extends org.bukkit.inventory.view.builder.InventoryViewBuilder<V>> implements org.bukkit.inventory.MenuType.Typed<V, B> {
+public final class CraftMenuType<V extends InventoryView, B extends org.bukkit.inventory.view.builder.InventoryViewBuilder<V>> implements org.bukkit.inventory.MenuType.Typed<V, B>, org.bukkit.craftbukkit.util.Handleable<MenuType<?>> {
     private final NamespacedKey key;
     private final MenuType<?> handle;
     private final Class<? extends InventoryView> viewClass;
@@ -27,7 +27,7 @@ public final class CraftMenuType<V extends InventoryView, B extends org.bukkit.i
         this.viewClass = viewClass;
     }
 
-    public MenuType<?> getHandle() { return handle; }
+    @Override public MenuType<?> getHandle() { return handle; }
 
     @Override public @NotNull NamespacedKey getKey() { return key; }
 

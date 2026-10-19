@@ -56,7 +56,7 @@ public final class CraftMerchantRecipe extends MerchantRecipe {
     private static ItemCost itemCost(net.minecraft.world.item.ItemStack stack) {
         net.minecraft.core.component.DataComponentExactPredicate predicate = net.minecraft.core.component.DataComponentExactPredicate.allOf(
                 PatchedDataComponentMap.fromPatch(DataComponentMap.EMPTY, stack.getComponentsPatch()));
-        return new ItemCost(stack.getItemHolder(), stack.getCount(), predicate, stack.copy());
+        return new ItemCost(stack.typeHolder(), stack.getCount(), predicate, stack.copy());
     }
 
     public MerchantOffer getHandle() { return this.handle; }

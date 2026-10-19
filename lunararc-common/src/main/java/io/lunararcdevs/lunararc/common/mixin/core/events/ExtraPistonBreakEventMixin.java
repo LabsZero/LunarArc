@@ -16,8 +16,8 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(PistonBaseBlock.class)
 public abstract class ExtraPistonBreakEventMixin {
     @WrapOperation(method = "moveBlocks", require = 0,
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/piston/PistonBaseBlock;dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/BlockEntity;)V"))
-    private void lunararc$breakBlockEvent(BlockState state, Level level, BlockPos pos, BlockEntity blockEntity, Operation<Void> original,
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/piston/PistonBaseBlock;dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/BlockEntity;)V"))
+    private void lunararc$breakBlockEvent(BlockState state, net.minecraft.world.level.LevelAccessor level, BlockPos pos, BlockEntity blockEntity, Operation<Void> original,
             @Local(argsOnly = true, ordinal = 0) BlockPos piston) {
         if (LunarArcBlockEvents.dropAfterBreak(state, level, pos, blockEntity, piston)) return;
         original.call(state, level, pos, blockEntity);

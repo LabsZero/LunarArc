@@ -20,7 +20,7 @@ public final class CraftWorldPersistentData extends SavedData {
             CraftWorldPersistentData::new,
             CraftWorldPersistentData::toTag);
     private static final SavedDataType<CraftWorldPersistentData> TYPE = new SavedDataType<>(
-            NAME, CraftWorldPersistentData::new, CODEC, DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
+            net.minecraft.resources.Identifier.fromNamespaceAndPath("lunararc", NAME), CraftWorldPersistentData::new, CODEC, DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 
     private final CraftPersistentDataContainer container;
 

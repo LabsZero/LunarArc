@@ -150,7 +150,8 @@ public abstract class CraftHumanEntity extends CraftLivingEntity {
         }
 
         signBlockEntity.setAllowedPlayerEditor(craftPlayer.getUniqueId());
-        craftPlayer.getHandle().openTextEdit(signBlockEntity, side == org.bukkit.block.sign.Side.FRONT);
+        craftPlayer.getHandle().openTextEdit(signBlockEntity, side == org.bukkit.block.sign.Side.FRONT
+                ? net.minecraft.world.level.block.entity.SignTextSlot.FRONT : net.minecraft.world.level.block.entity.SignTextSlot.BACK);
     }
 
     public net.minecraft.world.entity.player.Player getHandle() {

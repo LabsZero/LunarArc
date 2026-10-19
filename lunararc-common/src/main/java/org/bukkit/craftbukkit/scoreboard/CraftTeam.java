@@ -70,14 +70,16 @@ final class CraftTeam extends CraftScoreboardComponent implements Team {
     @Override
     public ChatColor getColor() {
         checkState();
-        return CraftChatMessage.getColor(this.team.getColor());
+        return this.team.getColor().map(t -> org.bukkit.ChatColor.valueOf(t.name())).orElse(org.bukkit.ChatColor.RESET);
     }
 
     @Override
     public void setColor(ChatColor color) {
         Preconditions.checkArgument(color != null, "Color cannot be null");
         checkState();
-        this.team.setColor(CraftChatMessage.getColor(color));
+        Preconditions.checkArgument(!color.isFormat(), "Color must be a color not a format");
+        this.team.setColor(color == org.bukkit.ChatColor.RESET ? java.util.Optional.empty()
+                : java.util.Optional.ofNullable(net.minecraft.world.scores.TeamColor.byName(color.name().toLowerCase(java.util.Locale.ROOT))));
     }
 
     public net.kyori.adventure.text.Component displayName() {
@@ -115,19 +117,18 @@ final class CraftTeam extends CraftScoreboardComponent implements Team {
 
     public boolean hasColor() {
         checkState();
-        return this.team.getColor().getColor() != null;
+        return this.team.getColor().isPresent();
     }
 
     public net.kyori.adventure.text.format.TextColor color() {
         checkState();
-        net.kyori.adventure.text.format.TextColor color = io.papermc.paper.adventure.PaperAdventure.asAdventure(this.team.getColor());
-        if (color == null) throw new IllegalStateException("Team does not have a named color");
-        return color;
+        return this.team.getColor().map(io.papermc.paper.adventure.PaperAdventure::asAdventure)
+                .orElseThrow(() -> new IllegalStateException("Team does not have a named color"));
     }
 
     public void color(net.kyori.adventure.text.format.NamedTextColor color) {
         checkState();
-        this.team.setColor(color == null ? net.minecraft.ChatFormatting.RESET : io.papermc.paper.adventure.PaperAdventure.asVanilla(color));
+        this.team.setColor(java.util.Optional.ofNullable(color).map(io.papermc.paper.adventure.PaperAdventure::asVanilla));
     }
 
     @Override

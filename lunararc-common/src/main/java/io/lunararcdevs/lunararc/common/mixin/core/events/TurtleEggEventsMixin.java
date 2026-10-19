@@ -31,8 +31,8 @@ public abstract class TurtleEggEventsMixin {
     }
 
     @WrapOperation(method = "tick", remap = true, at = @At(value = "INVOKE", remap = true,
-            target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean lunararc$layEgg(Level level, BlockPos pos, BlockState state, int flags, Operation<Boolean> original) {
+            target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$layEgg(Level level, BlockPos pos, BlockState state, Operation<Boolean> original) {
         Turtle turtle = lunararc$turtle();
         Location where = new Location(((LevelBridge) level).lunararc$getWorld(), pos.getX(), pos.getY(), pos.getZ());
         TurtleLayEggEvent event = new TurtleLayEggEvent((org.bukkit.entity.Turtle) ((EntityBridge) turtle).lunararc$getBukkitEntity(), where,
@@ -40,7 +40,7 @@ public abstract class TurtleEggEventsMixin {
         if (!event.callEvent()) return false;
         BlockState adjusted = state.setValue(TurtleEggBlock.EGGS, event.getEggCount());
         if (!CraftEventFactory.callEntityChangeBlockEvent(turtle, pos, adjusted)) return false;
-        return original.call(level, pos, adjusted, flags);
+        return original.call(level, pos, adjusted);
     }
 
     @Shadow(remap = false) @org.spongepowered.asm.mixin.Final private Turtle turtle;

@@ -14,10 +14,10 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(FlowingFluid.class)
 public abstract class ExtraFluidLevelEventMixin {
     @WrapOperation(method = "tick", require = 0,
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean lunararc$levelChange(ServerLevel level, BlockPos pos, BlockState state, int flags, Operation<Boolean> original) {
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$levelChange(ServerLevel level, BlockPos pos, BlockState state, Operation<Boolean> original) {
         BlockState result = LunarArcBlockEvents.fluidLevelChange(level, pos, state);
         if (result == null) return false;
-        return original.call(level, pos, result, flags);
+        return original.call(level, pos, result);
     }
 }

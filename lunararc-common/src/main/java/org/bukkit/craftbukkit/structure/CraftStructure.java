@@ -27,7 +27,6 @@ import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.craftbukkit.entity.CraftEntity;
 import org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer;
 import org.bukkit.craftbukkit.util.CraftStructureTransformer;
-import org.bukkit.craftbukkit.util.TransformerGeneratorAccess;
 import org.bukkit.entity.Entity;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.structure.Palette;
@@ -61,7 +60,7 @@ public final class CraftStructure implements Structure {
     }
 
     static CraftStructure fromTag(MinecraftServer server, CompoundTag tag) {
-        StructureTemplate template = server.getStructureManager().readStructure(tag);
+        StructureTemplate template = server.getStructureTemplateManager().resourceManagerSource.readStructure(tag);
         CraftStructure structure = new CraftStructure(server, template);
         if (tag.contains(PDC_KEY)) {
             structure.persistentData.fromTag(tag.getCompoundOrEmpty(PDC_KEY));
@@ -98,7 +97,7 @@ public final class CraftStructure implements Structure {
         for (StructureTemplate.StructureEntityInfo info : ((StructureTemplateAccessBridge) (Object) handle).lunararc$getEntityInfoList()) {
             try {
                 net.minecraft.world.entity.Entity entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(
-                        info.nbt.copy(), level, net.minecraft.world.entity.EntitySpawnReason.LOAD, created -> created);
+                        info.nbt.copy(), level, new net.minecraft.world.entity.EntitySpawnRequest(net.minecraft.world.entity.EntitySpawnReason.LOAD, false), created -> created);
                 if (entity == null) continue;
                 entity.snapTo(info.pos.x, info.pos.y, info.pos.z, entity.getYRot(), entity.getXRot());
                 Entity bukkit = CraftEntity.getEntity(craftServer, entity);
@@ -171,8 +170,8 @@ public final class CraftStructure implements Structure {
         }
 
         CraftStructureTransformer transformer = new CraftStructureTransformer(
-                target, new ChunkPos(origin), blockTransformers, entityTransformers);
-        TransformerGeneratorAccess access = new TransformerGeneratorAccess();
+                target, ChunkPos.containing(origin), blockTransformers, entityTransformers);
+        org.bukkit.craftbukkit.util.TransformerLevelAccessor access = new org.bukkit.craftbukkit.util.TransformerLevelAccessor();
         access.setDelegate(target);
         access.setStructureTransformer(transformer);
         try {

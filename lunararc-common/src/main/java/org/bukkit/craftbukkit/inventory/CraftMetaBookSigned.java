@@ -99,20 +99,13 @@ public final class CraftMetaBookSigned extends CraftItemMeta implements BookMeta
     @Override public @NotNull List<Component> pages() { return this.pages == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(this.pages)); }
     @Override public @NotNull BookMeta pages(@NotNull List<Component> pages) { this.pages = new ArrayList<>(pages); return this; }
 
-    private static final class CraftMetaBookSignedBuilder extends CraftMetaBook.CraftMetaBookBuilder {
-        private Component title;
-        private Component author;
-        @Override public BookMeta.BookMetaBuilder title(Component title) { this.title = title; return this; }
-        @Override public BookMeta.BookMetaBuilder author(Component author) { this.author = author; return this; }
-        @Override public BookMeta build() {
-            CraftMetaBookSigned meta = new CraftMetaBookSigned();
-            meta.title(this.title);
-            meta.author(this.author);
-            meta.pages(this.pages);
-            return meta;
-        }
+    @Override public net.kyori.adventure.inventory.@NotNull Book asBook() {
+        return net.kyori.adventure.inventory.Book.book(
+                title() == null ? Component.empty() : title(),
+                author() == null ? Component.empty() : author(),
+                pages());
     }
-    @Override public BookMeta.BookMetaBuilder toBuilder() { return new CraftMetaBookSignedBuilder(); }
+
 
     @Override public CraftMetaBookSigned clone() { CraftMetaBookSigned c=(CraftMetaBookSigned)super.clone(); c.pages=this.pages==null?null:new ArrayList<>(this.pages); c.spigot=c.new SpigotMeta(); return c; }
     private final class SpigotMeta extends BookMeta.Spigot {

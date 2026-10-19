@@ -256,7 +256,8 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
                     value = "INVOKE",
                     target = "Lnet/minecraft/server/level/ServerPlayer;setRespawnPosition(Lnet/minecraft/server/level/ServerPlayer$RespawnConfig;Z)V"),
             require = 0)
-    private void lunararc$bedSpawnChangeCause(BlockPos bedPos, CallbackInfoReturnable<Either<Player.BedSleepingProblem, Unit>> cir) {
+    private void lunararc$bedSpawnChangeCause(net.minecraft.world.level.block.AbstractBedBlock bed, net.minecraft.world.level.block.state.BlockState bedState,
+            net.minecraft.world.attribute.BedRule rule, BlockPos bedPos, CallbackInfoReturnable<Either<Player.BedSleepingProblem, Unit>> cir) {
         this.lunararc$spawnChangeCause = org.bukkit.event.player.PlayerSpawnChangeEvent.Cause.BED;
     }
 
@@ -269,7 +270,8 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
                     remap = false),
             require = 0)
     private <L, R> Either<L, R> lunararc$playerBedEnter(
-            Either<L, R> result, Consumer<? super R> successConsumer, BlockPos bedPos) {
+            Either<L, R> result, Consumer<? super R> successConsumer, net.minecraft.world.level.block.AbstractBedBlock bed,
+            net.minecraft.world.level.block.state.BlockState bedState, net.minecraft.world.attribute.BedRule rule, BlockPos bedPos) {
         @SuppressWarnings("unchecked")
         Either<Player.BedSleepingProblem, Unit> vanillaResult =
                 (Either<Player.BedSleepingProblem, Unit>) result;
@@ -339,13 +341,6 @@ public abstract class ServerPlayerMixin implements ServerPlayerClientOptionsBrid
     @Inject(method = "openMenu(Lnet/minecraft/world/MenuProvider;)Ljava/util/OptionalInt;", at = @At("RETURN"), require = 0)
     private void lunararc$finishInventoryOpen(net.minecraft.world.MenuProvider provider,
                                                CallbackInfoReturnable<java.util.OptionalInt> cir) {
-        lunararc$applyInventoryOpenTitle(cir);
-    }
-
-    @SuppressWarnings("target")
-    @Inject(method = "openMenu(Lnet/minecraft/world/MenuProvider;Ljava/util/function/Consumer;)Ljava/util/OptionalInt;", at = @At("RETURN"), require = 0)
-    private void lunararc$finishInventoryOpenWithExtraData(net.minecraft.world.MenuProvider provider,
-            java.util.function.Consumer<?> extraDataWriter, CallbackInfoReturnable<java.util.OptionalInt> cir) {
         lunararc$applyInventoryOpenTitle(cir);
     }
 

@@ -48,7 +48,8 @@ import io.papermc.paper.configuration.FeatureFlagConfig;
 public class CraftServer implements Server {
     private volatile org.bukkit.craftbukkit.util.CraftIconCache serverIcon;
     private final org.bukkit.potion.PotionBrewer potionBrewer;
-    private final MinecraftServer console;
+    public final net.minecraft.server.dedicated.DedicatedServer console;
+    public int reloadCount;
     private final PlayerList playerList;
     private final Logger logger = initLogger();
 
@@ -203,7 +204,7 @@ public class CraftServer implements Server {
             } catch (Throwable ignored) {
             }
         }
-        this.console = console;
+        this.console = (net.minecraft.server.dedicated.DedicatedServer) console;
         this.potionBrewer = new org.bukkit.craftbukkit.potion.CraftPotionBrewer(console);
         this.playerList = playerList;
         loadBukkitSideConfiguration();
@@ -700,7 +701,7 @@ public class CraftServer implements Server {
 
     @Override
     public boolean getGenerateStructures() {
-        return console.getWorldData().worldGenOptions().generateStructures();
+        return console.getWorldGenSettings().options().generateStructures();
     }
 
     @Override
@@ -1182,6 +1183,11 @@ public class CraftServer implements Server {
     @Override
     public int getAmbientSpawnLimit() {
         return getSpawnLimit(SpawnCategory.AMBIENT);
+    }
+
+    @Override
+    public java.nio.file.@NotNull Path getLevelDirectory() {
+        return getServer().storageSource.getLevelDirectory().path();
     }
 
     @Override
@@ -2228,6 +2234,33 @@ public class CraftServer implements Server {
     }
 
     @Override
+    public boolean addRecipes(@NotNull Iterable<Recipe> recipes) {
+        Objects.requireNonNull(recipes, "recipes");
+        boolean anyAdded = false;
+        for (Recipe recipe : recipes) {
+            anyAdded |= addRecipe(recipe, false);
+        }
+        if (anyAdded) updateRecipes();
+        return anyAdded;
+    }
+
+    @Override
+    public boolean hasRecipe(@NotNull NamespacedKey key) {
+        return getRecipe(key) != null;
+    }
+
+    @Override
+    public boolean removeRecipes(@NotNull Iterable<NamespacedKey> keys) {
+        Objects.requireNonNull(keys, "recipeKeys");
+        boolean anyRemoved = false;
+        for (NamespacedKey key : keys) {
+            anyRemoved |= removeRecipe(key, false);
+        }
+        if (anyRemoved) updateRecipes();
+        return anyRemoved;
+    }
+
+    @Override
     public boolean removeRecipe(@NotNull NamespacedKey key) {
         return removeRecipe(key, true);
     }
@@ -2360,8 +2393,7 @@ public class CraftServer implements Server {
         if (player == null) {
             LunarArcCraftingContext context = craftingContext(items, world);
             net.minecraft.world.item.ItemStack result = context.recipe()
-                    .map(holder -> holder.value().assemble(context.container().asCraftInput(),
-                            context.world().getHandle().registryAccess()))
+                    .map(holder -> holder.value().assemble(context.container().asCraftInput()))
                     .orElse(net.minecraft.world.item.ItemStack.EMPTY);
             return createItemCraftResult(result, context.container(), context.world().getHandle());
         }
@@ -2389,7 +2421,7 @@ public class CraftServer implements Server {
                         net.minecraft.world.item.crafting.RecipeType.CRAFTING,
                         crafting.asCraftInput(), craftWorld.getHandle());
         net.minecraft.world.item.ItemStack initial = recipe
-                .map(holder -> holder.value().assemble(crafting.asCraftInput(), craftWorld.getHandle().registryAccess()))
+                .map(holder -> holder.value().assemble(crafting.asCraftInput()))
                 .orElse(net.minecraft.world.item.ItemStack.EMPTY);
         resultContainer.setItem(0, initial.copy());
 
@@ -2507,6 +2539,7 @@ public class CraftServer implements Server {
         }
 
         net.minecraft.world.level.storage.PrimaryLevelData levelData;
+        long seed;
         net.minecraft.server.level.ServerLevel createdLevel = null;
         CraftWorld createdWorld = null;
         try {
@@ -2514,17 +2547,10 @@ public class CraftServer implements Server {
                 com.mojang.serialization.Dynamic<?> dynamic;
                 net.minecraft.world.level.storage.LevelSummary summary;
                 try {
-                    dynamic = session.getDataTag();
-                    summary = session.getSummary(dynamic);
-                } catch (net.minecraft.nbt.NbtException | net.minecraft.nbt.ReportedNbtException | java.io.IOException first) {
-                    try {
-                        dynamic = session.getDataTagFallback();
-                        summary = session.getSummary(dynamic);
-                        session.restoreLevelDataFromOld();
-                    } catch (java.io.IOException fallbackFailure) {
-                        fallbackFailure.addSuppressed(first);
-                        throw new IllegalStateException("Unable to read primary or fallback world data for " + name, fallbackFailure);
-                    }
+                    dynamic = session.getUnfixedDataTagWithFallback();
+                    summary = session.fixAndGetSummaryFromTag(dynamic);
+                } catch (net.minecraft.nbt.NbtException | net.minecraft.nbt.ReportedNbtException | java.io.IOException failure) {
+                    throw new IllegalStateException("Unable to read world data for " + name, failure);
                 }
                 if (summary.requiresManualConversion()) {
                     throw new IllegalStateException("World " + name + " requires manual conversion by an older Minecraft version");
@@ -2534,16 +2560,18 @@ public class CraftServer implements Server {
                 }
                 net.minecraft.world.level.storage.LevelDataAndDimensions loaded =
                         net.minecraft.world.level.storage.LevelStorageSource.getLevelDataAndDimensions(
-                                dynamic, context.dataConfiguration(),
+                                session, dynamic, context.dataConfiguration(),
                                 context.datapackDimensions().lookupOrThrow(net.minecraft.core.registries.Registries.LEVEL_STEM),
-                                context.datapackWorldgen());
-                levelData = (net.minecraft.world.level.storage.PrimaryLevelData) loaded.worldData();
+                                context.datapackWorldRegistries());
+                levelData = (net.minecraft.world.level.storage.PrimaryLevelData) loaded.worldDataAndGenSettings().data();
+                seed = loaded.worldDataAndGenSettings().genSettings().options().seed();
             } else {
                 net.minecraft.world.level.LevelSettings settings = new net.minecraft.world.level.LevelSettings(
-                        name, net.minecraft.world.level.GameType.byId(getDefaultGameMode().getValue()), creator.hardcore(),
-                        net.minecraft.world.Difficulty.EASY, false, new net.minecraft.world.level.gamerules.GameRules(context.dataConfiguration().enabledFeatures()), context.dataConfiguration());
-                net.minecraft.world.level.levelgen.WorldOptions options = new net.minecraft.world.level.levelgen.WorldOptions(
-                        creator.seed(), creator.generateStructures(), false);
+                        name, net.minecraft.world.level.GameType.byId(getDefaultGameMode().getValue()),
+                        new net.minecraft.world.level.LevelSettings.DifficultySettings(
+                                creator.hardcore() ? net.minecraft.world.Difficulty.HARD : net.minecraft.world.Difficulty.EASY,
+                                creator.hardcore(), false),
+                        false, context.dataConfiguration());
                 net.minecraft.world.level.storage.WorldData template = console.getWorldData();
                 net.minecraft.world.level.storage.PrimaryLevelData.SpecialWorldProperty property = template.isDebugWorld()
                         ? net.minecraft.world.level.storage.PrimaryLevelData.SpecialWorldProperty.DEBUG
@@ -2551,20 +2579,11 @@ public class CraftServer implements Server {
                                 ? net.minecraft.world.level.storage.PrimaryLevelData.SpecialWorldProperty.FLAT
                                 : net.minecraft.world.level.storage.PrimaryLevelData.SpecialWorldProperty.NONE;
                 levelData = new net.minecraft.world.level.storage.PrimaryLevelData(
-                        settings, options, property, template.worldGenSettingsLifecycle());
+                        settings, property, template.worldGenSettingsLifecycle());
+                seed = creator.seed();
             }
 
-            long seed = levelData.worldGenOptions().seed();
             long biomeSeed = net.minecraft.world.level.biome.BiomeManager.obfuscateSeed(seed);
-            java.util.List<net.minecraft.world.level.CustomSpawner> spawners = creator.environment() == World.Environment.NORMAL
-                    ? java.util.List.of(
-                            new net.minecraft.world.level.levelgen.PhantomSpawner(),
-                            new net.minecraft.world.level.levelgen.PatrolSpawner(),
-                            new net.minecraft.world.entity.npc.CatSpawner(),
-                            new net.minecraft.world.entity.ai.village.VillageSiege(),
-                            new net.minecraft.world.entity.npc.wanderingtrader.WanderingTraderSpawner(levelData))
-                    : java.util.List.of();
-
             String mainLevelName = dedicatedProperties().levelName;
             net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> worldKey;
             if (name.equals(mainLevelName + "_nether")) {
@@ -2577,6 +2596,18 @@ public class CraftServer implements Server {
                         net.minecraft.resources.Identifier.fromNamespaceAndPath(
                                 creator.key().getNamespace(), creator.key().getKey()));
             }
+            net.minecraft.world.level.storage.SavedDataStorage levelDataStorage = new net.minecraft.world.level.storage.SavedDataStorage(
+                    session.getDimensionPath(worldKey).resolve(net.minecraft.world.level.storage.LevelResource.DATA.id()),
+                    console.getFixerUpper(), console.registryAccess());
+            java.util.List<net.minecraft.world.level.CustomSpawner> spawners = creator.environment() == World.Environment.NORMAL
+                    ? java.util.List.of(
+                            new net.minecraft.world.level.levelgen.PhantomSpawner(),
+                            new net.minecraft.world.level.levelgen.PatrolSpawner(),
+                            new net.minecraft.world.entity.npc.CatSpawner(),
+                            new net.minecraft.world.entity.ai.village.VillageSiege(),
+                            new net.minecraft.world.entity.npc.wanderingtrader.WanderingTraderSpawner(levelDataStorage))
+                    : java.util.List.of();
+
             if (((io.lunararcdevs.lunararc.common.bridge.access.MinecraftServerAccessBridge) (Object) console).lunararc$getLevels().containsKey(worldKey)) {
                 throw new IllegalArgumentException("A world is already registered with key " + worldKey.identifier());
             }
@@ -2614,7 +2645,7 @@ public class CraftServer implements Server {
 
             createdLevel = new net.minecraft.server.level.ServerLevel(
                     console, console, session, levelData, worldKey, effectiveStem,
-                    levelData.isDebugWorld(), biomeSeed, spawners, true, console.overworld().getRandomSequences());
+                    levelData.isDebugWorld(), biomeSeed, spawners, true);
             if (customGenerator != null) customGenerator.attachWorld(createdLevel);
 
             serverBridge.lunararc$addLevel(createdLevel);

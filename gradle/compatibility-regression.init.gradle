@@ -4,17 +4,17 @@ allprojects {
             tasks.register('compileCompatibilityRegression', JavaCompile) {
                 dependsOn tasks.named('classes')
                 source = fileTree('src/test/java/io/lunararcdevs/lunararc')
-                classpath = files(sourceSets.main.output.classesDirs, layout.buildDirectory.dir('generated/paper-1.21.11-implementation-surface'), sourceSets.main.compileClasspath)
+                classpath = files(sourceSets.main.output.classesDirs, layout.buildDirectory.dir('generated/paper-implementation-surface'), sourceSets.main.compileClasspath)
                 destinationDirectory = layout.buildDirectory.dir('compatibility-regression')
                 javaCompiler = tasks.named('compileJava').get().javaCompiler
                 options.compilerArgs = ['-proc:none']
             }
             tasks.register('runCompatibilityRegression', JavaExec) {
                 dependsOn tasks.named('compileCompatibilityRegression')
-                classpath = files(layout.buildDirectory.dir('compatibility-regression'), sourceSets.main.output.classesDirs, layout.buildDirectory.dir('generated/paper-1.21.11-implementation-surface'), sourceSets.main.compileClasspath)
+                classpath = files(layout.buildDirectory.dir('compatibility-regression'), sourceSets.main.output.classesDirs, layout.buildDirectory.dir('generated/paper-implementation-surface'), sourceSets.main.compileClasspath)
                 systemProperty 'log4j2.loggerContextFactory', 'org.apache.logging.log4j.simple.SimpleLoggerContextFactory'
                 mainClass = 'io.lunararcdevs.lunararc.PluginCompatibilityRegressionTest'
-                javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+                javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
             }
         }
     }

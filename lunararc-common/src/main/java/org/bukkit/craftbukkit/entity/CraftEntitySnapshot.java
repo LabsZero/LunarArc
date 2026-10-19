@@ -27,7 +27,7 @@ public final class CraftEntitySnapshot implements EntitySnapshot {
             throw new IllegalArgumentException("World must be backed by LunarArc CraftWorld");
         }
         net.minecraft.world.entity.Entity entity = net.minecraft.world.entity.EntityType.loadEntityRecursive(
-                this.data.copy(), craftWorld.getHandle(), net.minecraft.world.entity.EntitySpawnReason.LOAD, created -> created);
+                this.data.copy(), craftWorld.getHandle(), new net.minecraft.world.entity.EntitySpawnRequest(net.minecraft.world.entity.EntitySpawnReason.LOAD, false), created -> created);
         if (entity == null) {
             throw new IllegalArgumentException("Error creating entity from snapshot");
         }

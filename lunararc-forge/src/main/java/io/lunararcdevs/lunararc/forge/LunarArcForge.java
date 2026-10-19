@@ -22,7 +22,7 @@ public final class LunarArcForge {
         LunarArcServer.installPlatform("Forge", LunarArcForge.class.getClassLoader());
         io.lunararcdevs.lunararc.common.config.IncompatibleList.screenLoadedMods(
                 io.lunararcdevs.lunararc.common.mod.LunarArcModListReflection.loadedMods(
-                        net.minecraftforge.fml.ModList.get().getMods()));
+                        net.minecraftforge.fml.ModList.getMods()));
         ForgeCommandHook.install();
         ForgeServerLifecycle.register();
         ForgeChannelRegistration.register();

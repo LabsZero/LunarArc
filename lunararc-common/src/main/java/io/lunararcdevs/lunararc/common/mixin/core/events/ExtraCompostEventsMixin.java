@@ -29,32 +29,38 @@ import org.spongepowered.asm.mixin.Unique;
 public abstract class ExtraCompostEventsMixin {
     @Unique private static boolean lunararc$cancelled;
 
-    @WrapMethod(method = "addItem(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/item/ItemStack;)Lnet/minecraft/world/level/block/state/BlockState;", require = 0)
-    private static BlockState lunararc$compost(Entity entity, BlockState state, LevelAccessor level, BlockPos pos, ItemStack stack,
-            Operation<BlockState> original) {
-        if (!LunarArcExtraEvents.compostListened(entity != null) || !(level instanceof ServerLevel)) {
-            return original.call(entity, state, level, pos, stack);
+    @Unique private static ItemStack lunararc$stack;
+
+    @WrapMethod(method = "addLayer", require = 0)
+    private static BlockState lunararc$compost(Entity entity, BlockState state, ServerLevel level, BlockPos pos,
+            net.minecraft.world.item.component.Compostable compostable, Operation<BlockState> original) {
+        ItemStack stack = lunararc$stack;
+        if (stack == null || !LunarArcExtraEvents.compostListened(entity != null)) {
+            return original.call(entity, state, level, pos, compostable);
         }
-        int levelValue = state.getValue(ComposterBlock.LEVEL);
-        float chance = ComposterBlock.COMPOSTABLES.getFloat(stack.getItem());
-        double roll = level.getRandom().nextDouble();
-        boolean willRaise = !((levelValue != 0 || chance <= 0.0F) && roll >= chance);
+        // Vanilla rolls the number of layers from a loot number provider; ask it the same way so the event sees the
+        // real outcome (a result of 0 layers means the item only fails to raise the level).
+        net.minecraft.world.level.storage.loot.LootParams params = new net.minecraft.world.level.storage.loot.LootParams.Builder(level)
+                .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.BLOCK_STATE, state)
+                .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.ORIGIN, net.minecraft.world.phys.Vec3.atCenterOf(pos))
+                .withOptionalParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.INTERACTING_ENTITY, entity)
+                .create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.BLOCK_INTERACT);
+        net.minecraft.world.level.storage.loot.LootContext context =
+                new net.minecraft.world.level.storage.loot.LootContext.Builder(params).create(java.util.Optional.empty());
+        boolean willRaise = compostable.layers().get(context, 0) > 0;
         Boolean decision = LunarArcExtraEvents.compost(entity, level, pos, stack, willRaise);
         if (decision == null) {
             lunararc$cancelled = true;
             return state;
         }
         if (!decision) return state;
-
-        BlockState raised = state.setValue(ComposterBlock.LEVEL, levelValue + 1);
-        if (entity != null && !CraftEventFactory.callEntityChangeBlockEvent(entity, pos, raised)) {
+        BlockState result = original.call(entity, state, level, pos, compostable);
+        if (result != state && entity != null && !CraftEventFactory.callEntityChangeBlockEvent(entity, pos, result)) {
+            level.setBlock(pos, state, 3);
             lunararc$cancelled = true;
             return state;
         }
-        level.setBlock(pos, raised, 3);
-        level.gameEvent(GameEvent.BLOCK_CHANGE, pos, GameEvent.Context.of(entity, raised));
-        if (levelValue + 1 == 7) level.scheduleTick(pos, state.getBlock(), 20);
-        return raised;
+        return result;
     }
 
     @WrapMethod(method = "useItemOn", require = 0)
@@ -76,7 +82,13 @@ public abstract class ExtraCompostEventsMixin {
             Operation<BlockState> original) {
         int before = stack.getCount();
         lunararc$cancelled = false;
-        BlockState result = original.call(entity, state, level, stack, pos);
+        lunararc$stack = stack;
+        BlockState result;
+        try {
+            result = original.call(entity, state, level, stack, pos);
+        } finally {
+            lunararc$stack = null;
+        }
         if (lunararc$cancelled) {
             lunararc$cancelled = false;
             stack.setCount(before);

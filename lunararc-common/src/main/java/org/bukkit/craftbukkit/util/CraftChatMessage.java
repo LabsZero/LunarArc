@@ -101,7 +101,7 @@ public final class CraftChatMessage {
                                 this.modifier = RESET.withColor(TextColor.parseColor(this.hex.toString()).result().orElse(null));
                                 this.hex = null;
                             }
-                        } else if (format != null && format.isFormat() && format != ChatFormatting.RESET) {
+                        } else if (format != null && isFormat(format) && format != ChatFormatting.RESET) {
                             this.modifier = switch (format) {
                                 case BOLD -> this.modifier.withBold(Boolean.TRUE);
                                 case ITALIC -> this.modifier.withItalic(Boolean.TRUE);
@@ -392,5 +392,12 @@ public final class CraftChatMessage {
         private ChatSerializer() {}
         public static Component fromJSON(String json) { return CraftChatMessage.fromJSON(json); }
         public static String toJSON(Component component) { return CraftChatMessage.toJSON(component); }
+    }
+
+    private static boolean isFormat(final ChatFormatting formatting) {
+        return switch (formatting) {
+            case OBFUSCATED, BOLD, STRIKETHROUGH, UNDERLINE, ITALIC -> true;
+            default -> false;
+        };
     }
 }

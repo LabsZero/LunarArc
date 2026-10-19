@@ -8,7 +8,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+import net.minecraft.world.level.levelgen.feature.Feature;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.TreeType;
@@ -29,7 +29,7 @@ public final class LunarArcBlockCapture {
     private static final class Capture {
         private final ServerLevel level;
         private final Map<BlockPos, CraftBlockState> states = new LinkedHashMap<>();
-        private ResourceKey<ConfiguredFeature<?, ?>> feature;
+        private ResourceKey<Feature> feature;
 
         private Capture(ServerLevel level) {
             this.level = level;
@@ -93,7 +93,7 @@ public final class LunarArcBlockCapture {
         return result;
     }
 
-    public static void noteFeature(ResourceKey<ConfiguredFeature<?, ?>> feature) {
+    public static void noteFeature(ResourceKey<Feature> feature) {
         Capture capture = ACTIVE.get();
         if (capture != null && feature != null) capture.feature = feature;
     }
@@ -134,7 +134,7 @@ public final class LunarArcBlockCapture {
         return result;
     }
 
-    private static TreeType treeType(ResourceKey<ConfiguredFeature<?, ?>> feature) {
+    private static TreeType treeType(ResourceKey<Feature> feature) {
         if (feature == null) return TreeType.TREE;
         String path = feature.identifier().getPath();
         int bees = path.indexOf("_bees");

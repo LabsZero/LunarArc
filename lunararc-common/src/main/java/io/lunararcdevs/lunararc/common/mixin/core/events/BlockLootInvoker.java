@@ -1,9 +1,11 @@
 package io.lunararcdevs.lunararc.common.mixin.core.events;
 
 import java.util.function.BiConsumer;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemInstance;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -16,8 +18,8 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 @Mixin(Block.class)
 public interface BlockLootInvoker {
     @Invoker("dropFromBlockInteractLootTable")
-    static boolean lunararc$rollInteractLoot(ServerLevel level, ResourceKey<LootTable> table, BlockState state, BlockEntity blockEntity,
-            ItemStack tool, Entity entity, BiConsumer<ServerLevel, ItemStack> consumer) {
+    static boolean lunararc$rollInteractLoot(ServerLevel level, ResourceKey<LootTable> table, BlockPos pos, BlockState state,
+            BlockEntity blockEntity, ItemInstance tool, Entity entity, BiConsumer<ServerLevel, ItemStack> consumer) {
         throw new AssertionError();
     }
 }

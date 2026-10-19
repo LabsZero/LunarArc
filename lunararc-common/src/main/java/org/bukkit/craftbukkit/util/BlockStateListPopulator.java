@@ -83,7 +83,7 @@ public final class BlockStateListPopulator extends DummyGeneratorAccess {
             CapturedBlock block = entry.getValue();
             CraftBlockState snapshot;
             if (block.blockEntity != null) {
-                snapshot = new CraftBlockEntityState<>(serverLevel, block.blockEntity, true);
+                snapshot = org.bukkit.craftbukkit.block.CraftBlockStates.getBlockState(io.lunararcdevs.lunararc.common.LunarArcServerAccess.getCraftWorld(serverLevel), pos, block.state, block.blockEntity);
             } else {
                 snapshot = new CraftBlockState(serverLevel, pos, block.state);
             }
@@ -102,6 +102,10 @@ public final class BlockStateListPopulator extends DummyGeneratorAccess {
             actualConsumer.accept(state);
             state.update(true, (captured.flags & net.minecraft.world.level.block.Block.UPDATE_NEIGHBORS) != 0);
         }
+    }
+
+    public void placeSomeBlocks(Predicate<? super org.bukkit.block.BlockState> filter) {
+        placeSomeBlocks(filter, null);
     }
 
     public void placeInto(LevelAccessor target) {

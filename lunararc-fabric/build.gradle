@@ -1,6 +1,6 @@
 plugins {
     id 'architectury-plugin'
-    id 'dev.architectury.loom'
+    id 'dev.architectury.loom-no-remap'
     id 'com.gradleup.shadow'
 }
 
@@ -15,6 +15,10 @@ loom {
 }
 
 configurations {
+    permissionsBundle {
+        canBeResolved = true
+        canBeConsumed = false
+    }
     common {
         canBeResolved = true
         canBeConsumed = false
@@ -31,15 +35,12 @@ configurations {
 
 dependencies {
     minecraft libs.minecraft
-    mappings loom.layered() {
-        officialMojangMappings()
-        parchment("org.parchmentmc.data:parchment-${libs.versions.minecraft.get()}:${libs.versions.parchment.get()}@zip")
-    }
-    modImplementation "net.fabricmc:fabric-loader:${libs.versions.fabric.loader.get()}"
-    modImplementation libs.fabric.api
-    modImplementation(libs.fabric.permissions.api) { transitive = false }
-    include(libs.fabric.permissions.api) { transitive = false }
-    common(project(path: ':lunararc-common', configuration: 'namedElements')) { transitive = false }
+    implementation "net.fabricmc:fabric-loader:${libs.versions.fabric.loader.get()}"
+    implementation libs.fabric.api
+    implementation(libs.fabric.permissions.api) { transitive = false }
+    // jar-in-jar (include) needs the remap step, which no-remap Loom does not have, so bundle the classes instead
+    permissionsBundle(libs.fabric.permissions.api) { transitive = false }
+    common(project(path: ':lunararc-common')) { transitive = false }
     shadowBundle(project(path: ':lunararc-common', configuration: 'transformProductionFabric')) { transitive = false }
     implementation libs.lunararc.api
     shadowBundle libs.lunararc.api
@@ -60,6 +61,11 @@ processResources {
 }
 
 shadowJar {
+    from({ project.configurations.permissionsBundle.collect { zipTree(it) } }) {
+        exclude 'fabric.mod.json'
+        exclude 'quilt.mod.json'
+        exclude 'META-INF/MANIFEST.MF'
+    }
     configurations = [project.configurations.shadowBundle]
     archiveClassifier.set('dev-shadow')
     exclude 'quilt.mod.json'
@@ -67,7 +73,3 @@ shadowJar {
     exclude 'META-INF/neoforge.mods.toml'
 }
 
-remapJar {
-    inputFile.set shadowJar.archiveFile
-    dependsOn shadowJar
-}

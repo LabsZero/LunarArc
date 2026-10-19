@@ -24,8 +24,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(CaveVines.class)
 public interface CaveVinesMixin {
-    @WrapOperation(method = "use", require = 1, at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/Block;dropFromBlockInteractLootTable(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/entity/BlockEntity;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/entity/Entity;Ljava/util/function/BiConsumer;)Z"))
-    private static boolean lunararc$harvest(ServerLevel level, ResourceKey<LootTable> table, BlockState state, BlockEntity blockEntity, ItemStack tool,
+    @WrapOperation(method = "use", require = 1, at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/Block;dropFromBlockInteractLootTable(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/entity/BlockEntity;Lnet/minecraft/world/item/ItemInstance;Lnet/minecraft/world/entity/Entity;Ljava/util/function/BiConsumer;)Z"))
+    private static boolean lunararc$harvest(ServerLevel level, ResourceKey<LootTable> table, BlockPos lootPos, BlockState state, BlockEntity blockEntity, net.minecraft.world.item.ItemInstance tool,
             Entity harvester, BiConsumer<ServerLevel, ItemStack> consumer, Operation<Boolean> original, Entity entity, BlockState unusedState, Level unusedLevel, BlockPos pos) {
         if (entity != null && !CraftEventFactory.callEntityChangeBlockEvent(entity, pos, state.setValue(CaveVines.BERRIES, false))) {
             LunarArcHarvestCapture.cancel();
@@ -33,7 +33,7 @@ public interface CaveVinesMixin {
         }
         BiConsumer<ServerLevel, ItemStack> captured = (lvl, drop) ->
                 LunarArcHarvestCapture.harvest(lvl, pos, entity instanceof Player player ? player : null, drop, item -> consumer.accept(lvl, item));
-        return original.call(level, table, state, blockEntity, tool, harvester, captured);
+        return original.call(level, table, lootPos, state, blockEntity, tool, harvester, captured);
     }
 
     @Inject(method = "use", cancellable = true, require = 1, at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;playSound(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V"))

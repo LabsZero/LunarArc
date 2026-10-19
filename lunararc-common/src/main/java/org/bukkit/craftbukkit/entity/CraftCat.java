@@ -93,4 +93,30 @@ public final class CraftCat extends CraftTameableAnimal implements Cat {
             super(holder, count++);
         }
     }
+
+    @Override
+    public Cat.SoundVariant getSoundVariant() {
+        return CraftSoundVariant.minecraftHolderToBukkit(this.getHandle().getSoundVariant());
+    }
+
+    @Override
+    public void setSoundVariant(Cat.SoundVariant soundVariant) {
+        com.google.common.base.Preconditions.checkArgument(soundVariant != null, "soundVariant cannot be null");
+        this.getHandle().setSoundVariant(CraftSoundVariant.bukkitToMinecraftHolder(soundVariant));
+    }
+
+    public static class CraftSoundVariant extends io.papermc.paper.registry.HolderableBase<net.minecraft.world.entity.animal.feline.CatSoundVariant> implements Cat.SoundVariant {
+
+        public static Cat.SoundVariant minecraftHolderToBukkit(net.minecraft.core.Holder<net.minecraft.world.entity.animal.feline.CatSoundVariant> minecraft) {
+            return org.bukkit.craftbukkit.CraftRegistry.minecraftHolderToBukkit(minecraft, net.minecraft.core.registries.Registries.CAT_SOUND_VARIANT);
+        }
+
+        public static net.minecraft.core.Holder<net.minecraft.world.entity.animal.feline.CatSoundVariant> bukkitToMinecraftHolder(Cat.SoundVariant bukkit) {
+            return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraftHolder(bukkit);
+        }
+
+        public CraftSoundVariant(final net.minecraft.core.Holder<net.minecraft.world.entity.animal.feline.CatSoundVariant> holder) {
+            super(holder);
+        }
+    }
 }

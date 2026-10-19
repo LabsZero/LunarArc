@@ -30,7 +30,6 @@ import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.serializer.ComponentSerializer;
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
-import net.kyori.adventure.text.serializer.plain.PlainComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.kyori.adventure.translation.GlobalTranslator;
 import net.kyori.adventure.util.Codec;
@@ -118,8 +117,6 @@ public final class PaperAdventure {
         })
         .build();
     public static final AttributeKey<Locale> LOCALE_ATTRIBUTE = AttributeKey.valueOf("adventure:locale"); // init after FLATTENER because classloading triggered here might create a logger
-    @Deprecated
-    public static final PlainComponentSerializer PLAIN = PlainComponentSerializer.builder().flattener(FLATTENER).build();
     private static final TagParser<Tag> NBT_PARSER = TagParser.create(NbtOps.INSTANCE);
     public static final Codec<Tag, String, CommandSyntaxException, RuntimeException> NBT_CODEC = new Codec<>() {
         @Override
@@ -262,7 +259,14 @@ public final class PaperAdventure {
             ((io.lunararcdevs.lunararc.common.bridge.CommandSourceStackBridge) css).lunararc$setBypassSelectorPermissions(true);
         }
         try {
-            return asAdventure(ComponentUtils.updateForEntity(css, asVanilla(component), scoreboardSubject == null ? null : ((CraftEntity) scoreboardSubject).getHandle(), 0));
+            final net.minecraft.network.chat.ResolutionContext.Builder builder = net.minecraft.network.chat.ResolutionContext.builder();
+            if (css != null) {
+                builder.withSource(css);
+            }
+            if (scoreboardSubject != null) {
+                builder.withEntityOverride(((CraftEntity) scoreboardSubject).getHandle());
+            }
+            return asAdventure(ComponentUtils.resolve(builder.build(), asVanilla(component)));
         } catch (final CommandSyntaxException e) {
             throw new IOException(e);
         } finally {
@@ -387,7 +391,7 @@ public final class PaperAdventure {
             return Collections.emptyMap();
         }
         final Map<Key, DataComponentValue> map = new HashMap<>();
-        for (final Map.Entry<DataComponentType<?>, Optional<?>> entry : patch.entrySet()) {
+        for (final Map.Entry<DataComponentType<?>, Optional<?>> entry : org.bukkit.craftbukkit.inventory.ComponentPatches.entries(patch).entrySet()) {
             if (entry.getKey().isTransient()) continue;
             @Subst("key:value") final String typeKey = requireNonNull(BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(entry.getKey())).toString();
             if (entry.getValue().isEmpty()) {
@@ -434,21 +438,19 @@ public final class PaperAdventure {
 
     // Colors
 
-    public static @NotNull TextColor asAdventure(final ChatFormatting formatting) {
-        final Integer color = formatting.getColor();
+    public static @NotNull TextColor asAdventure(final net.minecraft.world.scores.TeamColor teamColor) {
+        final net.kyori.adventure.text.format.NamedTextColor color = net.kyori.adventure.text.format.NamedTextColor.NAMES.value(teamColor.getSerializedName());
         if (color == null) {
             throw new IllegalArgumentException("Not a valid color");
         }
-        return TextColor.color(color);
+        return color;
     }
 
-    public static @Nullable ChatFormatting asVanilla(final TextColor color) {
-        // Real Paper adds ChatFormatting.getByHexValue via its AT/patch; LunarArc inlines the identical loop.
-        final int hex = color.value();
-        for (final ChatFormatting fmt : ChatFormatting.values()) {
-            if (fmt.getColor() != null && fmt.getColor() == hex) return fmt;
+    public static @Nullable net.minecraft.world.scores.TeamColor asVanilla(final TextColor color) {
+        if (!(color instanceof net.kyori.adventure.text.format.NamedTextColor named)) {
+            return null;
         }
-        return null;
+        return net.minecraft.world.scores.TeamColor.byName(named.toString());
     }
 
     // Style

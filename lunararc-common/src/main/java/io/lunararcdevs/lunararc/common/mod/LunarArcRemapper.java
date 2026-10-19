@@ -88,10 +88,7 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         try {
 
             try (InputStream stream = loader.getResourceAsStream(base + "paper-reobf.tiny")) {
-                if (stream == null) {
-                    throw new IllegalStateException("Missing Paper reobf mappings " + base + "paper-reobf.tiny");
-                }
-                loadPaperMappings(stream);
+                if (stream != null) loadPaperMappings(stream);
             }
 
 
@@ -161,7 +158,10 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         Boolean cached = needsIntermediaryHopCache;
         if (cached != null) return cached;
         String platform = LunarArcServer.platformName();
-        boolean needs = "Fabric".equalsIgnoreCase(platform) || "Quilt".equalsIgnoreCase(platform);
+        // Minecraft 26.x is unobfuscated: Fabric/Quilt run on Mojang names too, so there is no intermediary table to
+        // hop through (intermediary.tiny is only generated for older, obfuscated versions).
+        boolean needs = ("Fabric".equalsIgnoreCase(platform) || "Quilt".equalsIgnoreCase(platform))
+                && !MOJANG_TO_INTERMEDIARY_CLASS.isEmpty();
         LOGGER.info("Mojang -> Intermediary remap hop {} (platform={}, {} class(es)/{} method(s)/{} "
                         + "field(s) loaded from intermediary.tiny)", needs ? "ENABLED" : "disabled",
                 platform, MOJANG_TO_INTERMEDIARY_CLASS.size(), INTERMEDIARY_METHOD_MAP.size(),

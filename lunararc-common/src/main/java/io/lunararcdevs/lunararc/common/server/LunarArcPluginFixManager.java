@@ -24,8 +24,6 @@ public final class LunarArcPluginFixManager {
     public static void applyPluginProperties(String pluginName, java.io.File pluginFile) {
         if (pluginName == null || !pluginName.equals("WorldEdit") || pluginFile == null) return;
         if (System.getProperty("worldedit.bukkit.adapter") != null) return;
-        // WorldEdit swallows every adapter that fails to construct, so a broken adapter just reads as "unsupported
-        // version". Naming the adapter for this exact Minecraft version makes WorldEdit report why it failed.
         try {
             String version = net.minecraft.SharedConstants.getCurrentVersion().id();
             String adapter = "com.sk89q.worldedit.bukkit.adapter.impl.v" + version.replace('.', '_') + ".PaperweightAdapter";
@@ -35,7 +33,6 @@ public final class LunarArcPluginFixManager {
                 }
             }
         } catch (Throwable ignored) {
-            // Not a jar, or no adapter for this version: WorldEdit falls back to its own search.
         }
     }
 
@@ -46,9 +43,7 @@ public final class LunarArcPluginFixManager {
         Consumer<ClassNode> patcher = switch (className) {
             case "com.sk89q.worldedit.util.translation.TranslationManager" ->
                     LunarArcPluginFixManager::fixEmptyWorldEditTranslations;
-            case "com.sk89q.worldedit.bukkit.adapter.impl.v1_21.PaperweightAdapter",
-                 "com.sk89q.worldedit.bukkit.adapter.impl.v1_21_11.PaperweightAdapter",
-                 "com.sk89q.worldedit.bukkit.adapter.ext.fawe.v1_21_R7.PaperweightAdapter" ->
+            case "com.sk89q.worldedit.bukkit.adapter.impl.v26_3.PaperweightAdapter" ->
                     node -> helloWorld(node, "org.spigotmc.WatchdogThread", REPLACEMENT);
             case "com.fastasyncworldedit.bukkit.util.MinecraftVersion" ->
                     node -> redirectMethodToGetNMSVersion(node, "getPackageVersion");

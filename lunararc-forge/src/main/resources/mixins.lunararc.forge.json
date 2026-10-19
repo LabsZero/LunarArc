@@ -11,7 +11,8 @@
     "network.NetworkRegistryAccessor_Forge",
     "bukkit.StandardMessengerMixin_Forge",
     "bukkit.CraftPlayerMixin_Forge",
-    "core.item.ShearsItemMixin_Forge"
+    "core.item.ShearsItemMixin_Forge",
+    "core.world.FurnaceSmeltEventMixin_Forge"
   ],
   "injectors": {
     "defaultRequire": 1

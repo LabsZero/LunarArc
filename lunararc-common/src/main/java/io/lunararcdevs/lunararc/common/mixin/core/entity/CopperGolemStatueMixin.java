@@ -14,9 +14,9 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(CopperGolem.class)
 public abstract class CopperGolemStatueMixin {
     @WrapOperation(method = "turnToStatue", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/server/level/ServerLevel;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean lunararc$statue(ServerLevel level, BlockPos pos, BlockState statue, int flags, Operation<Boolean> original) {
+            target = "Lnet/minecraft/server/level/ServerLevel;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$statue(ServerLevel level, BlockPos pos, BlockState statue, Operation<Boolean> original) {
         if (!CraftEventFactory.callEntityChangeBlockEvent((CopperGolem) (Object) this, pos, statue)) return false;
-        return original.call(level, pos, statue, flags);
+        return original.call(level, pos, statue);
     }
 }

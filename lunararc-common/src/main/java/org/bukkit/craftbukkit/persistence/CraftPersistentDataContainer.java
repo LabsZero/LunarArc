@@ -23,6 +23,7 @@ public class CraftPersistentDataContainer implements PersistentDataContainer {
     };
 
     public CraftPersistentDataContainer() {}
+    public CraftPersistentDataContainer(CraftPersistentDataTypeRegistry registry) {}
     public CraftPersistentDataContainer(CraftPersistentDataContainer source) {
         source.customData.forEach((key, value) -> customData.put(key, value.copy()));
     }

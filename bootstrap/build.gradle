@@ -126,6 +126,7 @@ def createFatJar(String platform) {
 
     def resolvePlatformJarTask = {
         def t = platformProject.tasks.findByName('remapJar')
+        if (t == null || !t.enabled) t = platformProject.tasks.findByName('shadowJar')
         if (t == null || !t.enabled) t = platformProject.tasks.findByName('jar')
         return t
     }
@@ -493,7 +494,9 @@ def createFatJar(String platform) {
                 (id.group == 'com.mysql' && id.name == 'mysql-connector-j') ||
                 id.group == 'org.spongepowered' ||
                 id.group == 'io.leangen.geantyref' ||
-                id.group == 'org.slf4j'
+                id.group == 'org.slf4j' ||
+                // Paper's data converter libraries must be visible to the game class loader, not only the launcher
+                id.group == 'ca.spottedleaf.leafpile'
 
             if (flatten) {
                 from(zipTree(artifact.file)) {
@@ -590,7 +593,7 @@ def createFatJar(String platform) {
             Set<String> expectedCraftSurface = new HashSet<>()
             File paperReference = rootProject.ext.paperServerJar
             if (!paperReference.isFile()) {
-                throw new GradleException("Paper 1.21.11 compile/reference JAR is missing during ${platform} surface verification")
+                throw new GradleException("Paper 26.3 compile/reference JAR is missing during ${platform} surface verification")
             }
             new java.util.jar.JarFile(paperReference).withCloseable { paperJar ->
                 paperJar.entries().each { entry ->
@@ -611,12 +614,12 @@ def createFatJar(String platform) {
             List<String> missingCraftSurface = expectedCraftSurface.findAll { !entries.contains(it) }.sort()
             if (!missingCraftSurface.isEmpty()) {
                 throw new GradleException(
-                    "${platform} hybrid JAR is missing ${missingCraftSurface.size()} exact Paper 1.21.11 CraftBukkit/Spigot implementation classes. " +
+                    "${platform} hybrid JAR is missing ${missingCraftSurface.size()} exact Paper 26.3 CraftBukkit/Spigot implementation classes. " +
                     "First missing entries: ${missingCraftSurface.take(25)}"
                 )
             }
             logger.lifecycle(
-                "${platform} exact Paper 1.21.11 CraftBukkit/Spigot class surface: ${expectedCraftSurface.size()} / ${expectedCraftSurface.size()} present"
+                "${platform} exact Paper 26.3 CraftBukkit/Spigot class surface: ${expectedCraftSurface.size()} / ${expectedCraftSurface.size()} present"
             )
 
             List<String> requiredPluginLibraryRuntime = [

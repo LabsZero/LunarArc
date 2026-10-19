@@ -41,6 +41,12 @@ public class CraftInventoryView implements InventoryView {
         this.legacyTitle = this.originalTitle;
     }
 
+    /** Paper-shaped constructor used by the donated Craft*View classes. */
+    public CraftInventoryView(HumanEntity player, Inventory viewing, AbstractContainerMenu container) {
+        this((org.bukkit.craftbukkit.entity.CraftPlayer) player, container, viewing, null,
+                viewing != null ? viewing.getType() : InventoryType.CHEST, net.kyori.adventure.text.Component.empty());
+    }
+
     public AbstractContainerMenu getHandle() { return handle; }
 
     /**

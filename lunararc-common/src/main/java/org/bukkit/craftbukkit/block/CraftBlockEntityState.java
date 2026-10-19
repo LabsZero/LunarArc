@@ -36,7 +36,7 @@ public class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockStat
     }
 
     /** Existing LunarArc constructor retained for source compatibility. */
-    public CraftBlockEntityState(@NotNull ServerLevel world, @NotNull T blockEntity, boolean snapshot) {
+    public CraftBlockEntityState(@Nullable World world, @NotNull T blockEntity, boolean snapshot) {
         super(world, blockEntity.getBlockPos(), blockEntity.getBlockState());
         this.tileEntity = Objects.requireNonNull(blockEntity, "blockEntity");
         this.snapshotDisabled = !snapshot;

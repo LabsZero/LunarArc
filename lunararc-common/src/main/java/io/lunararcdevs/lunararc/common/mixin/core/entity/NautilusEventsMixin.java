@@ -20,11 +20,4 @@ public abstract class NautilusEventsMixin {
         ((LivingEntityBridge) rider).lunararc$pushEffectCause(EntityPotionEffectEvent.Cause.NAUTILUS);
         return original.call(rider, effect);
     }
-
-    @WrapOperation(method = "mobInteract", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/entity/animal/nautilus/AbstractNautilus;heal(F)V"))
-    private void lunararc$eatingHeal(AbstractNautilus self, float amount, Operation<Void> original) {
-        ((LivingEntityBridge) self).lunararc$pushHealReason(EntityRegainHealthEvent.RegainReason.EATING, false);
-        original.call(self, amount);
-    }
 }

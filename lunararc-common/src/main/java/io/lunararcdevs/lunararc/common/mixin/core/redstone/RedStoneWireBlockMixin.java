@@ -12,7 +12,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.world.level.block.RedstoneWireBlock;
 
 @Mixin(net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator.class)
 public abstract class RedStoneWireBlockMixin {
@@ -21,7 +21,7 @@ public abstract class RedStoneWireBlockMixin {
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/redstone/DefaultRedstoneWireEvaluator;calculateTargetStrength(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)I"))
     private int lunararc$strength(int target, @Local(argsOnly = true) Level level, @Local(argsOnly = true) BlockPos pos,
             @Local(argsOnly = true) BlockState state) {
-        int old = state.getValue(RedStoneWireBlock.POWER);
+        int old = state.getValue(RedstoneWireBlock.POWER);
         return old != target ? LunarArcPaperEvents.redstone(level, pos, old, target) : target;
     }
 }

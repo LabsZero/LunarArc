@@ -194,13 +194,6 @@ public final class PluginClassLoader extends URLClassLoader
 
     private static final int RUNTIME_CLASS_MAJOR = Runtime.version().feature() + 44;
     private static final java.util.Set<Integer> DOWNGRADED_MAJORS = java.util.concurrent.ConcurrentHashMap.newKeySet();
-
-    /**
-     * Plugins compiled for a newer Java than the one running the server (for example Java 25 plugins on a
-     * Java 21 server) are rejected by the JVM with "Unsupported class file major version". Class files from
-     * Java 22+ add no new bytecode instructions, so rewriting the version header lets them load; code that
-     * calls a Java API newer than the runtime will still fail when that call is reached.
-     */
     static byte[] downgradeClassVersion(byte[] bytes, String className) {
         if (bytes.length < 8 || (bytes[0] & 0xFF) != 0xCA || (bytes[1] & 0xFF) != 0xFE
                 || (bytes[2] & 0xFF) != 0xBA || (bytes[3] & 0xFF) != 0xBE) {

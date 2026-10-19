@@ -26,6 +26,10 @@ public final class CraftRaid implements Raid {
         this.handle = java.util.Objects.requireNonNull(handle, "handle");
     }
 
+    public CraftRaid(net.minecraft.world.entity.raid.Raid handle, net.minecraft.world.level.Level level) {
+        this(handle);
+    }
+
     public net.minecraft.world.entity.raid.Raid getHandle() { return this.handle; }
     private RaidBridge bridge() { return (RaidBridge) (Object) this.handle; }
 

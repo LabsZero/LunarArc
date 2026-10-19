@@ -68,6 +68,14 @@ public class CraftBlock implements Block {
         return world;
     }
 
+    public net.minecraft.world.level.block.state.BlockState getBlockState() {
+        return world.getBlockState(position);
+    }
+
+    public net.minecraft.world.level.LevelAccessor getLevel() {
+        return world;
+    }
+
     public BlockPos getPosition() {
         return position;
     }
@@ -322,7 +330,7 @@ public class CraftBlock implements Block {
     public boolean isLiquid() { return !world.getFluidState(position).isEmpty(); }
 
     @Override
-    public boolean isPassable() { return !nmsState().blocksMotion(); }
+    public boolean isPassable() { return !nmsState().is(net.minecraft.tags.BlockTags.BLOCKS_MOTION); }
 
     @Override
     public boolean isPreferredTool(@NotNull ItemStack tool) {
@@ -333,11 +341,11 @@ public class CraftBlock implements Block {
     @Override
     public @NotNull PistonMoveReaction getPistonMoveReaction() {
         return switch (nmsState().getPistonPushReaction()) {
-            case NORMAL -> PistonMoveReaction.MOVE;
-            case DESTROY -> PistonMoveReaction.BREAK;
-            case BLOCK -> PistonMoveReaction.BLOCK;
-            case PUSH_ONLY -> PistonMoveReaction.PUSH_ONLY;
-            case IGNORE -> PistonMoveReaction.IGNORE;
+            case PUSH_PULL -> PistonMoveReaction.MOVE;
+            case POPPED -> PistonMoveReaction.BREAK;
+            case IMMOVEABLE -> PistonMoveReaction.BLOCK;
+            case PUSH -> PistonMoveReaction.PUSH_ONLY;
+            case IGNORE_ENTITY -> PistonMoveReaction.IGNORE;
         };
     }
 
@@ -405,9 +413,9 @@ public class CraftBlock implements Block {
         Objects.requireNonNull(face, "face");
         net.minecraft.world.level.block.state.BlockState state = nmsState();
         if (!(state.getBlock() instanceof net.minecraft.world.level.block.BonemealableBlock bonemealable)) return false;
-        if (!bonemealable.isValidBonemealTarget(world, position, state)) return false;
-        if (!bonemealable.isBonemealSuccess(world, world.getRandom(), position, state)) return false;
-        bonemealable.performBonemeal(world, world.getRandom(), position, state);
+        if (!bonemealable.isValidBonemealTarget(world, position, state, net.minecraft.world.level.block.BonemealSource.INTERACTION)) return false;
+        if (!bonemealable.isBonemealSuccess(world, world.getRandom(), position, state, net.minecraft.world.level.block.BonemealSource.INTERACTION)) return false;
+        bonemealable.performBonemeal(world, world.getRandom(), position, state, net.minecraft.world.level.block.BonemealSource.INTERACTION);
         return true;
     }
 

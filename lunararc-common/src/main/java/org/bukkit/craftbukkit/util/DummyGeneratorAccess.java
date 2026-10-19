@@ -70,7 +70,7 @@ public class DummyGeneratorAccess implements WorldGenLevel {
     @Override public DimensionType dimensionType() { throw unsupported(); }
     @Override public RegistryAccess registryAccess() { throw unsupported(); }
     @Override public FeatureFlagSet enabledFeatures() { throw unsupported(); }
-    @Override public float getShade(Direction direction, boolean shaded) { throw unsupported(); }
+    public float getShade(Direction direction, boolean shaded) { throw unsupported(); }
     @Override public LevelLightEngine getLightEngine() { throw unsupported(); }
     @Override public BlockEntity getBlockEntity(BlockPos pos) { return null; }
     @Override public BlockState getBlockState(BlockPos pos) { return Blocks.AIR.defaultBlockState(); }

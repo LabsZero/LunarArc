@@ -17,6 +17,7 @@ import org.jetbrains.annotations.NotNull;
 public final class CraftChunkSnapshot implements ChunkSnapshot {
     private final int x, z, minY, maxY;
     private final String worldName;
+    private final net.kyori.adventure.key.Key worldKey;
     private final long fullTime;
     private final BlockState[] states;
     private final Biome[] biomes;
@@ -25,13 +26,15 @@ public final class CraftChunkSnapshot implements ChunkSnapshot {
     private final int[] highest;
     private final boolean[] sectionEmpty;
 
-    private CraftChunkSnapshot(int x, int z, int minY, int maxY, String worldName, long fullTime,
+    private CraftChunkSnapshot(int x, int z, int minY, int maxY, String worldName, net.kyori.adventure.key.Key worldKey, long fullTime,
             BlockState[] states, Biome[] biomes, double[] temperatures, byte[] skyLight, byte[] blockLight,
             int[] highest, boolean[] sectionEmpty) {
-        this.x=x; this.z=z; this.minY=minY; this.maxY=maxY; this.worldName=worldName; this.fullTime=fullTime;
+        this.x=x; this.z=z; this.minY=minY; this.maxY=maxY; this.worldName=worldName; this.worldKey=worldKey; this.fullTime=fullTime;
         this.states=states; this.biomes=biomes; this.temperatures=temperatures; this.skyLight=skyLight; this.blockLight=blockLight;
         this.highest=highest; this.sectionEmpty=sectionEmpty;
     }
+
+    @Override public net.kyori.adventure.key.@org.jetbrains.annotations.NotNull Key getWorldKey() { return this.worldKey; }
 
     public static CraftChunkSnapshot empty(CraftWorld world, int x, int z, boolean includeBiome,
             boolean includeTemperature) {
@@ -56,7 +59,7 @@ public final class CraftChunkSnapshot implements ChunkSnapshot {
         java.util.Arrays.fill(highest, minY);
         boolean[] sectionEmpty = new boolean[(height + 15) >> 4];
         java.util.Arrays.fill(sectionEmpty, true);
-        return new CraftChunkSnapshot(x, z, minY, maxY, world.getName(), world.getFullTime(), states,
+        return new CraftChunkSnapshot(x, z, minY, maxY, world.getName(), world.getKey(), world.getFullTime(), states,
                 biomes, temperatures, null, null, highest, sectionEmpty);
     }
 
@@ -91,7 +94,7 @@ public final class CraftChunkSnapshot implements ChunkSnapshot {
             }
             if (highest != null) highest[(lz<<4)|lx]=top;
         }
-        return new CraftChunkSnapshot(craft.getX(),craft.getZ(),minY,maxY,world.getName(),world.getFullTime(),states,biomes,temps,sky,emitted,highest,empty);
+        return new CraftChunkSnapshot(craft.getX(),craft.getZ(),minY,maxY,world.getName(),world.getKey(),world.getFullTime(),states,biomes,temps,sky,emitted,highest,empty);
     }
 
     private static int index(int x,int y,int z,int minY,int height) {

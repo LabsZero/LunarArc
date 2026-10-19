@@ -97,8 +97,8 @@ public final class LunarArcPotionEvents {
             double intensity = event.getIntensity(affected);
             for (MobEffectInstance effect : contents.getAllEffects()) {
                 Holder<MobEffect> holder = effect.getEffect();
-                if (holder.value().isInstantenous()) {
-                    holder.value().applyInstantenousEffect(level, potion, potion.getOwner(), target, effect.getAmplifier(), intensity);
+                if (holder.value().isInstantaneous()) {
+                    holder.value().applyInstantaneousEffect(level, potion, potion.getOwner(), target, effect.getAmplifier(), intensity);
                 } else {
                     int duration = effect.mapDuration(base -> (int) (intensity * base * durationScale + 0.5));
                     MobEffectInstance scaled = new MobEffectInstance(holder, duration, effect.getAmplifier(), effect.isAmbient(), effect.isVisible());

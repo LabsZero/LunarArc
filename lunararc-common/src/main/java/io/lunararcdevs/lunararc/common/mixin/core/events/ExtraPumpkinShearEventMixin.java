@@ -39,7 +39,7 @@ public abstract class ExtraPumpkinShearEventMixin {
         Direction face = hit.getDirection();
         Direction facing = face.getAxis() == Direction.Axis.Y ? player.getDirection().getOpposite() : face;
         List<ItemStack> rolled = new ArrayList<>();
-        BlockLootInvoker.lunararc$rollInteractLoot(server, BuiltInLootTables.CARVE_PUMPKIN, state, level.getBlockEntity(pos), stack, player,
+        BlockLootInvoker.lunararc$rollInteractLoot(server, BuiltInLootTables.CARVE_PUMPKIN, pos, state, level.getBlockEntity(pos), stack, player,
                 (l, item) -> rolled.add(item));
         List<ItemStack> drops = LunarArcBlockEvents.shearBlock(player, server, pos, stack, hand, rolled);
         if (drops == null) return InteractionResult.PASS;
@@ -47,8 +47,8 @@ public abstract class ExtraPumpkinShearEventMixin {
         for (ItemStack drop : drops) {
             ItemEntity entity = new ItemEntity(level, pos.getX() + 0.5 + facing.getStepX() * 0.65, pos.getY() + 0.1,
                     pos.getZ() + 0.5 + facing.getStepZ() * 0.65, drop);
-            entity.setDeltaMovement(0.05 * facing.getStepX() + level.random.nextDouble() * 0.02, 0.05,
-                    0.05 * facing.getStepZ() + level.random.nextDouble() * 0.02);
+            entity.setDeltaMovement(0.05 * facing.getStepX() + level.getRandom().nextDouble() * 0.02, 0.05,
+                    0.05 * facing.getStepZ() + level.getRandom().nextDouble() * 0.02);
             level.addFreshEntity(entity);
         }
         level.playSound(null, pos, net.minecraft.sounds.SoundEvents.PUMPKIN_CARVE, net.minecraft.sounds.SoundSource.BLOCKS, 1.0F, 1.0F);

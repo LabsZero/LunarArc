@@ -35,6 +35,7 @@ public class CraftBossBar implements KeyedBossBar {
             @NotNull BarColor color, @NotNull BarStyle style, BarFlag... flags) {
         this.key = key != null ? key : NamespacedKey.minecraft("lunararc_bossbar_" + UUID.randomUUID());
         this.handle = new ServerBossEvent(
+                java.util.UUID.randomUUID(),
                 toComponent(title),
                 toNmsColor(Objects.requireNonNull(color, "color")),
                 toNmsStyle(Objects.requireNonNull(style, "style")));

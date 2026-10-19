@@ -13,8 +13,8 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(ConcretePowderBlock.class)
 public abstract class ConcretePowderBlockMixin {
     @WrapOperation(method = "onLand", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean lunararc$form(Level level, BlockPos pos, BlockState state, int flags, Operation<Boolean> original) {
-        return CraftEventFactory.handleBlockFormEvent(level, pos, state, flags, null, (p, s, f) -> original.call(level, p, s, f));
+            target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$form(Level level, BlockPos pos, BlockState state, Operation<Boolean> original) {
+        return CraftEventFactory.handleBlockFormEvent(level, pos, state, 3, null, (p, s, f) -> original.call(level, p, s));
     }
 }

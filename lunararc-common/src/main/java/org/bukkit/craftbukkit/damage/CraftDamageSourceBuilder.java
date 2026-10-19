@@ -13,6 +13,7 @@ public final class CraftDamageSourceBuilder implements DamageSource.Builder {
     private Entity causingEntity;
     private Entity directEntity;
     private Location damageLocation;
+    private final net.kyori.adventure.pointer.Pointers.Builder damageContext = net.kyori.adventure.pointer.Pointers.builder();
 
     public CraftDamageSourceBuilder(@NotNull DamageType damageType) {
         this.damageType = Objects.requireNonNull(damageType, "DamageType cannot be null");
@@ -38,6 +39,13 @@ public final class CraftDamageSourceBuilder implements DamageSource.Builder {
 
 
     @Override
+    public DamageSource.@NotNull Builder withDamageContext(java.util.function.@NotNull Consumer<net.kyori.adventure.pointer.Pointers.Builder> consumer) {
+        Objects.requireNonNull(consumer, "Consumer cannot be null");
+        consumer.accept(this.damageContext);
+        return this;
+    }
+
+    @Override
     public @NotNull DamageSource build() {
         if (this.causingEntity != null && this.directEntity == null) {
             throw new IllegalArgumentException("Direct entity must be set if causing entity is set");
@@ -46,7 +54,8 @@ public final class CraftDamageSourceBuilder implements DamageSource.Builder {
                 this.damageType,
                 this.causingEntity,
                 this.directEntity,
-                this.damageLocation
+                this.damageLocation,
+                this.damageContext.build()
         );
     }
 }

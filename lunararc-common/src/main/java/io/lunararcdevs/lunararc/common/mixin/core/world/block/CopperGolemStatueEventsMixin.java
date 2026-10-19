@@ -15,10 +15,10 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(CopperGolemStatueBlock.class)
 public abstract class CopperGolemStatueEventsMixin {
     @WrapOperation(method = "updatePose", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean lunararc$pose(Level level, BlockPos pos, BlockState newState, int flags, Operation<Boolean> original,
+            target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$pose(Level level, BlockPos pos, BlockState newState, Operation<Boolean> original,
             Level levelArg, BlockState state, BlockPos posArg, Player player) {
         if (!CraftEventFactory.callEntityChangeBlockEvent(player, pos, newState)) return false;
-        return original.call(level, pos, newState, flags);
+        return original.call(level, pos, newState);
     }
 }

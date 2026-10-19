@@ -31,7 +31,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
 
     @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(
-            method = "handlePortal",
+            method = "teleportToPortalDestination",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/world/entity/Entity;canTeleport(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/Level;)Z"),
             require = 1)
@@ -304,7 +304,8 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
             net.minecraft.world.entity.LightningBolt lightning, CallbackInfo ci) {
         if (this.lunararc$getBukkitEntity() instanceof org.bukkit.entity.Hanging hanging) {
             var event = new org.bukkit.event.hanging.HangingBreakByEntityEvent(hanging,
-                    ((EntityBridge) lightning).lunararc$getBukkitEntity());
+                    ((EntityBridge) lightning).lunararc$getBukkitEntity(),
+                    new org.bukkit.craftbukkit.damage.CraftDamageSource(lightning.damageSources().lightningBolt()));
             org.bukkit.Bukkit.getPluginManager().callEvent(event);
             if (event.isCancelled()) ci.cancel();
         }

@@ -270,7 +270,7 @@ public final class LunarArcPaperEvents {
         if (!listened(PlayerChunkUnloadEvent.getHandlerList())
                 || !(((EntityBridge) player).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Player bukkit)) return;
         org.bukkit.craftbukkit.CraftWorld world = LunarArcServerAccess.getCraftWorld(player.level());
-        if (world != null) call(player, new PlayerChunkUnloadEvent(world.getChunkAt(pos.x, pos.z, false), bukkit));
+        if (world != null) call(player, new PlayerChunkUnloadEvent(world.getChunkAt(pos.x(), pos.z(), false), bukkit));
     }
 
     public static boolean trackEntity(ServerPlayer player, Entity entity) {
@@ -328,7 +328,7 @@ public final class LunarArcPaperEvents {
     public static ExpBottleEvent expBottle(Entity bottle, net.minecraft.world.phys.HitResult hit) {
         if (!listened(ExpBottleEvent.getHandlerList()) || !entityEventsActive(bottle)
                 || !(((EntityBridge) bottle).lunararc$getBukkitEntity() instanceof org.bukkit.entity.ThrownExpBottle bukkit)) return null;
-        int exp = 3 + bottle.level().random.nextInt(5) + bottle.level().random.nextInt(5);
+        int exp = 3 + bottle.level().getRandom().nextInt(5) + bottle.level().getRandom().nextInt(5);
         org.bukkit.block.Block block = null;
         org.bukkit.block.BlockFace face = null;
         org.bukkit.entity.Entity hitEntity = null;

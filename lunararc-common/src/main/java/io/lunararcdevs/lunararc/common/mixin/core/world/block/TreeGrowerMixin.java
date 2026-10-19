@@ -10,7 +10,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.grower.TreeGrower;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkGenerator;
-import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+import net.minecraft.world.level.levelgen.feature.Feature;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -26,12 +26,12 @@ public abstract class TreeGrowerMixin {
     }
 
     @Inject(method = "getConfiguredMegaFeature", at = @At("RETURN"), require = 0)
-    private void lunararc$noteMegaFeature(RandomSource random, CallbackInfoReturnable<ResourceKey<ConfiguredFeature<?, ?>>> cir) {
+    private void lunararc$noteMegaFeature(RandomSource random, CallbackInfoReturnable<ResourceKey<Feature>> cir) {
         LunarArcBlockCapture.noteFeature(cir.getReturnValue());
     }
 
     @Inject(method = "getConfiguredFeature", at = @At("RETURN"), require = 0)
-    private void lunararc$noteFeature(RandomSource random, boolean flowers, CallbackInfoReturnable<ResourceKey<ConfiguredFeature<?, ?>>> cir) {
+    private void lunararc$noteFeature(RandomSource random, boolean flowers, CallbackInfoReturnable<ResourceKey<Feature>> cir) {
         LunarArcBlockCapture.noteFeature(cir.getReturnValue());
     }
 }

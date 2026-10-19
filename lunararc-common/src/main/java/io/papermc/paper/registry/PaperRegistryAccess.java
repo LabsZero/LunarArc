@@ -158,6 +158,24 @@ public final class PaperRegistryAccess implements RegistryAccess {
                 return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.COW_VARIANT, org.bukkit.craftbukkit.entity.CraftCow.CraftVariant::new);
             case "org.bukkit.entity.Chicken$Variant":
                 return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.CHICKEN_VARIANT, org.bukkit.craftbukkit.entity.CraftChicken.CraftVariant::new);
+            case "org.bukkit.entity.Cow$SoundVariant":
+                return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.COW_SOUND_VARIANT, org.bukkit.craftbukkit.entity.CraftCow.CraftSoundVariant::new);
+            case "org.bukkit.entity.Pig$SoundVariant":
+                return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.PIG_SOUND_VARIANT, org.bukkit.craftbukkit.entity.CraftPig.CraftSoundVariant::new);
+            case "org.bukkit.entity.Chicken$SoundVariant":
+                return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.CHICKEN_SOUND_VARIANT, org.bukkit.craftbukkit.entity.CraftChicken.CraftSoundVariant::new);
+            case "org.bukkit.entity.Cat$SoundVariant":
+                return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.CAT_SOUND_VARIANT, org.bukkit.craftbukkit.entity.CraftCat.CraftSoundVariant::new);
+            case "io.papermc.paper.entity.poi.PoiType":
+                return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.POINT_OF_INTEREST_TYPE, io.papermc.paper.entity.poi.PaperPoiType::new);
+            case "org.bukkit.entity.ZombieNautilus$Variant":
+                return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.ZOMBIE_NAUTILUS_VARIANT, org.bukkit.craftbukkit.entity.CraftZombieNautilus.CraftVariant::new);
+            case "org.bukkit.entity.SulfurCube$Archetype":
+                return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.SULFUR_CUBE_ARCHETYPE, org.bukkit.craftbukkit.entity.CraftSulfurCube.CraftArchetype::new);
+            case "io.papermc.paper.block.pot.PotPatternType":
+                return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.DECORATED_POT_PATTERN, io.papermc.paper.block.pot.PaperPotPatternType::new);
+            case "io.papermc.paper.dialog.Dialog":
+                return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.DIALOG, io.papermc.paper.dialog.PaperDialog::new);
             case "org.bukkit.entity.Wolf$SoundVariant":
                 return (Registry<T>) holderRegistry(net.minecraft.core.registries.Registries.WOLF_SOUND_VARIANT, org.bukkit.craftbukkit.entity.CraftWolf.CraftSoundVariant::new);
             case "org.bukkit.entity.Wolf$Variant":
@@ -285,6 +303,11 @@ public final class PaperRegistryAccess implements RegistryAccess {
             RegistryKey.PIG_VARIANT,
             RegistryKey.COW_VARIANT,
             RegistryKey.CHICKEN_VARIANT,
+            RegistryKey.COW_SOUND_VARIANT,
+            RegistryKey.PIG_SOUND_VARIANT,
+            RegistryKey.CHICKEN_SOUND_VARIANT,
+            RegistryKey.CAT_SOUND_VARIANT,
+            RegistryKey.POINT_OF_INTEREST_TYPE,
             RegistryKey.WOLF_SOUND_VARIANT);
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -297,8 +320,6 @@ public final class PaperRegistryAccess implements RegistryAccess {
 
     @SuppressWarnings("unchecked")
     private static <T extends Keyed> Class<T> resolveType(RegistryKey<T> key) {
-        // Explicit table (Paper 1.21.11 registry keys we adapt). Keep it explicit so registry lookup does
-        // not depend on runtime generic/reflection discovery.
         if (key == RegistryKey.GAME_EVENT) return (Class<T>) org.bukkit.GameEvent.class;
         if (key == RegistryKey.STRUCTURE_TYPE) return (Class<T>) org.bukkit.generator.structure.StructureType.class;
         if (key == RegistryKey.MOB_EFFECT) return (Class<T>) org.bukkit.potion.PotionEffectType.class;
@@ -333,7 +354,16 @@ public final class PaperRegistryAccess implements RegistryAccess {
         if (key == RegistryKey.PIG_VARIANT) return (Class<T>) org.bukkit.entity.Pig.Variant.class;
         if (key == RegistryKey.COW_VARIANT) return (Class<T>) org.bukkit.entity.Cow.Variant.class;
         if (key == RegistryKey.CHICKEN_VARIANT) return (Class<T>) org.bukkit.entity.Chicken.Variant.class;
+        if (key == RegistryKey.COW_SOUND_VARIANT) return (Class<T>) org.bukkit.entity.Cow.SoundVariant.class;
+        if (key == RegistryKey.PIG_SOUND_VARIANT) return (Class<T>) org.bukkit.entity.Pig.SoundVariant.class;
+        if (key == RegistryKey.CHICKEN_SOUND_VARIANT) return (Class<T>) org.bukkit.entity.Chicken.SoundVariant.class;
+        if (key == RegistryKey.CAT_SOUND_VARIANT) return (Class<T>) org.bukkit.entity.Cat.SoundVariant.class;
+        if (key == RegistryKey.POINT_OF_INTEREST_TYPE) return (Class<T>) io.papermc.paper.entity.poi.PoiType.class;
         if (key == RegistryKey.WOLF_SOUND_VARIANT) return (Class<T>) org.bukkit.entity.Wolf.SoundVariant.class;
+        if (key == RegistryKey.ZOMBIE_NAUTILUS_VARIANT) return (Class<T>) org.bukkit.entity.ZombieNautilus.Variant.class;
+        if (key == RegistryKey.SULFUR_CUBE_ARCHETYPE) return (Class<T>) org.bukkit.entity.SulfurCube.Archetype.class;
+        if (key == RegistryKey.DECORATED_POT_PATTERN) return (Class<T>) io.papermc.paper.block.pot.PotPatternType.class;
+        if (key == RegistryKey.DIALOG) return (Class<T>) io.papermc.paper.dialog.Dialog.class;
         return null;
     }
 

@@ -19,9 +19,9 @@ import net.minecraft.world.level.block.RedstoneTorchBlock;
 public abstract class RedstoneTorchBlockMixin {
 
     @WrapOperation(method = "tick", require = 0,
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean lunararc$toggle(ServerLevel level, BlockPos pos, BlockState state, int flags, Operation<Boolean> original) {
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$toggle(ServerLevel level, BlockPos pos, BlockState state, Operation<Boolean> original) {
         boolean lit = state.getValue(RedstoneTorchBlock.LIT);
-        return LunarArcPaperEvents.redstoneAllows(level, pos, !lit, lit) && original.call(level, pos, state, flags);
+        return LunarArcPaperEvents.redstoneAllows(level, pos, !lit, lit) && original.call(level, pos, state);
     }
 }

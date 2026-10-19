@@ -1,7 +1,7 @@
 package io.lunararcdevs.lunararc.common.mixin.core.world.block;
 
 import io.lunararcdevs.lunararc.common.bridge.ServerLevelBridge;
-import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
@@ -39,7 +39,7 @@ public abstract class WitherBuildSpawnMixin {
         if (!skull || pos.getY() < level.getMinY() || level.getDifficulty() == Difficulty.PEACEFUL) return;
         BlockPattern.BlockPatternMatch match = getOrCreateWitherFull().find(level, pos);
         if (match == null) return;
-        WitherBoss wither = EntityType.WITHER.create(level, EntitySpawnReason.TRIGGERED);
+        WitherBoss wither = net.minecraft.world.entity.EntityTypes.WITHER.create(level, EntitySpawnReason.TRIGGERED);
         if (wither == null) return;
         BlockPos spawn = match.getBlock(1, 2, 0).getPos();
         float yaw = match.getForwards().getAxis() == Direction.Axis.X ? 0.0F : 90.0F;

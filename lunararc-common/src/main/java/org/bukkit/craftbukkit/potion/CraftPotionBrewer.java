@@ -1,7 +1,6 @@
 package org.bukkit.craftbukkit.potion;
 
 import com.google.common.base.Preconditions;
-import io.lunararcdevs.lunararc.common.bridge.alchemy.PotionBrewingBridge;
 import io.papermc.paper.potion.PotionMix;
 import java.util.Collection;
 import java.util.Objects;
@@ -18,14 +17,6 @@ public final class CraftPotionBrewer implements PotionBrewer {
 
     public CraftPotionBrewer(MinecraftServer server) {
         this.server = Objects.requireNonNull(server, "server");
-    }
-
-    private PotionBrewingBridge bridge() {
-        Object brewing = this.server.potionBrewing();
-        if (!(brewing instanceof PotionBrewingBridge bridge)) {
-            throw new IllegalStateException("PotionBrewingMixin is not active on the loader-owned PotionBrewing");
-        }
-        return bridge;
     }
 
     @Override
@@ -50,19 +41,20 @@ public final class CraftPotionBrewer implements PotionBrewer {
     }
 
     @Override
-    public void addPotionMix(@NotNull PotionMix potionMix) {
-        bridge().lunararc$addPotionMix(Objects.requireNonNull(potionMix, "potionMix"));
-    }
-
-    @Override
-    public void removePotionMix(@NotNull NamespacedKey key) {
-        bridge().lunararc$removePotionMix(Objects.requireNonNull(key, "key"));
-    }
-
-    @Override
     public void resetPotionMixes() {
-        // Only remove Paper-added mixes. Vanilla/modloader recipes remain owned by
-        // the active loader and must not be rebuilt or replaced here.
-        bridge().lunararc$clearPotionMixes();
+        // Brewing mixes are ordinary BrewingRecipe entries in the recipe manager in 26.x; drop the ones added by plugins
+        // (anything outside the vanilla namespace) and leave vanilla/loader recipes in place.
+        io.lunararcdevs.lunararc.common.bridge.recipe.RecipeManagerBridge bridge =
+                (io.lunararcdevs.lunararc.common.bridge.recipe.RecipeManagerBridge) (Object) this.server.getRecipeManager();
+        java.util.List<net.minecraft.world.item.crafting.RecipeHolder<?>> custom = new java.util.ArrayList<>();
+        for (net.minecraft.world.item.crafting.RecipeHolder<?> holder : bridge.lunararc$recipes()) {
+            if (holder.value().getType() == net.minecraft.world.item.crafting.RecipeType.BREWING
+                    && !"minecraft".equals(holder.id().identifier().getNamespace())) {
+                custom.add(holder);
+            }
+        }
+        for (net.minecraft.world.item.crafting.RecipeHolder<?> holder : custom) {
+            bridge.lunararc$removeRecipe(holder.id().identifier());
+        }
     }
 }

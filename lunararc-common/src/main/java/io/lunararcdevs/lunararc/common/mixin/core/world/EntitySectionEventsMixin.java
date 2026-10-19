@@ -44,7 +44,7 @@ public abstract class EntitySectionEventsMixin<T extends EntityAccess> {
             if (access instanceof Entity entity) entities.add(entity);
         });
         if (!entities.isEmpty() && entities.get(0).level() instanceof ServerLevel level) {
-            LunarArcMoreEvents.entitiesUnloaded(level, new ChunkPos(pos), entities);
+            LunarArcMoreEvents.entitiesUnloaded(level, ChunkPos.unpack(pos), entities);
         }
     }
 }

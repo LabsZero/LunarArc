@@ -17,7 +17,7 @@ public abstract class ExtraEquipSwapEventMixin {
     @WrapMethod(method = "swapWithEquipmentSlot", require = 0)
     private InteractionResult lunararc$swap(ItemStack stack, Player player, Operation<InteractionResult> original) {
         Equippable self = (Equippable) (Object) this;
-        if (player.canUseSlot(self.slot()) && self.canBeEquippedBy(player.getType())) {
+        if (player.canUseSlot(self.slot()) && self.canBeEquippedBy(player.getType().builtInRegistryHolder())) {
             ItemStack current = player.getItemBySlot(self.slot());
             boolean allowedByEnchant = !EnchantmentHelper.has(current, EnchantmentEffectComponents.PREVENT_ARMOR_CHANGE) || player.isCreative();
             if (allowedByEnchant && !ItemStack.isSameItemSameComponents(stack, current)

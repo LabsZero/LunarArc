@@ -46,8 +46,8 @@ public final class CraftLimitedRegion implements LimitedRegion {
 
     public CraftLimitedRegion(WorldGenLevel access, ChunkPos center) {
         this.weakAccess = new WeakReference<>(Objects.requireNonNull(access, "access"));
-        this.centerChunkX = center.x;
-        this.centerChunkZ = center.z;
+        this.centerChunkX = center.x();
+        this.centerChunkZ = center.z();
         int x = center.getMinBlockX(), z = center.getMinBlockZ();
         this.region = new BoundingBox(x - buffer, access.getMinY(), z - buffer,
                 x + 16 + buffer, access.getMaxY(), z + 16 + buffer);
@@ -111,7 +111,7 @@ public final class CraftLimitedRegion implements LimitedRegion {
     @Override public @NotNull BlockState getBlockState(int x, int y, int z) {
         check(x,y,z); BlockPos pos = new BlockPos(x,y,z); net.minecraft.world.level.block.state.BlockState state = getHandle().getBlockState(pos);
         net.minecraft.world.level.block.entity.BlockEntity be = getHandle().getBlockEntity(pos);
-        return be == null ? CraftBlockState.unplacedAt(pos, state) : new CraftBlockEntityState<>(serverLevel(), be, true);
+        return be == null ? CraftBlockState.unplacedAt(pos, state) : org.bukkit.craftbukkit.block.CraftBlockStates.getBlockState(io.lunararcdevs.lunararc.common.LunarArcServerAccess.getCraftWorld(serverLevel()), pos, state, be);
     }
     @Override public void setBlockData(@NotNull Location location, @NotNull BlockData data) { setBlockData(location.getBlockX(), location.getBlockY(), location.getBlockZ(), data); }
     @Override public void setBlockData(int x, int y, int z, @NotNull BlockData data) {
@@ -146,7 +146,7 @@ public final class CraftLimitedRegion implements LimitedRegion {
 
     private boolean generateTreeInternal(WorldGenLevel level, Location location, Random random, TreeType type) {
         check(location.getBlockX(), location.getBlockY(), location.getBlockZ());
-        net.minecraft.resources.ResourceKey<net.minecraft.world.level.levelgen.feature.ConfiguredFeature<?, ?>> feature = switch (type) {
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.levelgen.feature.Feature> feature = switch (type) {
             case BIG_TREE -> net.minecraft.data.worldgen.features.TreeFeatures.FANCY_OAK; case BIRCH -> net.minecraft.data.worldgen.features.TreeFeatures.BIRCH;
             case REDWOOD -> net.minecraft.data.worldgen.features.TreeFeatures.SPRUCE; case TALL_REDWOOD -> net.minecraft.data.worldgen.features.TreeFeatures.PINE;
             case JUNGLE -> net.minecraft.data.worldgen.features.TreeFeatures.MEGA_JUNGLE_TREE; case SMALL_JUNGLE -> net.minecraft.data.worldgen.features.TreeFeatures.JUNGLE_TREE_NO_VINE;
@@ -163,7 +163,7 @@ public final class CraftLimitedRegion implements LimitedRegion {
             default -> net.minecraft.data.worldgen.features.TreeFeatures.OAK;
         };
         if (feature == null) return true;
-        var holder = level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.CONFIGURED_FEATURE).get(feature).orElse(null);
+        var holder = level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.FEATURE).get(feature).orElse(null);
         return holder != null && holder.value().place(level, serverLevel().getChunkSource().getGenerator(), new org.bukkit.craftbukkit.util.RandomSourceWrapper(random), new BlockPos(location.getBlockX(),location.getBlockY(),location.getBlockZ()));
     }
 
@@ -173,7 +173,7 @@ public final class CraftLimitedRegion implements LimitedRegion {
             ChunkAccess access = getHandle().getChunk(centerChunkX+dx, centerChunkZ+dz, ChunkStatus.EMPTY);
             if (!(access instanceof ProtoChunk proto)) continue;
             for (CompoundTag tag : proto.getEntities()) {
-                net.minecraft.world.entity.EntityType.loadEntityRecursive(tag, serverLevel(), EntitySpawnReason.LOAD, entity -> {
+                net.minecraft.world.entity.EntityType.loadEntityRecursive(tag, serverLevel(), new net.minecraft.world.entity.EntitySpawnRequest(net.minecraft.world.entity.EntitySpawnReason.LOAD, false), entity -> {
                     if (region.contains(entity.getX(), entity.getY(), entity.getZ())) entities.add(entity); else outsideEntities.add(entity); return entity;
                 });
             }
@@ -216,7 +216,7 @@ public final class CraftLimitedRegion implements LimitedRegion {
     @Override public void setBlockState(int x,int y,int z,@NotNull BlockState state){ check(x,y,z); if(!(state instanceof CraftBlockState craft))throw new IllegalArgumentException("BlockState must be CraftBlockState"); BlockPos pos=new BlockPos(x,y,z); getHandle().setBlock(pos,craft.getHandle(),net.minecraft.world.level.block.Block.UPDATE_ALL,512); if(state instanceof CraftBlockEntityState<?> tile){ var live=getHandle().getBlockEntity(pos); if(live!=null){ try (net.minecraft.util.ProblemReporter.ScopedCollector problems = new net.minecraft.util.ProblemReporter.ScopedCollector(() -> "CraftLimitedRegion@" + pos.toShortString(), org.slf4j.LoggerFactory.getLogger(CraftLimitedRegion.class))) { live.loadWithComponents(net.minecraft.world.level.storage.TagValueInput.create(problems, getHandle().registryAccess(), tile.getSnapshotNBT())); } } } }
     @Override public void scheduleBlockUpdate(int x,int y,int z){ check(x,y,z); BlockPos pos=new BlockPos(x,y,z); getHandle().scheduleTick(pos,getHandle().getBlockState(pos).getBlock(),0); }
     @Override public void scheduleFluidUpdate(int x,int y,int z){ check(x,y,z); BlockPos pos=new BlockPos(x,y,z); getHandle().scheduleTick(pos,getHandle().getFluidState(pos).getType(),0); }
-    @Override public @NotNull io.papermc.paper.world.MoonPhase getMoonPhase(){ io.papermc.paper.world.MoonPhase[] p=io.papermc.paper.world.MoonPhase.values(); int i=(int)Math.floorMod(serverLevel().getDayTime()/24000L,8L); return p[i%p.length]; }
+    @Override public @NotNull io.papermc.paper.world.MoonPhase getMoonPhase(){ io.papermc.paper.world.MoonPhase[] p=io.papermc.paper.world.MoonPhase.values(); int i=(int)Math.floorMod(serverLevel().getDefaultClockTime()/24000L,8L); return p[i%p.length]; }
     @Override public boolean lineOfSightExists(@NotNull Location from,@NotNull Location to){ var start=new net.minecraft.world.phys.Vec3(from.getX(),from.getY(),from.getZ()); var end=new net.minecraft.world.phys.Vec3(to.getX(),to.getY(),to.getZ()); var hit=getHandle().clip(new net.minecraft.world.level.ClipContext(start,end,net.minecraft.world.level.ClipContext.Block.COLLIDER,net.minecraft.world.level.ClipContext.Fluid.NONE,net.minecraft.world.phys.shapes.CollisionContext.empty())); return hit.getType()==net.minecraft.world.phys.HitResult.Type.MISS; }
     @Override public boolean hasCollisionsIn(@NotNull BoundingBox box){ return !getHandle().noCollision(new net.minecraft.world.phys.AABB(box.getMinX(),box.getMinY(),box.getMinZ(),box.getMaxX(),box.getMaxY(),box.getMaxZ())); }
     @Override

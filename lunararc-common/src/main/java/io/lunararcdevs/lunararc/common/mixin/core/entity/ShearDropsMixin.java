@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(LivingEntity.class)
 public abstract class ShearDropsMixin {
     @Inject(method = "dropFromShearingLootTable", at = @At("HEAD"), cancellable = true)
-    private void lunararc$forcedShearDrops(ServerLevel level, ResourceKey<LootTable> table, ItemStack shears,
+    private void lunararc$forcedShearDrops(ServerLevel level, ResourceKey<LootTable> table, net.minecraft.world.item.ItemInstance shears,
             BiConsumer<ServerLevel, ItemStack> consumer, CallbackInfo ci) {
         List<ItemStack> forced = LunarArcShearing.take((LivingEntity) (Object) this);
         if (forced == null) return;

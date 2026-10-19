@@ -18,6 +18,6 @@ config="mixins.lunararc.neoforge.json"
 [[dependencies.lunararc]]
 modId="minecraft"
 type="required"
-versionRange="[1.21.11]"
+versionRange="[26.3]"
 ordering="NONE"
 side="BOTH"

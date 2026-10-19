@@ -16,7 +16,7 @@ LunarArc also provides native [EssentialsX](https://essentialsx.net) integration
 
 |        Release        |  Forge  | NeoForge |  Fabric  |  QuiltMC  | Status |                                                                                                                                              Build                                                           
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Mobs of Mayhem (1.21.11) | 61.2.1 | 21.11.45 |  0.19.5  |  0.30.1  | ACTIVE | [![1.21.11 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=MobsofMayhem&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3AMobsofMayhem) |
+| Outland Bound (26.3) | 66.0.13 | 26.3.0.94 |  0.20.0  |  0.30.1  | ACTIVE | [![26.3 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=OutlandBound&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3AOutlandBound) |
 
 ---
 
@@ -51,7 +51,7 @@ and <a href="https://www.yourkit.com/youmonitor/">YourKit YouMonitor</a>.
 LunarArc uses the following upstream projects as runtime platforms, API contracts, or implementation references:
 
 - **[Arclight](https://github.com/IzzelAliz/Arclight)** - Primary architecture reference for the hybrid server structure, loader-specific mixins, lifecycle hooks, event coexistence, and concrete Bukkit/Craft integration.
-- **[Paper](https://github.com/PaperMC/Paper)** - Bukkit/Paper API and server-behavior contract used to match Paper 1.21.11 plugin compatibility.
+- **[Paper](https://github.com/PaperMC/Paper)** - Bukkit/Paper API and server-behavior contract used to match Paper 26.x plugin compatibility.
 - **[Minecraft Forge](https://github.com/MinecraftForge/MinecraftForge)** - Forge runtime and loader APIs used by LunarArc's Forge module.
 - **[NeoForge](https://github.com/neoforged/NeoForge)** - NeoForge runtime and loader APIs used by LunarArc's NeoForge module.
 - **[Fabric](https://github.com/FabricMC/fabric)**  - Fabric loader/API lifecycle and integration hooks used by LunarArc's Fabric module.

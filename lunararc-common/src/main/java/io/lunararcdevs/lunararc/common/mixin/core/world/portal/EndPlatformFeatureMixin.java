@@ -45,11 +45,11 @@ public abstract class EndPlatformFeatureMixin {
     }
 
     @Redirect(method = "createEndPlatform",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/ServerLevelAccessor;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"),
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/ServerLevelAccessor;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"),
             require = 0)
-    private static boolean lunararc$captureSetBlock(ServerLevelAccessor level, BlockPos pos, BlockState state, int flags) {
+    private static boolean lunararc$captureSetBlock(ServerLevelAccessor level, BlockPos pos, BlockState state) {
         BlockStateListPopulator populator = LUNARARC_POPULATOR.get();
-        return populator == null ? level.setBlock(pos, state, flags) : populator.setBlock(pos, state, flags, 512);
+        return populator == null ? level.setBlock(pos, state, 3) : populator.setBlock(pos, state, 3, 512);
     }
 
     @Inject(method = "createEndPlatform", at = @At("RETURN"), require = 0)

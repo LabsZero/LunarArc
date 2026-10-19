@@ -12,9 +12,6 @@ import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(MinecraftServer.class)
 public abstract class MinecraftServerMixin_NeoForge implements MinecraftServerBridge {
-    @Shadow(remap = false)
-    public abstract void markWorldsDirty();
-
     @Override
     public void lunararc$loaderLevelLoad(ServerLevel level) {
         NeoForge.EVENT_BUS.post(new LevelEvent.Load(level));
@@ -27,7 +24,11 @@ public abstract class MinecraftServerMixin_NeoForge implements MinecraftServerBr
 
     @Override
     public void lunararc$loaderMarkLevelsDirty() {
-        this.markWorldsDirty();
+        // NeoForge 26.x dropped MinecraftServer#markWorldsDirty; flag the per-level chunk tickets so they are saved again.
+        for (ServerLevel level : ((net.minecraft.server.MinecraftServer) (Object) this).getAllLevels()) {
+            TicketStorage tickets = level.getDataStorage().get(TicketStorage.TYPE);
+            if (tickets != null) tickets.setDirty();
+        }
     }
 
     @Override

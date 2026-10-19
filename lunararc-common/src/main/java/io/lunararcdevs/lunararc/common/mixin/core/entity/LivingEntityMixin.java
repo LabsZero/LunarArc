@@ -160,14 +160,6 @@ public abstract class LivingEntityMixin implements LivingEntityBridge {
             net.minecraft.world.entity.Entity source,
             Operation<Boolean> original) {
         LivingEntity entity = (LivingEntity) (Object) this;
-        // Structure/entity-spawn generation genuinely runs on worker threads even in vanilla
-        // (confirmed by a real crash: ChunkGenerationTask -> StructureTemplate.addEntitiesToWorld
-        // -> a mod's spawn-time potion-effect application -> this method, all on a
-        // ForkJoinWorkerThread). PaperEventManager correctly refuses to fire a synchronous event
-        // off the main thread (that's real, correct Paper safety behavior, not a bug) — so this
-        // must not even attempt to fire the event in that case. Falling through to the real
-        // vanilla/modded behavior unmodified, same as the existing suppressed/client-side cases
-        // below, rather than crashing the whole chunk generation task.
         if (this.lunararc$suppressEffectEvent || entity.level().isClientSide || !org.bukkit.Bukkit.isPrimaryThread()) {
             return original.call(incoming, source);
         }
@@ -257,7 +249,7 @@ public abstract class LivingEntityMixin implements LivingEntityBridge {
     }
 
     @WrapOperation(
-            method = "randomTeleport",
+            method = "checkPositionAndTeleport",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;teleportTo(DDD)V"),
             require = 0)
     private void lunararc$entityRandomTeleport(
@@ -417,7 +409,7 @@ public abstract class LivingEntityMixin implements LivingEntityBridge {
         }
         int dragonBase = 0;
         if (entity instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon dragon) {
-            net.minecraft.world.level.dimension.end.EndDragonFight fight = dragon.getDragonFight();
+            net.minecraft.world.level.dimension.end.EnderDragonFight fight = dragon.getDragonFight();
             dragonBase = fight != null && !fight.hasPreviouslyKilledDragon() ? 12000 : 500;
             capture.exp = dragonBase;
         }

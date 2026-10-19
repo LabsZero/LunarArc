@@ -40,7 +40,18 @@ public final class LunarArcMixinConfigPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        // Forge's patched AbstractFurnaceBlockEntity#burn is an instance method, so Forge ships its own smelt-event handler.
+        if (mixinClassName.endsWith(".FurnaceSmeltEventMixin") && isForge()) return false;
         return true;
+    }
+
+    private static Boolean forge;
+
+    private static boolean isForge() {
+        if (forge == null) {
+            forge = LunarArcMixinConfigPlugin.class.getClassLoader().getResource("net/minecraftforge/fml/ModList.class") != null;
+        }
+        return forge;
     }
 
     @Override

@@ -51,13 +51,13 @@ public abstract class PlayerMixin implements PlayerAffectsSpawningBridge, io.lun
     @Unique private net.minecraft.world.entity.LivingEntity lunararc$shieldAttacker;
 
     @Inject(method = "blockUsingItem", at = @At("HEAD"), require = 1)
-    private void lunararc$shieldAttacker(net.minecraft.server.level.ServerLevel level, net.minecraft.world.entity.LivingEntity attacker, CallbackInfo ci) {
+    private void lunararc$shieldAttacker(net.minecraft.server.level.ServerLevel level, net.minecraft.world.entity.LivingEntity attacker, net.minecraft.world.damagesource.DamageSource source, float damage, boolean blocked, CallbackInfo ci) {
         this.lunararc$shieldAttacker = attacker;
     }
     @Override public net.minecraft.world.entity.LivingEntity lunararc$getShieldAttacker() { return this.lunararc$shieldAttacker; }
 
     @Inject(method = "blockUsingItem", at = @At("RETURN"), require = 1)
-    private void lunararc$clearShieldAttacker(net.minecraft.server.level.ServerLevel level, net.minecraft.world.entity.LivingEntity attacker, CallbackInfo ci) {
+    private void lunararc$clearShieldAttacker(net.minecraft.server.level.ServerLevel level, net.minecraft.world.entity.LivingEntity attacker, net.minecraft.world.damagesource.DamageSource source, float damage, boolean blocked, CallbackInfo ci) {
         this.lunararc$shieldAttacker = null;
     }
 

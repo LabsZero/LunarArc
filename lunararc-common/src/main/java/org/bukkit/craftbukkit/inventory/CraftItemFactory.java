@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.function.UnaryOperator;
 import net.minecraft.commands.arguments.item.ItemParser;
 import net.minecraft.core.Holder;
+import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.component.DataComponentPatch;
@@ -155,11 +156,12 @@ public final class CraftItemFactory implements ItemFactory {
         Objects.requireNonNull(input, "input");
         try {
             RegistryAccess registries = ((org.bukkit.craftbukkit.CraftServer) org.bukkit.Bukkit.getServer()).getServer().registryAccess();
-            ItemParser.ItemResult parsed = new ItemParser(registries).parse(new StringReader(input));
-            net.minecraft.world.item.ItemStack nms = new net.minecraft.world.item.ItemStack(parsed.item().value());
-            DataComponentPatch patch = parsed.components();
-            if (patch != null) nms.applyComponents(patch);
-            return CraftItemStack.asCraftMirror(nms);
+            StringReader reader = new StringReader(input);
+            net.minecraft.commands.arguments.item.ItemInput parsed = new ItemParser(registries).parse(reader);
+            if (reader.canRead()) {
+                throw new IllegalArgumentException("Trailing input found when parsing ItemStack: " + reader.getRemaining());
+            }
+            return CraftItemStack.asCraftMirror(parsed.createItemStack(1));
         } catch (CommandSyntaxException | RuntimeException exception) {
             throw new IllegalArgumentException("Could not parse ItemStack: " + input, exception);
         }
@@ -172,10 +174,10 @@ public final class CraftItemFactory implements ItemFactory {
         net.minecraft.world.entity.EntityType<?> nmsType = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getValue(
                 Identifier.parse(type.getKey().toString()));
         if (nmsType == null) return null;
-        Item egg = SpawnEggItem.byId(nmsType);
-        if (egg == null) return null;
-        Identifier key = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(egg);
-        return key == null ? null : Material.matchMaterial(key.toString());
+        return SpawnEggItem.byId(nmsType)
+                .flatMap(Holder::unwrapKey)
+                .map(key -> Material.matchMaterial(key.identifier().toString()))
+                .orElse(null);
     }
 
     @Override

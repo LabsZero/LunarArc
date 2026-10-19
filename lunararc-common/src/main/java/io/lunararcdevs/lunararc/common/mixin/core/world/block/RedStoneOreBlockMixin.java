@@ -13,9 +13,9 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(RedStoneOreBlock.class)
 public abstract class RedStoneOreBlockMixin {
     @WrapOperation(method = "randomTick", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/server/level/ServerLevel;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean lunararc$fade(ServerLevel level, BlockPos pos, BlockState state, int flags, Operation<Boolean> original) {
+            target = "Lnet/minecraft/server/level/ServerLevel;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$fade(ServerLevel level, BlockPos pos, BlockState state, Operation<Boolean> original) {
         if (CraftEventFactory.callBlockFadeCancelled(level, pos, state)) return false;
-        return original.call(level, pos, state, flags);
+        return original.call(level, pos, state);
     }
 }

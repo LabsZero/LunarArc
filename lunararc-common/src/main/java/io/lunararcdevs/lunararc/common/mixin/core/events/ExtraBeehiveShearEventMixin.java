@@ -42,7 +42,7 @@ public abstract class ExtraBeehiveShearEventMixin {
             return original.call(stack, state, level, pos, player, hand, hit);
         }
         List<ItemStack> rolled = new ArrayList<>();
-        BlockLootInvoker.lunararc$rollInteractLoot(server, BuiltInLootTables.HARVEST_BEEHIVE, state, level.getBlockEntity(pos), stack, player,
+        BlockLootInvoker.lunararc$rollInteractLoot(server, BuiltInLootTables.HARVEST_BEEHIVE, pos, state, level.getBlockEntity(pos), stack, player,
                 (l, item) -> rolled.add(item));
         List<ItemStack> result = LunarArcBlockEvents.shearBlock(player, server, pos, stack, hand, rolled);
         if (result == null) return InteractionResult.PASS;

@@ -15,7 +15,6 @@ public final class PaperHelperRegressionTest {
                 "io.papermc.paper.inventory.BrewingSimpleContainerData",
                 "io.papermc.paper.inventory.PaperInventoryCustomHolderContainer",
                 "io.papermc.paper.persistence.PaperPersistentDataContainerView",
-                "io.papermc.paper.util.ObfHelper",
                 "io.papermc.paper.util.MCUtil",
                 "io.papermc.paper.world.flag.PaperFeatureFlagProviderImpl",
                 "io.papermc.paper.console.BrigadierCommandCompleter",

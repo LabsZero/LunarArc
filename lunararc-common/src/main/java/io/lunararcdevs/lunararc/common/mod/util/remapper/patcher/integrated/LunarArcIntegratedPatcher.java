@@ -36,6 +36,23 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
                     + "Lorg/bukkit/generator/ChunkGenerator;"
                     + "Lorg/bukkit/generator/BiomeProvider;)V";
 
+    // WorldEdit v26_* adapters call Paper's ServerLevel constructor that takes WorldGenSettings, the stem key,
+    // a SavedDataStorage and the loaded world data (see LunarArcWorldEditRegenLevel).
+    private static final String REGEN_CTOR_DESC_26_MOJANG =
+            "(Lnet/minecraft/server/MinecraftServer;"
+                    + "Ljava/util/concurrent/Executor;"
+                    + "Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;"
+                    + "Lnet/minecraft/world/level/levelgen/WorldGenSettings;"
+                    + "Lnet/minecraft/resources/ResourceKey;"
+                    + "Lnet/minecraft/world/level/dimension/LevelStem;"
+                    + "ZJLjava/util/List;Z"
+                    + "Lnet/minecraft/resources/ResourceKey;"
+                    + "Lorg/bukkit/World$Environment;"
+                    + "Lorg/bukkit/generator/ChunkGenerator;"
+                    + "Lorg/bukkit/generator/BiomeProvider;"
+                    + "Lnet/minecraft/world/level/storage/SavedDataStorage;"
+                    + "Lio/papermc/paper/world/PaperWorldLoader$LoadedWorldData;)V";
+
     private static final String WORLDEDIT_ADAPTER_PREFIX = "com/sk89q/worldedit/bukkit/adapter/impl/";
     private static final String WORLDEDIT_PROPERTY_LOADER_SUFFIX = "/PaperweightAdapter$1";
     private static final String WORLDEDIT_PROPERTY = "com/sk89q/worldedit/registry/state/Property";
@@ -75,7 +92,8 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
     }
 
     private static boolean isWorldEditRegenAdapter(String name) {
-        return name.startsWith(WORLDEDIT_ADAPTER_PREFIX + "v1_21") && name.endsWith("/PaperweightAdapter");
+        return (name.startsWith(WORLDEDIT_ADAPTER_PREFIX + "v1_21") || name.startsWith(WORLDEDIT_ADAPTER_PREFIX + "v26_"))
+                && name.endsWith("/PaperweightAdapter");
     }
 
     public static java.util.List<String> worldEditPropertyValueNames(Object property) {
@@ -206,13 +224,14 @@ public final class LunarArcIntegratedPatcher implements PluginPatcher {
     private static void patchWorldEditRegen(ClassNode node, ClassRepo classRepo) {
         String serverLevel = io.lunararcdevs.lunararc.common.mod.LunarArcRemapper.currentRuntimeClassName(SERVER_LEVEL_MOJANG);
         String regenCtorDesc = io.lunararcdevs.lunararc.common.mod.LunarArcRemapper.currentRuntimeDescriptor(REGEN_CTOR_DESC_MOJANG);
+        String regenCtorDesc26 = io.lunararcdevs.lunararc.common.mod.LunarArcRemapper.currentRuntimeDescriptor(REGEN_CTOR_DESC_26_MOJANG);
         for (MethodNode method : node.methods) {
             for (AbstractInsnNode insn : method.instructions) {
                 if (!(insn instanceof MethodInsnNode call)) continue;
 
                 if (call.getOpcode() == Opcodes.INVOKESPECIAL && "<init>".equals(call.name)) {
                     String replacement;
-                    if (serverLevel.equals(call.owner) && regenCtorDesc.equals(call.desc)) {
+                    if (serverLevel.equals(call.owner) && (regenCtorDesc.equals(call.desc) || regenCtorDesc26.equals(call.desc))) {
                         replacement = REGEN_LEVEL;
                     } else if ((WORLDEDIT_NOOP_LISTENER.equals(call.owner) || call.owner.startsWith(node.name + "$NoOp")) && "()V".equals(call.desc)) {
                         replacement = LUNARARC_NOOP_LISTENER;

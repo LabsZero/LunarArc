@@ -136,7 +136,7 @@ public final class LunarArcMoreEvents {
     }
 
     public static boolean dragonEgg(ServerLevel level, BlockPos pos, net.minecraft.world.level.block.state.BlockState egg,
-                                    net.minecraft.world.level.dimension.end.EndDragonFight fight) {
+                                    net.minecraft.world.level.dimension.end.EnderDragonFight fight) {
         if (!listened(DragonEggFormEvent.getHandlerList()) || !org.bukkit.Bukkit.isPrimaryThread()) return true;
         org.bukkit.craftbukkit.block.CraftBlockState state = org.bukkit.craftbukkit.block.CraftBlockStates.getBlockState(level, pos);
         state.setData(egg);
@@ -410,8 +410,8 @@ public final class LunarArcMoreEvents {
         org.bukkit.entity.Player player = player(who);
         if (player == null || !listened(io.papermc.paper.event.player.PlayerPickItemEvent.getHandlerList())) return null;
         io.papermc.paper.event.player.PlayerPickItemEvent event = entity != null
-                ? new io.papermc.paper.event.player.PlayerPickEntityEvent(player, bukkit(entity), includeData, targetSlot, sourceSlot)
-                : new io.papermc.paper.event.player.PlayerPickBlockEvent(player, CraftBlock.at(who.level(), block), includeData, targetSlot, sourceSlot);
+                ? new io.papermc.paper.event.player.PlayerPickEntityEvent(player, bukkit(entity), CraftItemStack.asBukkitCopy(entity.getPickResult()), includeData, targetSlot, sourceSlot)
+                : new io.papermc.paper.event.player.PlayerPickBlockEvent(player, CraftBlock.at(who.level(), block), CraftItemStack.asBukkitCopy(who.level().getBlockState(block).getCloneItemStack(who.level(), block, includeData)), includeData, targetSlot, sourceSlot);
         fire(event);
         return event;
     }
@@ -519,7 +519,7 @@ public final class LunarArcMoreEvents {
         if (world == null) return;
         List<org.bukkit.entity.Entity> list = new ArrayList<>();
         for (net.minecraft.world.entity.Entity entity : entities) if (bukkit(entity) != null) list.add(bukkit(entity));
-        fire(new org.bukkit.event.world.EntitiesLoadEvent(new org.bukkit.craftbukkit.CraftChunk(world, pos.x, pos.z), java.util.Collections.unmodifiableList(list)));
+        fire(new org.bukkit.event.world.EntitiesLoadEvent(new org.bukkit.craftbukkit.CraftChunk(world, pos.x(), pos.z()), java.util.Collections.unmodifiableList(list)));
     }
 
     public static void entitiesUnloaded(ServerLevel level, net.minecraft.world.level.ChunkPos pos, List<net.minecraft.world.entity.Entity> entities) {
@@ -528,7 +528,7 @@ public final class LunarArcMoreEvents {
         if (world == null) return;
         List<org.bukkit.entity.Entity> list = new ArrayList<>();
         for (net.minecraft.world.entity.Entity entity : entities) if (bukkit(entity) != null) list.add(bukkit(entity));
-        fire(new org.bukkit.event.world.EntitiesUnloadEvent(new org.bukkit.craftbukkit.CraftChunk(world, pos.x, pos.z), java.util.Collections.unmodifiableList(list)));
+        fire(new org.bukkit.event.world.EntitiesUnloadEvent(new org.bukkit.craftbukkit.CraftChunk(world, pos.x(), pos.z()), java.util.Collections.unmodifiableList(list)));
     }
 
     public static void bedFailed(net.minecraft.server.level.ServerPlayer who, BlockPos pos, String problem, net.minecraft.network.chat.Component message) {

@@ -1,13 +1,14 @@
 package io.lunararcdevs.lunararc.common.mixin.core.entity;
 import io.lunararcdevs.lunararc.common.bridge.entity.SlimeBridge;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.AbstractCubeMob;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-@Mixin(Slime.class)
+// 26.x: Slime inherits its save-data handling from AbstractCubeMob, so the flag lives there (Slime-only API reads it).
+@Mixin(AbstractCubeMob.class)
 public abstract class SlimeMixin implements SlimeBridge {
     @Unique private boolean lunararc$canWander = true;
     @Override public boolean lunararc$canWander() { return lunararc$canWander; }

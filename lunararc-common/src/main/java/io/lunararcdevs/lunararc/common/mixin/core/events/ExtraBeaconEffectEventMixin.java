@@ -32,19 +32,19 @@ public abstract class ExtraBeaconEffectEventMixin {
     }
 
     @WrapMethod(method = "updateEffects", require = 0)
-    private void lunararc$beaconEffects(Optional<Holder<MobEffect>> primary, Optional<Holder<MobEffect>> secondary, Operation<Void> original) {
+    private boolean lunararc$beaconEffects(Optional<Holder<MobEffect>> primary, Optional<Holder<MobEffect>> secondary, Operation<Boolean> original) {
         var owner = ((AbstractContainerMenuBridge) (AbstractContainerMenu) (Object) this).lunararc$getOwner();
         if (owner == null || !this.lunararc$payment().hasItem()) {
-            original.call(primary, secondary);
-            return;
+            return original.call(primary, secondary);
         }
         org.bukkit.block.Block beacon = this.access.evaluate((Level level, BlockPos pos) ->
                 level instanceof ServerLevel server ? (org.bukkit.block.Block) CraftBlock.at(server, pos) : null).orElse(null);
         LunarArcExtraEvents.BeaconChoice choice = LunarArcExtraEvents.beaconEffects(owner, beacon, primary, secondary);
-        if (choice == null) return;
+        if (choice == null) return false;
         this.beaconData.set(1, BeaconMenu.encodeEffect(choice.primary().orElse(null)));
         this.beaconData.set(2, BeaconMenu.encodeEffect(choice.secondary().orElse(null)));
         if (choice.consume()) this.lunararc$payment().remove(1);
         this.access.execute(Level::blockEntityChanged);
+        return true;
     }
 }

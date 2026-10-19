@@ -33,6 +33,10 @@ public final class CraftBlockType<B extends BlockData> implements BlockType.Type
 
     @Override public Block getHandle() { return this.handle; }
 
+    @Override public org.bukkit.Instrument getInstrument() {
+        return org.bukkit.craftbukkit.block.data.CraftBlockData.instrumentFromVanilla(this.handle.defaultBlockState().instrument());
+    }
+
     public static BlockType minecraftToBukkitNew(Block block) {
         Identifier id = BuiltInRegistries.BLOCK.getKey(block);
         return id == null ? null : Registry.BLOCK.get(new NamespacedKey(id.getNamespace(), id.getPath()));
@@ -76,7 +80,7 @@ public final class CraftBlockType<B extends BlockData> implements BlockType.Type
         return (B) parsed;
     }
 
-    @Override public boolean isSolid() { return this.handle.defaultBlockState().blocksMotion(); }
+    @Override public boolean isSolid() { return this.handle.defaultBlockState().is(net.minecraft.tags.BlockTags.BLOCKS_MOTION); }
     @Override public boolean isAir() { return this.handle.defaultBlockState().isAir(); }
 
     @Override

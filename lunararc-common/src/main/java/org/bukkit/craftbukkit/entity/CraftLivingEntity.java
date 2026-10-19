@@ -281,8 +281,8 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     }
     @Override public double getLastDamage() { return livingAccessor().lunararc$getLastHurt(); }
     @Override public void setLastDamage(double damage) { livingAccessor().lunararc$setLastHurt((float) damage); }
-    @Override public int getNoDamageTicks() { return getHandle().invulnerableTime; }
-    @Override public void setNoDamageTicks(int ticks) { getHandle().invulnerableTime = Math.max(0, ticks); }
+    @Override public int getNoDamageTicks() { return getHandle().getInvulnerableTime(); }
+    @Override public void setNoDamageTicks(int ticks) { getHandle().setInvulnerableTime(Math.max(0, ticks)); }
     @Override public int getNoActionTicks() { return getHandle().getNoActionTime(); }
     @Override public void setNoActionTicks(int ticks) {
         if (ticks < 0) throw new IllegalArgumentException("ticks must be >= 0");
@@ -437,8 +437,8 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         if (getHandle() instanceof net.minecraft.world.entity.player.Player player) player.attack(craft.getHandle());
         else if (craft.getHandle().level() instanceof ServerLevel targetLevel) getHandle().doHurtTarget(targetLevel, craft.getHandle());
     }
-    @Override public void swingMainHand() { getHandle().swing(InteractionHand.MAIN_HAND, true); }
-    @Override public void swingOffHand() { getHandle().swing(InteractionHand.OFF_HAND, true); }
+    @Override public void swingMainHand() { getHandle().swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, true); }
+    @Override public void swingOffHand() { getHandle().swing(InteractionHand.OFF_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, true); }
     @Override public void playHurtAnimation(float yaw) {
         if (getHandle().level() instanceof ServerLevel level) {
             level.getChunkSource().sendToTrackingPlayersAndSelf(getHandle(), new ClientboundHurtAnimationPacket(getEntityId(), yaw + 90.0F));
@@ -460,6 +460,17 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     }
 
     @Override public @Nullable Sound getHurtSound() { return bukkitSound(livingAccessor().lunararc$invokeGetHurtSound(getHandle().damageSources().generic())); }
+    @Override public @Nullable Sound getHurtSound(@NotNull org.bukkit.damage.DamageSource damageSource) {
+        java.util.Objects.requireNonNull(damageSource, "damageSource");
+        return bukkitSound(livingAccessor().lunararc$invokeGetHurtSound(((org.bukkit.craftbukkit.damage.CraftDamageSource) damageSource).getHandle()));
+    }
+    @Override public float getSoundVolume() { return getHandle().getSoundVolume(); }
+    @Override public void kill(@NotNull org.bukkit.damage.DamageSource damageSource) {
+        java.util.Objects.requireNonNull(damageSource, "damageSource");
+        getHandle().setHealth(0);
+        getHandle().die(((org.bukkit.craftbukkit.damage.CraftDamageSource) damageSource).getHandle());
+    }
+    @Override public float getSoundPitch() { return getHandle().getVoicePitch(); }
     @Override public @Nullable Sound getDeathSound() { return bukkitSound(livingAccessor().lunararc$invokeGetDeathSound()); }
     @Override public @NotNull Sound getFallDamageSound(int fallHeight) { return requireSound(livingAccessor().lunararc$invokeGetFallDamageSound(fallHeight)); }
     @Override public @NotNull Sound getFallDamageSoundSmall() { return requireSound(getHandle().getFallSounds().small()); }
@@ -526,7 +537,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     @Override public boolean canUseEquipmentSlot(@NotNull EquipmentSlot slot) { return livingAccessor().lunararc$canUseSlot(CraftEquipmentSlot.getNMS(slot)); }
     @Override public void knockback(double strength, double directionX, double directionZ) {
         if (strength <= 0.0D || !Double.isFinite(strength)) throw new IllegalArgumentException("strength must be finite and > 0");
-        getHandle().knockback(strength, directionX, directionZ);
+        getHandle().knockback(strength, directionX, directionZ, getHandle().damageSources().generic(), 0.0F);
     }
 
     @Override public void broadcastSlotBreak(@NotNull EquipmentSlot slot) {
@@ -623,7 +634,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         } else if (org.bukkit.entity.LlamaSpit.class.isAssignableFrom(projectile)) {
             org.bukkit.Location eye = this.getEyeLocation();
             org.bukkit.util.Vector direction = eye.getDirection();
-            net.minecraft.world.entity.projectile.LlamaSpit spit = net.minecraft.world.entity.EntityType.LLAMA_SPIT.create(world, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+            net.minecraft.world.entity.projectile.LlamaSpit spit = net.minecraft.world.entity.EntityTypes.LLAMA_SPIT.create(world, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
             if (spit == null) throw new IllegalStateException("Minecraft failed to create LLAMA_SPIT");
             spit.setOwner(getHandle());
             spit.shoot(direction.getX(), direction.getY(), direction.getZ(), 1.5F, 10.0F);
@@ -632,9 +643,9 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         } else if (org.bukkit.entity.AbstractWindCharge.class.isAssignableFrom(projectile)) {
             net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.AbstractWindCharge charge;
             if (org.bukkit.entity.BreezeWindCharge.class.isAssignableFrom(projectile)) {
-                charge = net.minecraft.world.entity.EntityType.BREEZE_WIND_CHARGE.create(world, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+                charge = net.minecraft.world.entity.EntityTypes.BREEZE_WIND_CHARGE.create(world, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
             } else {
-                charge = net.minecraft.world.entity.EntityType.WIND_CHARGE.create(world, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
+                charge = net.minecraft.world.entity.EntityTypes.WIND_CHARGE.create(world, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
             }
             if (charge == null) throw new IllegalStateException("Minecraft failed to create wind charge");
             charge.setOwner(getHandle());

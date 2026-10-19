@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 @Mixin(WorldLoader.class)
 public abstract class WorldLoaderMixin {
     @ModifyArg(
-            method = "load",
+            method = "lambda$load$2",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/server/WorldLoader$WorldDataSupplier;get(Lnet/minecraft/server/WorldLoader$DataLoadContext;)Lnet/minecraft/server/WorldLoader$DataLoadOutput;"))

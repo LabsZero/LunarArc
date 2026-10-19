@@ -19,7 +19,7 @@ public abstract class JukeboxBlockEntityMixin {
         BlockEntity self = (BlockEntity) (Object) this;
         this.item = stack;
         RegistryAccess access = self.getLevel() != null ? self.getLevel().registryAccess() : CraftRegistry.getMinecraftRegistry();
-        JukeboxSong.fromStack(access, stack)
+        JukeboxSong.fromStack(stack)
                 .ifPresent(song -> this.jukeboxSongPlayer.setSongWithoutPlaying(song, ticksSinceSongStarted));
         if (self.getLevel() != null) {
             self.getLevel().updateNeighborsAt(self.getBlockPos(), self.getBlockState().getBlock());

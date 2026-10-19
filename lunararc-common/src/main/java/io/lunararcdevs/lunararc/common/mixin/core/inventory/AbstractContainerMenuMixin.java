@@ -6,7 +6,7 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -51,9 +51,9 @@ public abstract class AbstractContainerMenuMixin implements io.lunararcdevs.luna
     @Override public void lunararc$setCheckReachable(boolean checkReachable) { this.lunararc$checkReachable = checkReachable; }
 
     @Inject(method = "doClick", at = @At("HEAD"), require = 0)
-    private void lunararc$captureQuickCraftBefore(int slotId, int button, ClickType clickType, Player player, CallbackInfo ci) {
+    private void lunararc$captureQuickCraftBefore(int slotId, int button, ContainerInput clickType, Player player, CallbackInfo ci) {
         this.lunararc$clearDragCapture();
-        if (clickType != ClickType.QUICK_CRAFT || lunararc$quickcraftHeader(button) != 2) {
+        if (clickType != ContainerInput.QUICK_CRAFT || lunararc$quickcraftHeader(button) != 2) {
             return;
         }
         if (!(player instanceof ServerPlayer) || this.quickcraftSlots == null || this.quickcraftSlots.isEmpty()) {
@@ -78,8 +78,8 @@ public abstract class AbstractContainerMenuMixin implements io.lunararcdevs.luna
     }
 
     @Inject(method = "doClick", at = @At("RETURN"), require = 0)
-    private void lunararc$finishQuickCraft(int slotId, int button, ClickType clickType, Player player, CallbackInfo ci) {
-        if (!this.lunararc$capturingDrag || clickType != ClickType.QUICK_CRAFT || !(player instanceof ServerPlayer serverPlayer)) {
+    private void lunararc$finishQuickCraft(int slotId, int button, ContainerInput clickType, Player player, CallbackInfo ci) {
+        if (!this.lunararc$capturingDrag || clickType != ContainerInput.QUICK_CRAFT || !(player instanceof ServerPlayer serverPlayer)) {
             this.lunararc$clearDragCapture();
             return;
         }

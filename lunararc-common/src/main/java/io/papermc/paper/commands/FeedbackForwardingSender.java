@@ -23,16 +23,14 @@ public final class FeedbackForwardingSender extends ServerCommandSender {
     }
     @Override public void sendMessage(String... messages) { for (String message : messages) sendMessage(message); }
     @Override public void sendMessage(Component message) { feedback.accept(message); }
-    @Override public void sendMessage(net.kyori.adventure.identity.Identity identity, Component message,
-            net.kyori.adventure.audience.MessageType type) { feedback.accept(message); }
 
     public net.minecraft.commands.CommandSourceStack asVanilla() {
         var minecraft = server.getServer();
         var level = minecraft.overworld();
         return new net.minecraft.commands.CommandSourceStack(new Source(),
                 level == null ? net.minecraft.world.phys.Vec3.ZERO : net.minecraft.world.phys.Vec3.atLowerCornerOf(level.getRespawnData().pos()),
-                net.minecraft.world.phys.Vec2.ZERO, level, net.minecraft.server.permissions.PermissionSet.ALL_PERMISSIONS, getName(),
-                net.minecraft.network.chat.Component.literal(getName()), minecraft, null);
+                net.minecraft.world.phys.Vec2.ZERO, level, net.minecraft.server.permissions.PermissionSet.ALL_PERMISSIONS,
+                net.minecraft.network.chat.Component.literal(getName()), minecraft);
     }
 
     private final class Source implements net.minecraft.commands.CommandSource {

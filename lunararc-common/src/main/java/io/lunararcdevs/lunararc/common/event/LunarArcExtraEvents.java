@@ -357,9 +357,9 @@ public final class LunarArcExtraEvents {
         org.bukkit.inventory.ItemStack item = CraftItemStack.asBukkitCopy(stack);
         io.papermc.paper.event.block.CompostItemEvent event;
         if (!entityEvent) {
-            event = new io.papermc.paper.event.block.CompostItemEvent(block, item, willRaise);
+            event = new io.papermc.paper.event.block.CompostItemEvent(block, item, willRaise ? 1 : 0);
         } else if (bukkitObject(entity) instanceof org.bukkit.entity.Entity bukkitEntity) {
-            event = new io.papermc.paper.event.entity.EntityCompostItemEvent(bukkitEntity, block, item, willRaise);
+            event = new io.papermc.paper.event.entity.EntityCompostItemEvent(bukkitEntity, block, item, willRaise ? 1 : 0);
         } else {
             return willRaise;
         }

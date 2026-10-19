@@ -8,7 +8,6 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.item.EitherHolder;
 import net.minecraft.world.item.JukeboxPlayable;
 import org.bukkit.JukeboxSong;
 import org.bukkit.NamespacedKey;
@@ -35,7 +34,7 @@ public final class CraftJukeboxComponent implements JukeboxPlayableComponent {
     public CraftJukeboxComponent(Map<String, Object> map) {
         String song = SerializableMeta.getObject(String.class, map, "song", false);
 
-        this.handle = new JukeboxPlayable(new EitherHolder<>(ResourceKey.create(Registries.JUKEBOX_SONG, Identifier.parse(song))));
+        this.handle = new JukeboxPlayable(holderOf(ResourceKey.create(Registries.JUKEBOX_SONG, Identifier.parse(song))));
     }
 
     @Override
@@ -45,33 +44,36 @@ public final class CraftJukeboxComponent implements JukeboxPlayableComponent {
         return result;
     }
 
+    private static Holder<net.minecraft.world.item.JukeboxSong> holderOf(ResourceKey<net.minecraft.world.item.JukeboxSong> key) {
+        return CraftRegistry.getMinecraftRegistry(Registries.JUKEBOX_SONG).getOrThrow(key);
+    }
+
     public JukeboxPlayable getHandle() {
         return this.handle;
     }
 
     @Override
     public JukeboxSong getSong() {
-        Optional<Holder<net.minecraft.world.item.JukeboxSong>> song = this.handle.song().unwrap(CraftRegistry.getMinecraftRegistry());
-        return song.map(CraftJukeboxSong::minecraftHolderToBukkit).orElse(null);
+        return CraftJukeboxSong.minecraftHolderToBukkit(this.handle.song());
     }
 
     @Override
     public NamespacedKey getSongKey() {
-        return CraftNamespacedKey.fromMinecraft(this.handle.song().key().orElseThrow().identifier());
+        return CraftNamespacedKey.fromMinecraft(this.handle.song().unwrapKey().orElseThrow().identifier());
     }
 
     @Override
     public void setSong(JukeboxSong song) {
         Preconditions.checkArgument(song != null, "song cannot be null");
 
-        this.handle = new JukeboxPlayable(new EitherHolder<>(CraftJukeboxSong.bukkitToMinecraftHolder(song)));
+        this.handle = new JukeboxPlayable(CraftJukeboxSong.bukkitToMinecraftHolder(song));
     }
 
     @Override
     public void setSongKey(NamespacedKey song) {
         Preconditions.checkArgument(song != null, "song cannot be null");
 
-        this.handle = new JukeboxPlayable(new EitherHolder<>(ResourceKey.create(Registries.JUKEBOX_SONG, CraftNamespacedKey.toMinecraft(song))));
+        this.handle = new JukeboxPlayable(holderOf(ResourceKey.create(Registries.JUKEBOX_SONG, CraftNamespacedKey.toMinecraft(song))));
     }
 
     @Override

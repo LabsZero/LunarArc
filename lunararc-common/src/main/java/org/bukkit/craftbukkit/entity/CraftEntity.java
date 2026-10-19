@@ -130,10 +130,10 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         if (entity instanceof net.minecraft.world.entity.item.FallingBlockEntity fallingBlock) {
             return new CraftFallingBlock(server, fallingBlock);
         }
-        if (entity instanceof net.minecraft.world.entity.monster.MagmaCube magmaCube) {
+        if (entity instanceof net.minecraft.world.entity.monster.cubemob.MagmaCube magmaCube) {
             return new CraftMagmaCube(server, magmaCube);
         }
-        if (entity instanceof net.minecraft.world.entity.monster.Slime slime) {
+        if (entity instanceof net.minecraft.world.entity.monster.cubemob.Slime slime) {
             return new CraftSlime(server, slime);
         }
         if (entity instanceof net.minecraft.world.entity.monster.Creeper creeper) {
@@ -142,7 +142,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         if (entity instanceof net.minecraft.world.entity.monster.zombie.Zombie zombie) {
             return new CraftZombie(server, zombie);
         }
-        if (entity instanceof net.minecraft.world.entity.monster.EnderMan enderman) {
+        if (entity instanceof net.minecraft.world.entity.monster.Enderman enderman) {
             return new CraftEnderman(server, enderman);
         }
         if (entity instanceof net.minecraft.world.entity.monster.skeleton.Skeleton skeleton) {
@@ -573,7 +573,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
 
     @Override
     public void setInvulnerable(boolean flag) {
-        entity.setInvulnerable(flag);
+        entity.setPermanentlyInvulnerable(flag);
     }
 
     @Override
@@ -640,7 +640,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
 
     @Override
     public @NotNull Set<String> getScoreboardTags() {
-        return entity.getTags();
+        return entity.entityTags();
     }
 
     @Override
@@ -723,7 +723,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
     @Override
     public boolean isTicking() {
         if (!(entity.level() instanceof net.minecraft.server.level.ServerLevel level)) return false;
-        return level.getChunkSource().getChunkNow(entity.chunkPosition().x, entity.chunkPosition().z) != null;
+        return level.getChunkSource().getChunkNow(entity.chunkPosition().x(), entity.chunkPosition().z()) != null;
     }
 
     @Override public boolean isInLava() { return entity.isInLava(); }
@@ -878,6 +878,38 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
     }
     @Override public void setFireTicks(int ticks) { ((EntityBridge) entity).lunararc$setRemainingFireTicks(ticks); }
     @Override public int getMaxFireTicks() { return entity.getFireImmuneTicks(); }
+    @Override public double getDefaultGravity() { return entity.getDefaultGravity(); }
+    @Override public boolean isInvulnerableTo(@org.jetbrains.annotations.NotNull org.bukkit.damage.DamageSource source) {
+        java.util.Objects.requireNonNull(source, "source");
+        return entity.isInvulnerableToBase(((org.bukkit.craftbukkit.damage.CraftDamageSource) source).getHandle());
+    }
+    @Override public org.bukkit.event.entity.EntityRemoveEvent.@org.jetbrains.annotations.Nullable Cause getRemoveEventCause() { return null; }
+    @Override public io.papermc.paper.entity.@org.jetbrains.annotations.Nullable RemovalReason getRemovalReason() {
+        final net.minecraft.world.entity.Entity.RemovalReason reason = entity.getRemovalReason();
+        return reason == null ? null : io.papermc.paper.entity.RemovalReason.valueOf(reason.name());
+    }
+    @Override public org.bukkit.inventory.@org.jetbrains.annotations.Nullable ItemStack getWeapon() {
+        final net.minecraft.world.item.ItemStack stack = entity.getWeaponItem();
+        return stack == null ? null : org.bukkit.craftbukkit.inventory.CraftItemStack.asBukkitCopy(stack);
+    }
+    @Override public org.bukkit.@org.jetbrains.annotations.NotNull SoundCategory getSoundCategory() {
+        return org.bukkit.SoundCategory.valueOf(entity.getSoundSource().name());
+    }
+    @Override public void setRotation(final io.papermc.paper.math.Angle yaw, final io.papermc.paper.math.Angle pitch) {
+        final float yawValue = Location.normalizeYaw(yaw.degrees());
+        final float pitchValue = Location.normalizePitch(pitch.degrees());
+        entity.forceSetRotation(yawValue, yaw.relative(), pitchValue, pitch.relative());
+    }
+    public void unsetFixedPose() {
+        this.fixedPose = false;
+        entity.refreshDimensions();
+    }
+    @Override public net.kyori.adventure.sound.Sound.@org.jetbrains.annotations.NotNull Source soundSource() {
+        return getSoundCategory().soundSource();
+    }
+    @Override public boolean isMarkedInvulnerable() { return entity.isInvulnerable(); }
+    @Override public double getGravity() { return entity.getGravity(); }
+    @Override public float getAirDrag() { return entity.getAirDrag(); }
     @Override public int getFireTicks() { return ((EntityBridge) entity).lunararc$getRemainingFireTicks(); }
     @Override public @NotNull List<org.bukkit.entity.Entity> getNearbyEntities(double x, double y, double z) {
         java.util.List<org.bukkit.entity.Entity> result = new java.util.ArrayList<>();

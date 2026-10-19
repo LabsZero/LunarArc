@@ -33,12 +33,12 @@ public abstract class AbstractFurnaceBlockEntityMixin implements io.lunararcdevs
     @Shadow public int cookingTimer;
     @Shadow int cookingTotalTime;
 
-    @Shadow protected abstract boolean isLit();
+    @Shadow public int litTimeRemaining;
 
 
     @Unique private static int shadowTotalCookTime(ServerLevel level, AbstractFurnaceBlockEntity furnace) { return AbstractFurnaceBlockEntity.getTotalCookTime(level, furnace); }
 
-    @Override public boolean lunararc$isLit() { return this.isLit(); }
+    @Override public boolean lunararc$isLit() { return this.litTimeRemaining > 0; }
     @Override public int lunararc$cookingProgress() { return this.cookingTimer; }
     @Override public int lunararc$cookingTotalTime() { return this.cookingTotalTime; }
     @Override public void lunararc$setCookingTotalTime(int ticks) { this.cookingTotalTime = ticks; }
@@ -64,70 +64,39 @@ public abstract class AbstractFurnaceBlockEntityMixin implements io.lunararcdevs
         this.lunararc$recipeType = recipeType;
     }
 
-    @ModifyReturnValue(method = "getTotalCookTime", at = @At("RETURN"))
-    private static int lunararc$applyCookSpeed(int original, ServerLevel level, AbstractFurnaceBlockEntity furnace) {
+    @ModifyReturnValue(method = "getTotalCookTime(Lnet/minecraft/world/item/crafting/RecipeHolder;Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;)I", at = @At("RETURN"))
+    private static int lunararc$applyCookSpeed(int original, RecipeHolder<?> holder, AbstractFurnaceBlockEntity furnace) {
         double multiplier = ((io.lunararcdevs.lunararc.common.bridge.world.CookSpeedBridge) furnace).lunararc$cookSpeed();
         return multiplier == 1.0D ? original : (int) Math.ceil(original / multiplier);
     }
 
-    @Unique private static ServerLevel lunararc$tickLevel;
-    @Unique private static BlockPos lunararc$tickPos;
-    @Unique private static FurnaceBurnEvent lunararc$burnEvent;
-
     @Inject(method = "serverTick", at = @At("HEAD"))
     private static void lunararc$captureFurnace(ServerLevel level, BlockPos pos, BlockState state, AbstractFurnaceBlockEntity furnace, CallbackInfo ci) {
-        lunararc$tickLevel = org.bukkit.Bukkit.isPrimaryThread() ? level : null;
-        lunararc$tickPos = pos;
-        lunararc$burnEvent = null;
+        io.lunararcdevs.lunararc.common.event.LunarArcFurnaceState.level = org.bukkit.Bukkit.isPrimaryThread() ? level : null;
+        io.lunararcdevs.lunararc.common.event.LunarArcFurnaceState.pos = pos;
+        io.lunararcdevs.lunararc.common.event.LunarArcFurnaceState.burnEvent = null;
     }
 
     @WrapOperation(method = "serverTick", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;getBurnDuration(Lnet/minecraft/world/level/block/entity/FuelValues;Lnet/minecraft/world/item/ItemStack;)I"))
-    private static int lunararc$furnaceBurn(AbstractFurnaceBlockEntity furnace, net.minecraft.world.level.block.entity.FuelValues fuelValues, ItemStack fuel, Operation<Integer> original) {
-        int duration = original.call(furnace, fuelValues, fuel);
-        if (lunararc$tickLevel == null) return duration;
-        FurnaceBurnEvent event = new FurnaceBurnEvent(CraftBlock.at(lunararc$tickLevel, lunararc$tickPos), CraftItemStack.asCraftMirror(fuel), duration);
+            target = "Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;getBurnDuration(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/item/ItemStack;)I"))
+    private static int lunararc$furnaceBurn(AbstractFurnaceBlockEntity furnace, ServerLevel level, ItemStack fuel, Operation<Integer> original) {
+        int duration = original.call(furnace, level, fuel);
+        if (io.lunararcdevs.lunararc.common.event.LunarArcFurnaceState.level == null) return duration;
+        FurnaceBurnEvent event = new FurnaceBurnEvent(CraftBlock.at(io.lunararcdevs.lunararc.common.event.LunarArcFurnaceState.level, io.lunararcdevs.lunararc.common.event.LunarArcFurnaceState.pos), CraftItemStack.asCraftMirror(fuel), duration);
         org.bukkit.Bukkit.getPluginManager().callEvent(event);
-        lunararc$burnEvent = event;
+        io.lunararcdevs.lunararc.common.event.LunarArcFurnaceState.burnEvent = event;
         return event.isCancelled() ? 0 : event.getBurnTime();
     }
 
-    @WrapOperation(method = "serverTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/ItemStack;shrink(I)V"))
+    @WrapOperation(method = "consumeFuel", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/ItemStack;shrink(I)V"))
     private static void lunararc$consumeFuel(ItemStack fuel, int amount, Operation<Void> original) {
-        FurnaceBurnEvent event = lunararc$burnEvent;
+        FurnaceBurnEvent event = io.lunararcdevs.lunararc.common.event.LunarArcFurnaceState.burnEvent;
         if (event != null && (!event.isBurning() || !event.willConsumeFuel())) return;
         original.call(fuel, amount);
     }
 
-    @Inject(method = "burn", cancellable = true, at = @At(value = "INVOKE", ordinal = 1,
-            target = "Lnet/minecraft/core/NonNullList;get(I)Ljava/lang/Object;"))
-    private static void lunararc$furnaceSmelt(CallbackInfoReturnable<Boolean> cir,
-            @Local(argsOnly = true) RecipeHolder<?> recipe, @Local(argsOnly = true) NonNullList<ItemStack> slots,
-            @Local(ordinal = 1) LocalRef<ItemStack> result) {
-        if (lunararc$tickLevel == null) return;
-        org.bukkit.inventory.ItemStack bukkitResult = CraftItemStack.asBukkitCopy(result.get());
-        org.bukkit.inventory.Recipe bukkitRecipe = CraftRecipeAdapter.toBukkit(recipe);
-        FurnaceSmeltEvent event = new FurnaceSmeltEvent(CraftBlock.at(lunararc$tickLevel, lunararc$tickPos),
-                CraftItemStack.asCraftMirror(slots.get(0)), bukkitResult,
-                bukkitRecipe instanceof org.bukkit.inventory.CookingRecipe<?> cooking ? cooking : null);
-        org.bukkit.Bukkit.getPluginManager().callEvent(event);
-        if (event.isCancelled()) {
-            cir.setReturnValue(false);
-            return;
-        }
-        if (!event.getResult().equals(bukkitResult)) {
-            ItemStack changed = CraftItemStack.asNMSCopy(event.getResult());
-            ItemStack output = slots.get(2);
-            if (!output.isEmpty() && !ItemStack.isSameItemSameComponents(output, changed)) {
-                cir.setReturnValue(false);
-                return;
-            }
-            result.set(changed);
-        }
-    }
-
     @com.llamalad7.mixinextras.injector.ModifyExpressionValue(method = "serverTick", require = 0, at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;canBurn(Lnet/minecraft/core/RegistryAccess;Lnet/minecraft/world/item/crafting/RecipeHolder;Lnet/minecraft/world/item/crafting/SingleRecipeInput;Lnet/minecraft/core/NonNullList;I)Z"))
+            target = "Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;canBurn(Lnet/minecraft/core/NonNullList;ILnet/minecraft/world/item/ItemStack;)Z"))
     private static boolean lunararc$startSmelt(boolean can, @Local(argsOnly = true) AbstractFurnaceBlockEntity furnace,
             @Local(argsOnly = true) ServerLevel level, @Local(argsOnly = true) BlockPos pos) {
         io.lunararcdevs.lunararc.common.bridge.world.CookSpeedBridge bridge = (io.lunararcdevs.lunararc.common.bridge.world.CookSpeedBridge) furnace;

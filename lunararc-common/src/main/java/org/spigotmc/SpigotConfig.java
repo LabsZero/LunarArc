@@ -43,6 +43,10 @@ public final class SpigotConfig {
         }
     }
 
+    public static void readConfig(Class<?> clazz, Object instance) {
+        // Spigot's reflective option loader; LunarArc reads the options it supports through syncFrom().
+    }
+
     public static void syncFrom(YamlConfiguration loaded) {
         if (loaded == null) {
             return;

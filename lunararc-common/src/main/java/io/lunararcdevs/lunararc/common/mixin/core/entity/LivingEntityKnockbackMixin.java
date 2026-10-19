@@ -13,12 +13,12 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityKnockbackMixin {
 
-    @WrapOperation(method = "hurtServer", require = 1,
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;knockback(DDD)V"))
-    private void lunararc$knockback(LivingEntity target, double strength, double x, double z, Operation<Void> original,
-            @Local(argsOnly = true) DamageSource source) {
+    @WrapOperation(method = "dealDefaultKnockback", require = 1,
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;knockback(DDDLnet/minecraft/world/damagesource/DamageSource;F)V"))
+    private void lunararc$knockback(LivingEntity target, double strength, double x, double z, DamageSource source, float amount,
+            Operation<Void> original) {
         Vec3 before = target.getDeltaMovement();
-        original.call(target, strength, x, z);
+        original.call(target, strength, x, z, source, amount);
         if (source.getEntity() != null) LunarArcPaperEvents.knockback(target, source.getEntity(), strength, before);
     }
 }

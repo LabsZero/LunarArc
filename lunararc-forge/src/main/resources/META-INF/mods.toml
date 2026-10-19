@@ -1,5 +1,5 @@
 modLoader="javafml"
-loaderVersion="[52,)"
+loaderVersion="[66,)"
 license="GNU General Public License v3.0"
 
 [[mods]]
@@ -16,14 +16,14 @@ Minecraft and Forge remain authoritative; LunarArc provides the plugin-facing se
 [[dependencies.lunararc]]
 modId="forge"
 mandatory=true
-versionRange="[52.1.16,)"
+versionRange="[66.0.12,)"
 ordering="NONE"
 side="SERVER"
 
 [[dependencies.lunararc]]
 modId="minecraft"
 mandatory=true
-versionRange="[1.21.11]"
+versionRange="[26.3]"
 ordering="NONE"
 side="SERVER"
 

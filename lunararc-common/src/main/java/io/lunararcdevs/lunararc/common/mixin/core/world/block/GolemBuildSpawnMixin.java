@@ -2,7 +2,7 @@ package io.lunararcdevs.lunararc.common.mixin.core.world.block;
 
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import io.lunararcdevs.lunararc.common.bridge.ServerLevelBridge;
-import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
@@ -26,8 +26,8 @@ public abstract class GolemBuildSpawnMixin {
         ci.cancel();
         golem.snapTo(pos.getX() + 0.5, pos.getY() + 0.05, pos.getZ() + 0.5, 0.0F, 0.0F);
         CreatureSpawnEvent.SpawnReason reason;
-        if (golem.getType() == EntityType.SNOW_GOLEM) reason = CreatureSpawnEvent.SpawnReason.BUILD_SNOWMAN;
-        else if (golem.getType() == EntityType.COPPER_GOLEM) reason = CreatureSpawnEvent.SpawnReason.BUILD_COPPERGOLEM;
+        if (golem.getType() == net.minecraft.world.entity.EntityTypes.SNOW_GOLEM) reason = CreatureSpawnEvent.SpawnReason.BUILD_SNOWMAN;
+        else if (golem.getType() == net.minecraft.world.entity.EntityTypes.COPPER_GOLEM) reason = CreatureSpawnEvent.SpawnReason.BUILD_COPPERGOLEM;
         else reason = CreatureSpawnEvent.SpawnReason.BUILD_IRONGOLEM;
         if (!((ServerLevelBridge) level).lunararc$addFreshEntity(golem, reason)) return;
         CarvedPumpkinBlock.clearPatternBlocks(level, match);

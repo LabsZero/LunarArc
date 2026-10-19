@@ -11,8 +11,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** Adds Bukkit's BLOCK_MINED exhaustion cause at the real Block#playerDestroy call site. */
 @Mixin(Block.class)
 public abstract class BlockMixin {
-    @Inject(method = "playerDestroy", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/player/Player;causeFoodExhaustion(F)V"), require = 0)
-    private void lunararc$blockMinedExhaustion(net.minecraft.world.level.Level level, Player player,
+    @Inject(method = "playerDestroy", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerPlayer;causeFoodExhaustion(F)V"), require = 0)
+    private void lunararc$blockMinedExhaustion(net.minecraft.server.level.ServerLevel level, net.minecraft.server.level.ServerPlayer player,
             net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.state.BlockState state,
             net.minecraft.world.level.block.entity.BlockEntity blockEntity, net.minecraft.world.item.ItemStack tool,
             CallbackInfo ci) {

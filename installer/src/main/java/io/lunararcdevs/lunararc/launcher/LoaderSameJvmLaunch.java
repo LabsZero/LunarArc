@@ -152,8 +152,45 @@ final class LoaderSameJvmLaunch {
                         + "Forge will not discover LunarArc as a mod: " + e.getMessage());
             }
             System.setProperty("java.class.path", String.join(File.pathSeparator, forgeEntries));
+            // The bundled Adventure serializers live on the app class path (lunararc.jar) while Gson only exists in Forge's own
+            // module layer, so their gson() factories would fail with NoClassDefFoundError. Give the app loader Minecraft's Gson.
+            injectNewestLibrary(workingDir.resolve("libraries").resolve("com").resolve("google").resolve("code").resolve("gson").resolve("gson"));
         }
         invokeMain(mainClass, gameArgs, loaderLabel);
+    }
+
+    /** Appends the highest-versioned jar found one level below {@code libraryDir} (a Maven-style library folder) to the app class loader. */
+    private static void injectNewestLibrary(Path libraryDir) {
+        if (!Files.isDirectory(libraryDir)) return;
+        try (java.util.stream.Stream<Path> versions = Files.list(libraryDir)) {
+            Path newest = versions.filter(Files::isDirectory)
+                    .max(java.util.Comparator.comparing(dir -> versionKey(dir.getFileName().toString())))
+                    .orElse(null);
+            if (newest == null) return;
+            try (java.util.stream.Stream<Path> jars = Files.list(newest)) {
+                jars.filter(jar -> jar.getFileName().toString().endsWith(".jar")
+                        && !jar.getFileName().toString().endsWith("-sources.jar")).findFirst().ifPresent(jar -> injectJar(jar, null));
+            }
+        } catch (Exception e) {
+            System.err.println("[LunarArc] Warning: could not add " + libraryDir.getFileName() + " to the class path: " + e.getMessage());
+        }
+    }
+
+    private static long versionKey(String version) {
+        long key = 0;
+        String[] parts = version.split("[.-]");
+        for (int i = 0; i < 4; i++) {
+            long number = 0;
+            if (i < parts.length) {
+                try {
+                    number = Long.parseLong(parts[i]);
+                } catch (NumberFormatException ignored) {
+                    number = 0;
+                }
+            }
+            key = key * 1000 + Math.min(number, 999);
+        }
+        return key;
     }
 
     private static Path resolveArgsFileJar(Path workingDir, Path argsFile, String jarToken) {

@@ -55,7 +55,7 @@ public final class CraftPotionEffectType extends PotionEffectType implements org
 
     @Override
     public boolean isInstant() {
-        return this.handle.isInstantenous();
+        return this.handle.isInstantaneous();
     }
 
     @Override

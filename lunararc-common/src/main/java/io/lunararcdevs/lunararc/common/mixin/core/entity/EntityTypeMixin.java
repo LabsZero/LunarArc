@@ -1,7 +1,6 @@
 package io.lunararcdevs.lunararc.common.mixin.core.entity;
 
 import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
-import java.util.function.Consumer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -21,12 +20,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(EntityType.class)
 public abstract class EntityTypeMixin<T extends Entity> {
     @Inject(
-            method = "create(Lnet/minecraft/server/level/ServerLevel;Ljava/util/function/Consumer;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/EntitySpawnReason;ZZ)Lnet/minecraft/world/entity/Entity;",
+            method = "create(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/PostSpawnProcessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/EntitySpawnReason;ZZ)Lnet/minecraft/world/entity/Entity;",
             at = @At("RETURN"),
             require = 0)
     private void lunararc$captureSpawnType(
             ServerLevel level,
-            Consumer<T> consumer,
+            net.minecraft.world.entity.PostSpawnProcessor<T> consumer,
             BlockPos pos,
             EntitySpawnReason spawnType,
             boolean shouldOffsetY,

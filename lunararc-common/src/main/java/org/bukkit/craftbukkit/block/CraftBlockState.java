@@ -210,6 +210,12 @@ public class CraftBlockState implements BlockState {
         }
     }
 
+    /** Places this state's block data with the given update flags; used by captured block states. */
+    public boolean place(int flags) {
+        LevelAccessor access = getWorldHandle();
+        return access != null && access.setBlock(this.position, this.data, flags);
+    }
+
     public final BlockPos getPosition() {
         return this.position;
     }

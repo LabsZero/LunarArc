@@ -21,6 +21,7 @@ public final class PluginCompatibilityRegressionTest {
         PaperConfigurationRegressionTest.run();
         PluginJarLifecycleRegressionTest.run();
         PluginTransformRegressionTest.run();
+        WorldEditRegenPatchRegressionTest.run();
         PaperPerformanceRegressionTest.run();
         MappingEnvironmentRegressionTest.run();
         io.lunararcdevs.lunararc.common.server.EssentialsAliasRegressionTest.run();

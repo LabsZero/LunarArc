@@ -12,7 +12,7 @@ public abstract class EnderDragonMixin {
 
     public BlockPos getPodium() {
         return this.lunararc$podium == null
-                ? EndPodiumFeature.getLocation(((EnderDragon) (Object) this).getFightOrigin())
+                ? net.minecraft.world.level.dimension.end.EnderDragonFight.getPodiumLocation(((EnderDragon) (Object) this).getFightOrigin())
                 : this.lunararc$podium;
     }
 

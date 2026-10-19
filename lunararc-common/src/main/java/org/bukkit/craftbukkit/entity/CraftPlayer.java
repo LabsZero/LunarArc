@@ -601,13 +601,6 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         io.lunararcdevs.lunararc.common.messaging.LunarArcComponentPipeline.sendSystem(getHandle(), message);
     }
 
-    @SuppressWarnings("deprecation")
-    @Override
-    public void sendMessage(net.kyori.adventure.identity.Identity identity,
-            net.kyori.adventure.text.Component message, net.kyori.adventure.audience.MessageType type) {
-        sendMessage(message);
-    }
-
     private void syncAbilities() {
         getHandle().onUpdateAbilities();
     }
@@ -949,11 +942,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
         net.minecraft.world.level.block.entity.SignBlockEntity sign = new net.minecraft.world.level.block.entity.SignBlockEntity(
                 pos, net.minecraft.world.level.block.Blocks.OAK_SIGN.defaultBlockState());
-        net.minecraft.world.level.block.entity.SignText text = sign.getFrontText()
-                .setColor(net.minecraft.world.item.DyeColor.byId(dyeColor.getWoolData()))
-                .setHasGlowingText(hasGlowingText);
-        for (int i = 0; i < components.length; i++) text = text.setMessage(i, components[i]);
-        sign.setText(text, true);
+        java.util.List<net.minecraft.network.chat.Component> lines = new java.util.ArrayList<>(net.minecraft.world.level.block.entity.SignText.LINES);
+        for (int i = 0; i < net.minecraft.world.level.block.entity.SignText.LINES; i++) {
+            lines.add(i < components.length && components[i] != null ? components[i] : net.minecraft.network.chat.CommonComponents.EMPTY);
+        }
+        net.minecraft.world.level.block.entity.SignText text = new net.minecraft.world.level.block.entity.SignText(
+                lines, lines, net.minecraft.world.item.DyeColor.byId(dyeColor.getWoolData()), hasGlowingText);
+        sign.setText(text, net.minecraft.world.level.block.entity.SignTextSlot.FRONT);
         getHandle().connection.send(net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket.create(sign));
     }
     @Override public void sendHealthUpdate(double health, int foodLevel, float saturation) {
@@ -1075,16 +1070,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         return base + Math.round(getExp() * getExperiencePointsNeededForNextLevel());
     }
     @Override public boolean isChunkSent(long chunk) {
-        return getHandle().getChunkTrackingView().contains(new net.minecraft.world.level.ChunkPos(chunk));
+        return getHandle().getChunkTrackingView().contains(net.minecraft.world.level.ChunkPos.unpack(chunk));
     }
     @Override public Set<Chunk> getSentChunks() {
         java.util.LinkedHashSet<Chunk> chunks = new java.util.LinkedHashSet<>();
-        getHandle().getChunkTrackingView().forEach(pos -> chunks.add(getWorld().getChunkAt(pos.x, pos.z)));
+        getHandle().getChunkTrackingView().forEach(pos -> chunks.add(getWorld().getChunkAt(pos.x(), pos.z())));
         return java.util.Collections.unmodifiableSet(chunks);
     }
     @Override public Set<Long> getSentChunkKeys() {
         java.util.LinkedHashSet<Long> keys = new java.util.LinkedHashSet<>();
-        getHandle().getChunkTrackingView().forEach(pos -> keys.add(pos.toLong()));
+        getHandle().getChunkTrackingView().forEach(pos -> keys.add(pos.pack()));
         return java.util.Collections.unmodifiableSet(keys);
     }
     @Override public void resetIdleDuration() { getHandle().resetLastActionTime(); }
@@ -1114,29 +1109,27 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         if (getHandle().connection != null) getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundGameEventPacket(net.minecraft.network.protocol.game.ClientboundGameEventPacket.GUARDIAN_ELDER_EFFECT, silent ? 0.0F : 1.0F));
     }
     @Override public int getWardenWarningCooldown() {
-        return getHandle().getWardenSpawnTracker().map(tracker -> tracker.cooldownTicks).orElse(0);
+        return getHandle().getWardenSpawnTracker().cooldownTicks;
     }
     @Override public void setWardenWarningCooldown(int cooldown) {
         if (cooldown < 0) throw new IllegalArgumentException("cooldown must be >= 0");
-        getHandle().getWardenSpawnTracker().ifPresent(tracker -> tracker.cooldownTicks = cooldown);
+        getHandle().getWardenSpawnTracker().cooldownTicks = cooldown;
     }
     @Override public int getWardenTimeSinceLastWarning() {
-        return getHandle().getWardenSpawnTracker().map(tracker -> tracker.ticksSinceLastWarning).orElse(0);
+        return getHandle().getWardenSpawnTracker().ticksSinceLastWarning;
     }
     @Override public void setWardenTimeSinceLastWarning(int time) {
         if (time < 0) throw new IllegalArgumentException("time must be >= 0");
-        getHandle().getWardenSpawnTracker().ifPresent(tracker -> tracker.ticksSinceLastWarning = time);
+        getHandle().getWardenSpawnTracker().ticksSinceLastWarning = time;
     }
     @Override public int getWardenWarningLevel() {
-        return getHandle().getWardenSpawnTracker().map(net.minecraft.world.entity.monster.warden.WardenSpawnTracker::getWarningLevel).orElse(0);
+        return getHandle().getWardenSpawnTracker().getWarningLevel();
     }
     @Override public void setWardenWarningLevel(int level) {
-        getHandle().getWardenSpawnTracker().ifPresent(tracker -> tracker.setWarningLevel(level));
+        getHandle().getWardenSpawnTracker().setWarningLevel(level);
     }
     @Override public void increaseWardenWarningLevel() {
-        getHandle().getWardenSpawnTracker().ifPresent(tracker -> {
-            tracker.increaseWarningLevel();
-        });
+        getHandle().getWardenSpawnTracker().increaseWarningLevel();
     }
     @Override
     public String getClientBrandName() {
@@ -1326,6 +1319,17 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         if (distance != -1 && (distance < 2 || distance > 32)) {
             throw new IllegalArgumentException(name + " must be between 2 and 32, or -1 to use the world/server default");
         }
+    }
+    @Override public <T> void spawnParticle(Particle particle, double x, double y, double z, int count, double offsetX, double offsetY, double offsetZ, double speedX, double speedY, double speedZ, T data, boolean force, Particle.RandomizationType randomizationType) {
+        lunararcCraftWorld().spawnParticle(particle, java.util.List.of(this), this, x, y, z, count, offsetX, offsetY, offsetZ, speedX, speedY, speedZ, data, force, randomizationType);
+    }
+    @Override public void resetFlyingTicks() {
+        if (getHandle().connection == null) return;
+        getHandle().connection.aboveGroundTickCount = 0;
+        getHandle().connection.aboveGroundVehicleTickCount = 0;
+    }
+    @Override public io.papermc.paper.entity.PlayerPostEffects postEffects() {
+        return new io.papermc.paper.entity.PaperPlayerPostEffects(getHandle());
     }
     private org.bukkit.craftbukkit.CraftWorld lunararcCraftWorld() { return (org.bukkit.craftbukkit.CraftWorld) getWorld(); }
     @Override public void spawnParticle(Particle particle, Location location, int count) { lunararcCraftWorld().spawnParticle(particle, java.util.List.of(this), this, location.getX(), location.getY(), location.getZ(), count, 0,0,0,0,null,false); }
@@ -1699,7 +1703,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         int from = Math.max(0, blocks.size() - 2);
         return new ArrayList<>(blocks.subList(from, blocks.size()));
     }
-    @Override public int getNoDamageTicks() { return getHandle().invulnerableTime; }
+    @Override public int getNoDamageTicks() { return getHandle().getInvulnerableTime(); }
     @Override public EntityCategory getCategory() { return EntityCategory.NONE; }
     @Override public void setRemainingAir(int air) { getHandle().setAirSupply(air); }
     @Override public double getEyeHeight() { return getHandle().getEyeHeight(); }
@@ -1752,7 +1756,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
     @Override public void knockback(double strength, double x, double z) {
         if (strength <= 0) throw new IllegalArgumentException("Knockback strength must be > 0");
-        getHandle().knockback(strength, x, z);
+        getHandle().knockback(strength, x, z, getHandle().damageSources().generic(), 0.0F);
     }
     @Override public void setShieldBlockingDelay(int delay) {
         ((io.lunararcdevs.lunararc.common.bridge.LivingEntityBridge) getHandle()).lunararc$setShieldBlockingDelay(delay);
@@ -1804,7 +1808,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         ((ItemStackBridge) (Object) nmsStack).lunararc$hurtAndBreak(amount, getHandle(), null, true);
         return result;
     }
-    @Override public void setNoDamageTicks(int ticks) { getHandle().invulnerableTime = Math.max(0, ticks); }
+    @Override public void setNoDamageTicks(int ticks) { getHandle().setInvulnerableTime(Math.max(0, ticks)); }
     @Override public boolean isGliding() { return getHandle().isFallFlying(); }
     @Override public Set<UUID> getCollidableExemptions() { return super.getCollidableExemptions(); }
     @Override public org.bukkit.Sound getFallDamageSound(int fallDistance) { return org.bukkit.Sound.ENTITY_GENERIC_SMALL_FALL; }
@@ -1923,7 +1927,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     private java.util.Optional<net.minecraft.world.entity.Entity> lunararc$createFromTag(net.minecraft.nbt.CompoundTag tag) {
         return net.minecraft.world.entity.EntityType.create(
                 net.minecraft.world.level.storage.TagValueInput.create(net.minecraft.util.ProblemReporter.DISCARDING, getHandle().registryAccess(), tag),
-                getHandle().level(), net.minecraft.world.entity.EntitySpawnReason.LOAD);
+                getHandle().level(), new net.minecraft.world.entity.EntitySpawnRequest(net.minecraft.world.entity.EntitySpawnReason.LOAD, false));
     }
     private Entity shoulderEntity(net.minecraft.nbt.CompoundTag tag) {
         if (tag == null || tag.isEmpty()) return null;
@@ -1957,7 +1961,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         var pos = new net.minecraft.core.BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ());
         var state = getHandle().level().getBlockState(pos);
         if (!(state.getBlock() instanceof net.minecraft.world.level.block.BedBlock)) return false;
-        try { return getHandle().startSleepInBed(pos).left().isEmpty(); }
+        try {
+            if (!(state.getBlock() instanceof net.minecraft.world.level.block.AbstractBedBlock bedBlock)) return false;
+            net.minecraft.world.attribute.BedRule bedRule = bedBlock.getBedRule(getHandle().level(), pos);
+            return getHandle().startSleepInBed(bedBlock, state, bedRule, pos).left().isEmpty();
+        }
         catch (Throwable t) { return false; }
     }
     @Override public boolean isDeeplySleeping() { return getHandle().isSleepingLongEnough(); }
@@ -2559,8 +2567,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         loc.setY(loc.getY() + getEyeHeight());
         return loc;
     }
-    @Override public void swingMainHand() { getHandle().swing(net.minecraft.world.InteractionHand.MAIN_HAND); }
-    @Override public void swingOffHand() { getHandle().swing(net.minecraft.world.InteractionHand.OFF_HAND); }
+    @Override public void swingMainHand() { getHandle().swing(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, true); }
+    @Override public void swingOffHand() { getHandle().swing(net.minecraft.world.InteractionHand.OFF_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, true); }
     @Override public boolean setLeashHolder(Entity holder) { return false; }
     @Override public void setArrowsStuck(int arrows) {
         if (arrows < 0) throw new IllegalArgumentException("arrows must be >= 0");
@@ -3332,7 +3340,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             leftovers.add(org.bukkit.craftbukkit.inventory.CraftItemStack.asBukkitCopy(nmsStack));
             if (!dropIfFull) continue;
 
-            final net.minecraft.world.entity.item.ItemEntity entity = handle.drop(nmsStack, false, true);
+            final net.minecraft.world.entity.item.ItemEntity entity = handle.drop(nmsStack, false, net.minecraft.util.Prediction.PREDICTED);
             if (entity != null) drops.add((org.bukkit.entity.Item) ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) entity).lunararc$getBukkitEntity());
         }
 
@@ -3344,7 +3352,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public void openVirtualSign(io.papermc.paper.math.Position block, org.bukkit.block.sign.Side side) {
         if (this.getHandle().connection == null) return;
         this.getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket(
-                new net.minecraft.core.BlockPos(block.blockX(), block.blockY(), block.blockZ()), side == org.bukkit.block.sign.Side.FRONT));
+                new net.minecraft.core.BlockPos(block.blockX(), block.blockY(), block.blockZ()), side == org.bukkit.block.sign.Side.FRONT
+                        ? net.minecraft.world.level.block.entity.SignTextSlot.FRONT : net.minecraft.world.level.block.entity.SignTextSlot.BACK));
     }
 
     @Override
@@ -3397,7 +3406,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     public org.bukkit.entity.@Nullable Item dropItem(final ItemStack itemStack, final boolean throwRandomly, final java.util.function.@Nullable Consumer<org.bukkit.entity.Item> entityOperation) {
         com.google.common.base.Preconditions.checkArgument(itemStack != null, "Cannot drop a null itemstack");
         if (itemStack.isEmpty()) return null;
-        net.minecraft.world.entity.item.ItemEntity dropped = getHandle().drop(CraftItemStack.asNMSCopy(itemStack), throwRandomly, true);
+        net.minecraft.world.entity.item.ItemEntity dropped = getHandle().drop(CraftItemStack.asNMSCopy(itemStack), throwRandomly, net.minecraft.util.Prediction.PREDICTED);
         return lunararc$finishDrop(dropped, entityOperation);
     }
 
@@ -3405,7 +3414,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         if (original == null || original.isEmpty() || amount <= 0) return null;
         net.minecraft.world.item.ItemStack nms = CraftItemStack.unwrap(original);
         net.minecraft.world.item.ItemStack dropContent = nms.split(amount);
-        net.minecraft.world.entity.item.ItemEntity dropped = getHandle().drop(dropContent, throwRandomly, true);
+        net.minecraft.world.entity.item.ItemEntity dropped = getHandle().drop(dropContent, throwRandomly, net.minecraft.util.Prediction.PREDICTED);
         if (dropped == null) {
             // return the stack to the inventory slot if the drop was refused
             nms.grow(dropContent.getCount());

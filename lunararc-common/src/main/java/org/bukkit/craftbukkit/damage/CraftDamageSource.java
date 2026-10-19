@@ -22,8 +22,15 @@ import java.util.Objects;
 public final class CraftDamageSource implements DamageSource {
     private final net.minecraft.world.damagesource.DamageSource handle;
     private final DamageType damageType;
+    private final net.kyori.adventure.pointer.Pointers damageContext;
+
     public CraftDamageSource(@NotNull net.minecraft.world.damagesource.DamageSource handle) {
+        this(handle, net.kyori.adventure.pointer.Pointers.empty());
+    }
+
+    public CraftDamageSource(@NotNull net.minecraft.world.damagesource.DamageSource handle, @NotNull net.kyori.adventure.pointer.Pointers damageContext) {
         this.handle = Objects.requireNonNull(handle, "handle");
+        this.damageContext = Objects.requireNonNull(damageContext, "damageContext");
         Identifier location = handle.typeHolder().unwrapKey()
                 .map(ResourceKey::identifier)
                 .orElseThrow(() -> new IllegalStateException("DamageSource type is not registered"));
@@ -74,6 +81,11 @@ public final class CraftDamageSource implements DamageSource {
     }
 
     @Override
+    public net.kyori.adventure.pointer.@NotNull Pointers getDamageContext() {
+        return this.damageContext;
+    }
+
+    @Override
     public boolean scalesWithDifficulty() {
         return this.handle.scalesWithDifficulty();
     }
@@ -94,6 +106,14 @@ public final class CraftDamageSource implements DamageSource {
                                                   @Nullable Entity causingEntity,
                                                   @Nullable Entity directEntity,
                                                   @Nullable Location damageLocation) {
+        return fromBukkit(type, causingEntity, directEntity, damageLocation, net.kyori.adventure.pointer.Pointers.empty());
+    }
+
+    static @NotNull CraftDamageSource fromBukkit(@NotNull DamageType type,
+                                                  @Nullable Entity causingEntity,
+                                                  @Nullable Entity directEntity,
+                                                  @Nullable Location damageLocation,
+                                                  @NotNull net.kyori.adventure.pointer.Pointers damageContext) {
         CraftServer server = (CraftServer) Bukkit.getServer();
         if (server == null) throw new IllegalStateException("CraftServer is not initialized");
 
@@ -110,7 +130,7 @@ public final class CraftDamageSource implements DamageSource {
                 ? null
                 : new Vec3(damageLocation.getX(), damageLocation.getY(), damageLocation.getZ());
         return new CraftDamageSource(
-                new net.minecraft.world.damagesource.DamageSource(holder, nmsDirect, nmsCause, position));
+                new net.minecraft.world.damagesource.DamageSource(holder, nmsDirect, nmsCause, position), damageContext);
     }
 
     private static @Nullable net.minecraft.world.entity.Entity unwrap(@Nullable Entity entity) {

@@ -9,6 +9,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignText;
+import net.minecraft.world.level.block.entity.SignTextSlot;
 import org.bukkit.block.sign.Side;
 import org.bukkit.craftbukkit.block.CraftBlock;
 import org.bukkit.craftbukkit.block.CraftSign;
@@ -18,7 +19,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,46 +39,43 @@ public abstract class SignBlockEntityMixin {
         return false;
     }
 
-    @Unique private boolean lunararc$editingFront;
     @Unique private SignText lunararc$originalText;
 
     @Inject(method = "updateSignText", at = @At("HEAD"))
-    private void lunararc$captureSide(Player player, boolean front, List<FilteredText> lines, CallbackInfo ci) {
-        this.lunararc$editingFront = front;
+    private void lunararc$captureOriginal(Player player, SignTextSlot slot, List<FilteredText> lines, CallbackInfo ci) {
+        this.lunararc$originalText = ((SignBlockEntity) (Object) this).getText(slot);
     }
 
-    @Inject(method = "setMessages", at = @At("HEAD"))
-    private void lunararc$captureOriginal(Player player, List<FilteredText> lines, SignText text, CallbackInfoReturnable<SignText> cir) {
-        this.lunararc$originalText = text;
-    }
-
-    @Inject(method = "setMessages", at = @At("RETURN"), cancellable = true)
-    private void lunararc$fireSignChange(Player player, List<FilteredText> filtered, SignText unused, CallbackInfoReturnable<SignText> cir) {
+    @Inject(method = "updateSignText", at = @At("RETURN"))
+    private void lunararc$fireSignChange(Player player, SignTextSlot slot, List<FilteredText> filtered, CallbackInfo ci) {
         SignText original = this.lunararc$originalText;
         this.lunararc$originalText = null;
-        BlockEntity self = (BlockEntity) (Object) this;
-        if (!(player instanceof ServerPlayer) || !(self.getLevel() instanceof ServerLevel level)
+        SignBlockEntity sign = (SignBlockEntity) (Object) this;
+        if (original == null || !(player instanceof ServerPlayer) || !(sign.getLevel() instanceof ServerLevel level)
                 || !(((EntityBridge) player).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Player bukkitPlayer)) {
             return;
         }
-        SignText text = cir.getReturnValue();
+        SignText text = sign.getText(slot);
+        if (text == original) return;
         List<net.kyori.adventure.text.Component> lines = new ArrayList<>();
-        for (int i = 0; i < filtered.size(); i++) {
-            lines.add(PaperAdventure.asAdventure(text.getMessage(i, player.isTextFilteringEnabled())));
+        for (int i = 0; i < SignText.LINES; i++) {
+            lines.add(PaperAdventure.asAdventure(text.getMessages(player.isTextFilteringEnabled()).get(i)));
         }
-        SignChangeEvent event = new SignChangeEvent(CraftBlock.at(level, self.getBlockPos()), bukkitPlayer,
-                new ArrayList<>(lines), this.lunararc$editingFront ? Side.FRONT : Side.BACK);
+        SignChangeEvent event = new SignChangeEvent(CraftBlock.at(level, sign.getBlockPos()), bukkitPlayer,
+                new ArrayList<>(lines), slot == SignTextSlot.FRONT ? Side.FRONT : Side.BACK);
         bukkitPlayer.getServer().getPluginManager().callEvent(event);
         if (event.isCancelled()) {
-            cir.setReturnValue(original);
+            sign.setText(original, slot);
             return;
         }
         net.minecraft.network.chat.Component[] components = CraftSign.sanitizeLines(event.lines());
+        boolean changed = false;
         for (int i = 0; i < components.length; i++) {
             if (!Objects.equals(lines.get(i), event.line(i))) {
-                text = text.setMessage(i, components[i]);
+                text = text.asMutable().setLine(i, components[i]).asImmutable();
+                changed = true;
             }
         }
-        cir.setReturnValue(text);
+        if (changed) sign.setText(text, slot);
     }
 }

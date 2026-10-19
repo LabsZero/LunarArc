@@ -19,10 +19,10 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(CrafterBlock.class)
 public abstract class ExtraCrafterEventMixin {
     @WrapOperation(method = "dispenseFrom", require = 0,
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/crafting/CraftingRecipe;assemble(Lnet/minecraft/world/item/crafting/CraftingInput;Lnet/minecraft/core/HolderLookup$Provider;)Lnet/minecraft/world/item/ItemStack;"))
-    private ItemStack lunararc$craft(CraftingRecipe recipe, CraftingInput input, HolderLookup.Provider registries, Operation<ItemStack> original,
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/crafting/CraftingRecipe;assemble(Lnet/minecraft/world/item/crafting/RecipeInput;)Lnet/minecraft/world/item/ItemStack;"))
+    private ItemStack lunararc$craft(CraftingRecipe recipe, net.minecraft.world.item.crafting.RecipeInput input, Operation<ItemStack> original,
             @Local(argsOnly = true) ServerLevel level, @Local(argsOnly = true) BlockPos pos, @Local RecipeHolder<CraftingRecipe> holder) {
-        ItemStack result = original.call(recipe, input, registries);
+        ItemStack result = original.call(recipe, input);
         ItemStack changed = LunarArcBlockEvents.crafterCraft(level, pos, result, holder);
         return changed == null ? ItemStack.EMPTY : changed;
     }

@@ -5,7 +5,7 @@ import io.lunararcdevs.lunararc.common.bridge.ItemStackBridge;
 import io.lunararcdevs.lunararc.common.LunarArcServerAccess;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
@@ -69,7 +69,7 @@ public abstract class ItemStackMixin implements ItemStackBridge {
             return;
         }
 
-        Item brokenItem = stack.getItem();
+        ItemStack brokenItem = stack.copyWithCount(1);
         if (stack.getCount() == 1 && owner instanceof ServerPlayer player) {
             PlayerItemBreakEvent event = new PlayerItemBreakEvent(
                     (org.bukkit.entity.Player) ((EntityBridge) player).lunararc$getBukkitEntity(),

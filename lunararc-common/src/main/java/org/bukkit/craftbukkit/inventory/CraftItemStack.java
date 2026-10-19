@@ -20,7 +20,7 @@ public class CraftItemStack extends ItemStack {
 
     public net.minecraft.world.item.ItemStack handle;
 
-    private static @Nullable CraftItemStack getCraftStack(@Nullable ItemStack stack) {
+    public static @Nullable CraftItemStack getCraftStack(@Nullable ItemStack stack) {
         if (stack == null) return null;
         if (stack instanceof CraftItemStack craft) return craft;
         Object delegate = API_ITEM_STACK_CRAFT_DELEGATE_FIELD.get(stack);
@@ -111,6 +111,55 @@ public class CraftItemStack extends ItemStack {
             return;
         }
         handle.setCount(amount);
+    }
+
+    /** Paper's dialog codecs hand over either a stack or a stack template (both are ItemInstance in 26.x). */
+    public static java.util.List<net.minecraft.world.item.ItemStack> asNMSCopy(java.util.List<? extends ItemStack> original) {
+        java.util.List<net.minecraft.world.item.ItemStack> copies = new java.util.ArrayList<>(original.size());
+        for (ItemStack stack : original) copies.add(asNMSCopy(stack));
+        return copies;
+    }
+
+    public static ItemMeta getItemMeta(net.minecraft.world.item.ItemStack item) {
+        return item == null || item.isEmpty() ? null : asCraftMirror(item).getItemMeta();
+    }
+
+    public static boolean setItemMeta(net.minecraft.world.item.ItemStack item, ItemMeta meta) {
+        return item != null && !item.isEmpty() && asCraftMirror(item).setItemMeta(meta);
+    }
+
+    public static void applyMetaToItem(net.minecraft.world.item.ItemStack item, ItemMeta meta) {
+        setItemMeta(item, meta);
+    }
+
+    public static net.minecraft.world.item.ItemStackTemplate asTemplate(ItemStack bukkit) {
+        return net.minecraft.world.item.ItemStackTemplate.fromNonEmptyStack(asNMSCopy(bukkit));
+    }
+
+    public static ItemStack asBukkitMirror(net.minecraft.world.item.ItemStack original) {
+        return asCraftMirror(original);
+    }
+
+    public static net.minecraft.advancements.predicates.ItemPredicate asCriterionConditionItem(ItemStack key) {
+        net.minecraft.world.item.ItemStack item = unwrap(key);
+        return net.minecraft.advancements.predicates.ItemPredicate.Builder.item()
+                .of(org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(net.minecraft.core.registries.Registries.ITEM), item.getItem())
+                .withComponents(net.minecraft.advancements.predicates.DataComponentMatchers.Builder.components()
+                        .exact(net.minecraft.core.component.DataComponentExactPredicate.allOf(
+                                net.minecraft.core.component.PatchedDataComponentMap.fromPatch(
+                                        net.minecraft.core.component.DataComponentMap.EMPTY, item.getComponentsPatch())))
+                        .build())
+                .build();
+    }
+
+    public static ItemMeta getItemMeta(net.minecraft.world.item.ItemStack item, org.bukkit.inventory.ItemType metaForType) {
+        return asCraftMirror(item).getItemMeta();
+    }
+
+    public static ItemStack asBukkitCopy(net.minecraft.world.item.ItemInstance instance) {
+        if (instance instanceof net.minecraft.world.item.ItemStack stack) return asBukkitCopy(stack);
+        if (instance instanceof net.minecraft.world.item.ItemStackTemplate template) return asBukkitCopy(template.create());
+        throw new IllegalArgumentException("Unsupported item instance: " + instance);
     }
 
     public static ItemStack asBukkitCopy(net.minecraft.world.item.ItemStack stack) {
@@ -362,7 +411,7 @@ public class CraftItemStack extends ItemStack {
 
 
         java.util.List<net.minecraft.core.component.DataComponentType<?>> changed = new java.util.ArrayList<>();
-        for (var entry : stack.getComponentsPatch().entrySet()) {
+        for (var entry : ComponentPatches.entries(stack.getComponentsPatch()).entrySet()) {
             changed.add(entry.getKey());
         }
         for (net.minecraft.core.component.DataComponentType<?> type : changed) {

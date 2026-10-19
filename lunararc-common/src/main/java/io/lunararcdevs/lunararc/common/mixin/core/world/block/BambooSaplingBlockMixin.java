@@ -14,9 +14,9 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(BambooSaplingBlock.class)
 public abstract class BambooSaplingBlockMixin {
     @WrapOperation(method = "growBamboo", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean lunararc$spread(Level level, BlockPos target, BlockState state, int flags, Operation<Boolean> original,
+            target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$spread(Level level, BlockPos target, BlockState state, Operation<Boolean> original,
             @Local(argsOnly = true) BlockPos source) {
-        return CraftEventFactory.handleBlockSpreadEvent(level, source, target, state, flags, (p, s, f) -> original.call(level, p, s, f));
+        return CraftEventFactory.handleBlockSpreadEvent(level, source, target, state, 3, (p, s, f) -> original.call(level, p, s));
     }
 }

@@ -36,6 +36,11 @@ public class CraftGameRule<T> extends GameRule<T> implements Holderable<net.mine
         this.holder = (Holder) holder;
     }
 
+    @Override
+    public T getDefaultValue() {
+        return this.holder.value().defaultValue();
+    }
+
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static <LEGACY, MODERN> GameRule<LEGACY> wrap(GameRule<MODERN> rule, Function<LEGACY, MODERN> fromLegacyToModern, Function<MODERN, LEGACY> toLegacyFromModern, Class<LEGACY> legacyClass) {
         return new LegacyGameRuleWrapper<>(((CraftGameRule) rule).getHolder(), fromLegacyToModern, toLegacyFromModern, legacyClass);

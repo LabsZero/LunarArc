@@ -13,7 +13,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.ai.gossip.GossipContainer;
 import net.minecraft.world.entity.ai.gossip.GossipType;
-import net.minecraft.world.entity.npc.villager.VillagerTrades;
+import net.minecraft.world.item.trading.VillagerTrades;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -80,19 +80,12 @@ public final class CraftVillager extends CraftAbstractVillager implements Villag
         if (amount <= 0) throw new IllegalArgumentException("amount must be positive");
         int target = getVillagerLevel() + amount;
         if (target > 5) throw new IllegalArgumentException("final villager level must be <= 5");
+        if (!(getHandle().level() instanceof net.minecraft.server.level.ServerLevel level)) return false;
         boolean added = false;
         while (getVillagerLevel() < target) {
-            int next = getVillagerLevel() + 1;
-            setVillagerLevel(next);
-            var byLevel = VillagerTrades.TRADES.get(getHandle().getVillagerData().profession().unwrapKey().orElse(null));
-            if (byLevel != null) {
-                VillagerTrades.ItemListing[] listings = byLevel.get(next);
-                if (listings != null) {
-                    int before = getHandle().getOffers().size();
-                    super.villagerBridge().lunararc$addOffers(getHandle().getOffers(), listings, 2);
-                    added |= getHandle().getOffers().size() > before;
-                }
-            }
+            int before = getHandle().getOffers().size();
+            concreteVillagerBridge().lunararc$increaseMerchantCareer(level);
+            added |= getHandle().getOffers().size() > before;
         }
         return added;
     }
@@ -100,13 +93,18 @@ public final class CraftVillager extends CraftAbstractVillager implements Villag
     @Override
     public boolean addTrades(int amount) {
         if (amount <= 0) throw new IllegalArgumentException("amount must be positive");
-        var byLevel = VillagerTrades.TRADES.get(getHandle().getVillagerData().profession().unwrapKey().orElse(null));
-        if (byLevel == null) return false;
-        VillagerTrades.ItemListing[] listings = byLevel.get(getVillagerLevel());
-        if (listings == null || listings.length == 0) return false;
-        int before = getHandle().getOffers().size();
-        super.villagerBridge().lunararc$addOffers(getHandle().getOffers(), listings, amount);
-        return getHandle().getOffers().size() > before;
+        var profession = getHandle().getVillagerData().profession();
+        net.minecraft.resources.ResourceKey<net.minecraft.world.item.trading.TradeSet> tradeSet =
+                profession.value().tradeSetsByLevel().get(getVillagerLevel());
+        if (tradeSet == null) return false;
+        net.minecraft.world.item.trading.MerchantOffers offers = getHandle().getOffers();
+        int before = offers.size();
+        for (int i = 0; i < amount; i++) {
+            int size = offers.size();
+            super.villagerBridge().lunararc$addOffersFromTradeSet(offers, tradeSet);
+            if (offers.size() == size) break;
+        }
+        return offers.size() > before;
     }
 
     @Override public int getRestocksToday() { return concreteVillagerBridge().lunararc$getRestocksToday(); }
@@ -133,7 +131,7 @@ public final class CraftVillager extends CraftAbstractVillager implements Villag
         net.minecraft.world.entity.monster.zombie.ZombieVillager converted =
                 io.lunararcdevs.lunararc.common.mod.util.LunarArcEntityTransforms.convert(
                         getHandle(),
-                        net.minecraft.world.entity.EntityType.ZOMBIE_VILLAGER,
+                        net.minecraft.world.entity.EntityTypes.ZOMBIE_VILLAGER,
                         false,
                         org.bukkit.event.entity.EntityTransformEvent.TransformReason.INFECTION,
                         org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM,

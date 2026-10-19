@@ -25,18 +25,22 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(TntBlock.class)
 public abstract class TntBlockMixin {
+    // Vanilla ignites through prime(); Forge/NeoForge route every ignition through their own onCaughtFire patch instead.
     @Unique private static final String EXPLODE = "Lnet/minecraft/world/level/block/TntBlock;prime(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)Z";
-    @Unique private static final String EXPLODE_BY = "Lnet/minecraft/world/level/block/TntBlock;prime(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/LivingEntity;)Z";
-    @Unique private static final String CAUGHT_FIRE = "Lnet/minecraft/world/level/block/TntBlock;onCaughtFire(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;Lnet/minecraft/world/entity/LivingEntity;)Z";
+    @Unique private static final String EXPLODE_BY = "Lnet/minecraft/world/level/block/TntBlock;prime(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/item/ItemStack;)Z";
+    @Unique private static final String CAUGHT_FIRE_FORGE = "Lnet/minecraft/world/level/block/TntBlock;onCaughtFire(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;Lnet/minecraft/world/entity/LivingEntity;)Z";
+    @Unique private static final String CAUGHT_FIRE = "Lnet/minecraft/world/level/block/TntBlock;onCaughtFire(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/item/ItemStack;)Z";
 
     @Inject(method = {"onPlace", "neighborChanged"}, cancellable = true, at = {
-            @At(value = "INVOKE", target = EXPLODE), @At(value = "INVOKE", target = CAUGHT_FIRE, remap = false)})
+            @At(value = "INVOKE", target = EXPLODE), @At(value = "INVOKE", target = CAUGHT_FIRE, remap = false),
+            @At(value = "INVOKE", target = CAUGHT_FIRE_FORGE, remap = false)})
     private void lunararc$primeByRedstone(CallbackInfo ci, @Local(argsOnly = true) Level level, @Local(argsOnly = true, ordinal = 0) BlockPos pos) {
         if (!CraftEventFactory.callTNTPrimeEvent(level, pos, PrimeCause.REDSTONE, null, null)) ci.cancel();
     }
 
     @Inject(method = "onProjectileHit", cancellable = true, at = {
-            @At(value = "INVOKE", target = EXPLODE_BY), @At(value = "INVOKE", target = CAUGHT_FIRE, remap = false)})
+            @At(value = "INVOKE", target = EXPLODE_BY), @At(value = "INVOKE", target = CAUGHT_FIRE, remap = false),
+            @At(value = "INVOKE", target = CAUGHT_FIRE_FORGE, remap = false)})
     private void lunararc$primeByProjectile(Level level, BlockState state, BlockHitResult hit, Projectile projectile, CallbackInfo ci) {
         BlockPos pos = hit.getBlockPos();
         if (!CraftEventFactory.callEntityChangeBlockEvent(projectile, pos, Blocks.AIR.defaultBlockState())
@@ -46,7 +50,8 @@ public abstract class TntBlockMixin {
     }
 
     @Inject(method = "useItemOn", cancellable = true, at = {
-            @At(value = "INVOKE", target = EXPLODE_BY), @At(value = "INVOKE", target = CAUGHT_FIRE, remap = false)})
+            @At(value = "INVOKE", target = EXPLODE_BY), @At(value = "INVOKE", target = CAUGHT_FIRE, remap = false),
+            @At(value = "INVOKE", target = CAUGHT_FIRE_FORGE, remap = false)})
     private void lunararc$primeByPlayer(CallbackInfoReturnable<InteractionResult> cir,
             @Local(argsOnly = true) Level level, @Local(argsOnly = true) BlockPos pos, @Local(argsOnly = true) Player player) {
         if (!CraftEventFactory.callTNTPrimeEvent(level, pos, PrimeCause.PLAYER, player, null)) cir.setReturnValue(InteractionResult.CONSUME);
@@ -59,7 +64,13 @@ public abstract class TntBlockMixin {
     }
 
     @WrapOperation(method = "playerWillDestroy", require = 0, at = @At(value = "INVOKE", target = CAUGHT_FIRE, remap = false))
-    private boolean lunararc$primeByBreakNeo(TntBlock block, BlockState state, Level level, BlockPos pos, Direction face, LivingEntity igniter,
+    private boolean lunararc$primeByBreakLoader(TntBlock block, BlockState state, Level level, BlockPos pos, Direction face, LivingEntity igniter,
+            net.minecraft.world.item.ItemStack tool, Operation<Boolean> original, Level unused, BlockPos unusedPos, BlockState unusedState, Player player) {
+        return CraftEventFactory.callTNTPrimeEvent(level, pos, PrimeCause.BLOCK_BREAK, player, null) && original.call(block, state, level, pos, face, igniter, tool);
+    }
+
+    @WrapOperation(method = "playerWillDestroy", require = 0, at = @At(value = "INVOKE", target = CAUGHT_FIRE_FORGE, remap = false))
+    private boolean lunararc$primeByBreakForge(TntBlock block, BlockState state, Level level, BlockPos pos, Direction face, LivingEntity igniter,
             Operation<Boolean> original, Level unused, BlockPos unusedPos, BlockState unusedState, Player player) {
         return CraftEventFactory.callTNTPrimeEvent(level, pos, PrimeCause.BLOCK_BREAK, player, null) && original.call(block, state, level, pos, face, igniter);
     }

@@ -9,7 +9,7 @@ import org.objectweb.asm.tree.MethodNode
 
 plugins {
     id 'architectury-plugin'
-    id 'dev.architectury.loom'
+    id 'dev.architectury.loom-no-remap'
 }
 
 static byte[] neutralizeMojangLogUtils(byte[] classBytes) {
@@ -138,8 +138,7 @@ loom {
     accessWidenerPath = file('src/main/resources/lunararc.accesswidener')
     silentMojangMappingsLicense()
     mixin {
-        useLegacyMixinAp = true
-        defaultRefmapName = "mixins.lunararc.common.refmap.json"
+        useLegacyMixinAp = false // unobfuscated Minecraft: no refmaps to generate
     }
 }
 
@@ -147,12 +146,14 @@ configurations {
     paperApiReference
 }
 
+// lwjgl 3.4.x ships Java 27 multi-release classes that Architectury's shaded ASM (used by the platform transformers)
+// cannot read; the dedicated server never touches them.
+configurations.configureEach { Configuration c ->
+    c.exclude group: 'org.lwjgl'
+}
+
 dependencies {
     minecraft libs.minecraft
-    mappings loom.layered() {
-        officialMojangMappings()
-        parchment("org.parchmentmc.data:parchment-${libs.versions.minecraft.get()}:${libs.versions.parchment.get()}@zip")
-    }
 
     implementation 'org.jline:jline-reader:3.20.0'
     implementation libs.lunararc.api
@@ -184,6 +185,11 @@ dependencies {
     implementation libs.adventure.text.serializer.plain
 
     implementation libs.snakeyaml
+
+    // Paper 26.x moved its data converter (MCDataConverter and friends) out of the server jar into leafpile libraries
+    implementation 'ca.spottedleaf.leafpile:common:1.2.4'
+    implementation 'ca.spottedleaf.leafpile:concurrentutil:1.2.4'
+    implementation 'ca.spottedleaf.leafpile:converter:1.2.4'
 
     compileOnly libs.paper.api
     paperApiReference libs.paper.api
@@ -222,6 +228,12 @@ tasks.register('extractPaperPluginMappings') {
     inputs.file(rootProject.ext.paperServerJar)
 
     doLast {
+        // Minecraft 26.1+ is unobfuscated and Paper no longer ships Spigot reobf mappings (or supports reobfuscated
+        // plugins), so there is nothing to generate: plugins are Mojang-mapped and need no NMS remap table.
+        if (minecraftVersion.substring(0, minecraftVersion.indexOf('.')).toInteger() >= 26) {
+            logger.lifecycle("Minecraft ${minecraftVersion} is unobfuscated: skipping Spigot/Intermediary plugin mapping generation")
+            return
+        }
         File target = outputFile.get()
         target.parentFile.mkdirs()
 
@@ -323,9 +335,6 @@ tasks.register('extractPaperPluginMappings') {
             if (trimmed.isEmpty()) return
 
             int rawArrow = trimmed.lastIndexOf(' -> ')
-            // Class headers are the only mapping records whose RHS ends with ':'.
-            // Detect them from the trimmed content, not from indentation, so CRLF,
-            // tabs, or future Mojang whitespace changes cannot zero the member map.
             if (rawArrow > 0 && trimmed.endsWith(':')) {
                 currentNamed = normalizeInternal(trimmed.substring(0, rawArrow).trim())
                 return
@@ -342,10 +351,6 @@ tasks.register('extractPaperPluginMappings') {
             String left = trimmed.substring(0, arrow).trim()
             String obfName = trimmed.substring(arrow + 4).trim()
             if (left.isEmpty() || obfName.isEmpty()) return
-
-            // Strip Mojang's optional source line prefix (for example 68:69:).
-            // Do this procedurally instead of binding the whole member grammar to
-            // the line-number format, which has changed between mapping releases.
             int firstColon = left.indexOf(':')
             if (firstColon > 0 && left.substring(0, firstColon) ==~ /\d+/) {
                 int secondColon = left.indexOf(':', firstColon + 1)
@@ -637,7 +642,7 @@ tasks.named('processResources') {
     }
 }
 
-def generatedPaperImplementationSurfaceDir = layout.buildDirectory.dir('generated/paper-1.21.11-implementation-surface')
+def generatedPaperImplementationSurfaceDir = layout.buildDirectory.dir('generated/paper-implementation-surface')
 
 def ownsPaperImplementationClass = { String classEntry ->
     if (!classEntry.endsWith('.class')) return false
@@ -677,7 +682,7 @@ tasks.register('verifyCraftNmsOwnership') {
 tasks.register('preparePaperImplementationSurface') {
     dependsOn tasks.named('verifyCraftNmsOwnership')
     group = 'build setup'
-    description = 'Extracts missing exact Paper 1.21.11 CraftBukkit/Spigot implementation classes, plus Paper\'s own loader-independent config framework (io.papermc.paper.configuration.*), for loader remapping.'
+    description = 'Extracts missing exact Paper 26.3 CraftBukkit/Spigot implementation classes, plus Paper\'s own loader-independent config framework (io.papermc.paper.configuration.*), for loader remapping.'
     dependsOn rootProject.tasks.named('preparePaperCompileReference')
     inputs.file(rootProject.ext.paperServerJar)
     inputs.files(configurations.paperApiReference)
@@ -693,7 +698,7 @@ tasks.register('preparePaperImplementationSurface') {
 
         File paperJar = rootProject.ext.paperServerJar
         if (!paperJar.isFile()) {
-            throw new GradleException("Paper 1.21.11 implementation reference is missing: ${paperJar}")
+            throw new GradleException("Paper 26.3 implementation reference is missing: ${paperJar}")
         }
 
         List<String> unownedValidBlocksUsers = []
@@ -932,6 +937,13 @@ tasks.register('preparePaperImplementationSurface') {
             'io/papermc/paper/connection/PaperPlayerLoginConnection',
             'io/papermc/paper/event/player/PaperPlayerCustomClickEvent',
             'io/papermc/paper/PaperServerInternalAPIBridge',
+            'io/papermc/paper/block/pot/PaperPotPatternType',
+            'io/papermc/paper/datacomponent/item/PaperMobVisibility',
+            'io/papermc/paper/datacomponent/item/PaperSignText',
+            'io/papermc/paper/datacomponent/item/PaperSulfurCubeContent',
+            'io/papermc/paper/datacomponent/item/PaperVillagerFood',
+            'io/papermc/paper/persistence/PaperPersistentDataKey',
+            'io/papermc/paper/util/PaperCacheDir',
             'com/destroystokyo/paper/entity/CraftRangedEntity'
         ] as Set
         def referencesOf = { byte[] bytes ->
@@ -990,12 +1002,12 @@ tasks.register('preparePaperImplementationSurface') {
 
         if (donatedClasses < 100) {
             throw new GradleException(
-                "Paper 1.21.11 implementation donor extracted only ${donatedClasses} classes; expected a full CraftBukkit/Spigot surface"
+                "Paper 26.3 implementation donor extracted only ${donatedClasses} classes; expected a full CraftBukkit/Spigot surface"
             )
         }
         if (blockImplClasses.size() < 100) {
             throw new GradleException(
-                "Paper 1.21.11 implementation donor found only ${blockImplClasses.size()} generated block implementations"
+                "Paper 26.3 implementation donor found only ${blockImplClasses.size()} generated block implementations"
             )
         }
         Set<String> resolvable = new HashSet<>()
@@ -1041,7 +1053,7 @@ tasks.register('preparePaperImplementationSurface') {
         }
 
         logger.lifecycle(
-            "Prepared exact Paper 1.21.11 implementation surface: ${donatedClasses} donated classes, " +
+            "Prepared exact Paper 26.3 implementation surface: ${donatedClasses} donated classes, " +
             "${ownedClasses} LunarArc-owned classes retained, ${blockImplClasses.size()} generated block implementations"
         )
     }
@@ -1189,7 +1201,7 @@ tasks.register('runCompatibilityRegression', JavaExec) {
             project(':bootstrap').layout.buildDirectory.dir('generated/versions'),
             sourceSets.main.compileClasspath.filter { file -> !(file.name ==~ /paper-server-.*\.jar/) })
     mainClass = 'io.lunararcdevs.lunararc.PluginCompatibilityRegressionTest'
-    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
     systemProperty 'log4j2.loggerContextFactory', 'org.apache.logging.log4j.simple.SimpleLoggerContextFactory'
     jvmArgs '--add-opens', 'java.base/java.lang=ALL-UNNAMED'
 }
@@ -1203,7 +1215,7 @@ tasks.register('runPackagedRecipeRegression', JavaExec) {
     dependsOn tasks.named('testClasses'), project(':bootstrap').tasks.named('neoforgeJar')
     classpath = tasks.named('runCompatibilityRegression', JavaExec).get().classpath
     mainClass = 'io.lunararcdevs.lunararc.PackagedRecipeRegressionTest'
-    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
     systemProperty 'log4j2.loggerContextFactory', 'org.apache.logging.log4j.simple.SimpleLoggerContextFactory'
     doFirst {
         args = [project(':bootstrap').tasks.named('neoforgeJar').get().archiveFile.get().asFile.absolutePath]

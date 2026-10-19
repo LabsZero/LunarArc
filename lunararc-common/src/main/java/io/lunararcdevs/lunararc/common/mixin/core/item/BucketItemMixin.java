@@ -109,7 +109,7 @@ public abstract class BucketItemMixin {
             // mapping, so asking for it to be remapped can only fail to find it. Arclight marks the
             // same call site the same way. Harmless on NeoForge, whose runtime is Mojang-mapped
             // anyway; it is Forge, remapping to SRG, where the difference shows.
-            at = @At(value = "INVOKE", remap = false, target = "Lnet/minecraft/world/item/BucketItem;emptyContents(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/BlockHitResult;Lnet/minecraft/world/item/ItemStack;)Z"),
+            at = @At(value = "INVOKE", remap = false, target = "Lnet/minecraft/world/item/BucketItem;emptyContents(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/BlockHitResult;Lnet/minecraft/world/item/ItemStack;)Z"),
             require = 0)
     private void lunararc$captureBucketEmptyLoader(Level level, Player player, InteractionHand hand,
             CallbackInfoReturnable<InteractionResult> cir,

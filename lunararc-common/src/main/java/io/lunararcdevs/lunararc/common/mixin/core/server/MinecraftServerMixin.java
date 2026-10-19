@@ -131,43 +131,21 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
         level.getChunkSource().setSpawnSettings(true);
     }
 
+    @org.spongepowered.asm.mixin.gen.Invoker("setInitialSpawn")
+    private static void lunararc$invokeSetInitialSpawn(ServerLevel level, net.minecraft.world.level.storage.ServerLevelData data,
+            boolean bonusChest, boolean debug, net.minecraft.server.level.progress.LevelLoadListener listener) {
+        throw new AssertionError();
+    }
+
     @Unique
     private static void lunararc$setInitialSpawn(ServerLevel level, net.minecraft.world.level.storage.ServerLevelData data,
             boolean bonusChest, boolean debug) {
-        if (debug) {
-            data.setSpawn(net.minecraft.world.level.storage.LevelData.RespawnData.of(level.dimension(), BlockPos.ZERO.above(80), 0.0F, 0.0F));
-            return;
-        }
-        ServerChunkCache chunks = level.getChunkSource();
-        ChunkPos origin = new ChunkPos(chunks.randomState().sampler().findSpawnPosition());
-        int height = chunks.getGenerator().getSpawnHeight(level);
-        if (height < level.getMinY()) {
-            BlockPos pos = origin.getWorldPosition();
-            height = level.getHeight(Heightmap.Types.WORLD_SURFACE, pos.getX() + 8, pos.getZ() + 8);
-        }
-        data.setSpawn(net.minecraft.world.level.storage.LevelData.RespawnData.of(level.dimension(), origin.getWorldPosition().offset(8, height, 8), 0.0F, 0.0F));
-        int x = 0, z = 0, dx = 0, dz = -1;
-        for (int i = 0; i < Mth.square(11); ++i) {
-            if (x >= -5 && x <= 5 && z >= -5 && z <= 5) {
-                BlockPos candidate = net.minecraft.server.level.PlayerSpawnFinder.getSpawnPosInChunk(level, new ChunkPos(origin.x + x, origin.z + z));
-                if (candidate != null) {
-                    data.setSpawn(net.minecraft.world.level.storage.LevelData.RespawnData.of(level.dimension(), candidate, 0.0F, 0.0F));
-                    break;
-                }
-            }
-            if (x == z || x < 0 && x == -z || x > 0 && x == 1 - z) {
-                int oldDx = dx;
-                dx = -dz;
-                dz = oldDx;
-            }
-            x += dx;
-            z += dz;
-        }
-        if (bonusChest) {
-            level.registryAccess().lookup(net.minecraft.core.registries.Registries.CONFIGURED_FEATURE)
-                    .flatMap(reg -> reg.get(net.minecraft.data.worldgen.features.MiscOverworldFeatures.BONUS_CHEST))
-                    .ifPresent(feature -> feature.value().place(level, chunks.getGenerator(), level.random, data.getRespawnData().pos()));
-        }
+        lunararc$invokeSetInitialSpawn(level, data, bonusChest, debug, new net.minecraft.server.level.progress.LevelLoadListener() {
+            @Override public void start(net.minecraft.server.level.progress.LevelLoadListener.Stage stage, int total) {}
+            @Override public void update(net.minecraft.server.level.progress.LevelLoadListener.Stage stage, int current, int total) {}
+            @Override public void finish(net.minecraft.server.level.progress.LevelLoadListener.Stage stage) {}
+            @Override public void updateFocus(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension, net.minecraft.world.level.ChunkPos chunk) {}
+        });
     }
 
     @Override

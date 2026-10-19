@@ -32,6 +32,9 @@ public abstract class ServerLevelMixin implements ServerLevelBridge {
     @org.spongepowered.asm.mixin.Unique
     private java.nio.file.Path lunararc$dimensionFolder;
 
+    /** Paper gives every ServerLevel its WorldGenSettings; WorldEdit's v26 adapters read this field for //regen. */
+    public net.minecraft.world.level.levelgen.WorldGenSettings worldGenSettings;
+
     @Inject(method = "<init>", at = @At("RETURN"), require = 0)
     private void lunararc$captureDimensionFolder(
             net.minecraft.server.MinecraftServer server,
@@ -44,8 +47,8 @@ public abstract class ServerLevelMixin implements ServerLevelBridge {
             long biomeZoomSeed,
             java.util.List<net.minecraft.world.level.CustomSpawner> customSpawners,
             boolean tickTime,
-            net.minecraft.world.RandomSequences randomSequences,
             org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        this.worldGenSettings = server == null ? null : server.getWorldGenSettings();
         try {
             this.lunararc$dimensionFolder = access == null ? null : access.getDimensionPath(dimension);
         } catch (Throwable unavailable) {
@@ -168,12 +171,24 @@ public abstract class ServerLevelMixin implements ServerLevelBridge {
     }
 
     @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "tick", require = 0,
-            at = @At(value = "INVOKE", ordinal = 0, target = "Lnet/minecraft/server/level/ServerLevel;setDayTime(J)V"))
-    private void lunararc$nightSkip(ServerLevel level, long time,
-            com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> original) {
-        long skip = io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.timeSkip(
-                level, org.bukkit.event.world.TimeSkipEvent.SkipReason.NIGHT_SKIP, time - level.getDayTime());
-        if (skip != 0L) original.call(level, level.getDayTime() + skip);
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/clock/ServerClockManager;moveToTimeMarker(Lnet/minecraft/core/Holder;Lnet/minecraft/resources/ResourceKey;)Lnet/minecraft/world/clock/ServerClockManager$MoveResult;"))
+    private net.minecraft.world.clock.ServerClockManager.MoveResult lunararc$nightSkip(
+            net.minecraft.world.clock.ServerClockManager manager,
+            net.minecraft.core.Holder<net.minecraft.world.clock.WorldClock> clock,
+            net.minecraft.resources.ResourceKey<net.minecraft.world.clock.ClockTimeMarker> marker,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<net.minecraft.world.clock.ServerClockManager.MoveResult> original) {
+        ServerLevel level = (ServerLevel) (Object) this;
+        long before = manager.getInstance(clock).totalTicks();
+        net.minecraft.world.clock.ServerClockManager.MoveResult result = original.call(manager, clock, marker);
+        long skipped = manager.getInstance(clock).totalTicks() - before;
+        if (skipped > 0L) {
+            long allowed = io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents.timeSkip(
+                    level, org.bukkit.event.world.TimeSkipEvent.SkipReason.NIGHT_SKIP, skipped);
+            if (allowed != skipped) {
+                manager.setTotalTicks(clock, before + Math.max(0L, allowed));
+            }
+        }
+        return result;
     }
 
     @Inject(method = "addEntity", at = @At("RETURN"), require = 0)

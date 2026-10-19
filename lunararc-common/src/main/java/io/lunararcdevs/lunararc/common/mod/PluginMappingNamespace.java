@@ -120,7 +120,7 @@ public enum PluginMappingNamespace {
             case SPIGOT_NAMESPACE -> SPIGOT;
             default -> throw new IllegalArgumentException("Unsupported " + MANIFEST_ATTRIBUTE
                     + " '" + value + "' in " + pluginFile.getName()
-                    + "; LunarArc 1.21.11 supports '" + MOJANG_NAMESPACE + "', '"
+                    + "; LunarArc 26.3 supports '" + MOJANG_NAMESPACE + "', '"
                     + MOJANG_PLUS_YARN_NAMESPACE + "' or '" + SPIGOT_NAMESPACE + "'");
         };
     }

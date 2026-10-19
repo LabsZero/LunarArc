@@ -89,7 +89,7 @@ public final class LunarArcAntiXrayEngine {
         if (state.isAir()) return false;
         if (lavaObscures && state == Blocks.LAVA.defaultBlockState()) return true;
         if (SOLID_EXEMPT.contains(state.getBlock())) return false;
-        return state.blocksMotion();
+        return state.isSolid();
     }
 
     public LevelChunkSection[] obfuscateForSend(LevelChunk chunk) {
@@ -124,8 +124,8 @@ public final class LunarArcAntiXrayEngine {
                 for (int localZ = 0; localZ < 16; localZ++) {
                     BlockState state = section.getBlockState(localX, localY, localZ);
                     if (!isHidden(state)) continue;
-                    int worldX = (chunk.getPos().x << 4) + localX;
-                    int worldZ = (chunk.getPos().z << 4) + localZ;
+                    int worldX = (chunk.getPos().x() << 4) + localX;
+                    int worldZ = (chunk.getPos().z() << 4) + localZ;
                     if (isExposed(chunk, real, index, localX, localY, localZ, worldX, worldY, worldZ)) continue;
                     if (copy == null) {
                         copy = new LevelChunkSection(section.getStates().copy(), section.getBiomes());

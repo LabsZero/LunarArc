@@ -70,7 +70,7 @@ public final class MobGoalHelper {
         put(net.minecraft.world.entity.monster.spider.CaveSpider.class, org.bukkit.entity.CaveSpider.class);
         put(net.minecraft.world.entity.monster.Creeper.class, org.bukkit.entity.Creeper.class);
         put(net.minecraft.world.entity.monster.zombie.Drowned.class, org.bukkit.entity.Drowned.class);
-        put(net.minecraft.world.entity.monster.EnderMan.class, org.bukkit.entity.Enderman.class);
+        put(net.minecraft.world.entity.monster.Enderman.class, org.bukkit.entity.Enderman.class);
         put(net.minecraft.world.entity.monster.Endermite.class, org.bukkit.entity.Endermite.class);
         put(net.minecraft.world.entity.monster.illager.Evoker.class, org.bukkit.entity.Evoker.class);
         put(net.minecraft.world.entity.monster.Ghast.class, org.bukkit.entity.Ghast.class);
@@ -79,7 +79,7 @@ public final class MobGoalHelper {
         put(net.minecraft.world.entity.monster.ElderGuardian.class, org.bukkit.entity.ElderGuardian.class);
         put(net.minecraft.world.entity.monster.zombie.Husk.class, org.bukkit.entity.Husk.class);
         put(net.minecraft.world.entity.monster.illager.Illusioner.class, org.bukkit.entity.Illusioner.class);
-        put(net.minecraft.world.entity.monster.MagmaCube.class, org.bukkit.entity.MagmaCube.class);
+        put(net.minecraft.world.entity.monster.cubemob.MagmaCube.class, org.bukkit.entity.MagmaCube.class);
         put(net.minecraft.world.entity.monster.Phantom.class, org.bukkit.entity.Phantom.class);
         put(net.minecraft.world.entity.monster.illager.Pillager.class, org.bukkit.entity.Pillager.class);
         put(net.minecraft.world.entity.monster.Ravager.class, org.bukkit.entity.Ravager.class);

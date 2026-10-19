@@ -8,6 +8,12 @@ import org.bukkit.entity.Ageable;
 public class CraftAgeable extends CraftCreature implements Ageable {
     public CraftAgeable(CraftServer server, AgeableMob entity) { super(server, entity); }
 
+    public static void setBaby(net.minecraft.world.entity.Mob mob, boolean baby) {
+        if (baby != mob.isBaby()) {
+            mob.setBaby(baby);
+        }
+    }
+
     @Override public AgeableMob getHandle() { return (AgeableMob) this.entity; }
     private AgeableMobBridge ageBridge() { return (AgeableMobBridge) this.entity; }
 

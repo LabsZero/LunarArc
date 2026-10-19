@@ -43,7 +43,7 @@ public final class LunarArcEntityTransforms {
             target.setCustomNameVisible(source.isCustomNameVisible());
         }
         if (source.isPersistenceRequired()) target.setPersistenceRequired();
-        target.setInvulnerable(source.isInvulnerable());
+        target.setPermanentlyInvulnerable(source.isInvulnerable());
 
         if (keepEquipment) {
             target.setCanPickUpLoot(source.canPickUpLoot());

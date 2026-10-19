@@ -21,7 +21,36 @@ import org.bukkit.inventory.recipe.CraftingBookCategory;
 
 public interface CraftRecipe extends Recipe {
 
-    void addToCraftingManager();
+    net.minecraft.world.item.crafting.RecipeHolder<?> toMinecraftRecipe();
+
+    default void addToRecipeManager() {
+        io.lunararcdevs.lunararc.common.mod.server.LunarArcServer.minecraftServer().getRecipeManager();
+        ((io.lunararcdevs.lunararc.common.bridge.recipe.RecipeManagerBridge) (Object) io.lunararcdevs.lunararc.common.mod.server.LunarArcServer.minecraftServer().getRecipeManager())
+                .lunararc$addRecipe(this.toMinecraftRecipe());
+    }
+
+    static Optional<Ingredient> toPossibleIngredient(RecipeChoice bukkit, boolean requireNotEmpty) {
+        return (bukkit == null || bukkit == RecipeChoice.empty()) ? Optional.empty() : Optional.of(toIngredient(bukkit, requireNotEmpty));
+    }
+
+    static CraftRecipe fromBukkitRecipe(Recipe recipe) {
+        return switch (recipe) {
+            case CraftRecipe craftRecipe -> craftRecipe;
+            case org.bukkit.inventory.ShapedRecipe shapedRecipe -> CraftShapedRecipe.fromBukkitRecipe(shapedRecipe);
+            case org.bukkit.inventory.ShapelessRecipe shapelessRecipe -> CraftShapelessRecipe.fromBukkitRecipe(shapelessRecipe);
+            case org.bukkit.inventory.FurnaceRecipe furnaceRecipe -> CraftFurnaceRecipe.fromBukkitRecipe(furnaceRecipe);
+            case org.bukkit.inventory.BlastingRecipe blastingRecipe -> CraftBlastingRecipe.fromBukkitRecipe(blastingRecipe);
+            case org.bukkit.inventory.CampfireRecipe campfireRecipe -> CraftCampfireRecipe.fromBukkitRecipe(campfireRecipe);
+            case org.bukkit.inventory.SmokingRecipe smokingRecipe -> CraftSmokingRecipe.fromBukkitRecipe(smokingRecipe);
+            case org.bukkit.inventory.StonecuttingRecipe stonecuttingRecipe -> CraftStonecuttingRecipe.fromBukkitRecipe(stonecuttingRecipe);
+            case org.bukkit.inventory.SmithingTransformRecipe smithingTransformRecipe -> CraftSmithingTransformRecipe.fromBukkitRecipe(smithingTransformRecipe);
+            case org.bukkit.inventory.SmithingTrimRecipe smithingTrimRecipe -> CraftSmithingTrimRecipe.fromBukkitRecipe(smithingTrimRecipe);
+            case org.bukkit.inventory.TransmuteRecipe transmuteRecipe -> CraftTransmuteRecipe.fromBukkitRecipe(transmuteRecipe);
+            case org.bukkit.inventory.BrewingRecipe brewingRecipe -> CraftBrewingRecipe.fromBukkitRecipe(brewingRecipe);
+            case org.bukkit.inventory.ComplexRecipe ignored -> throw new UnsupportedOperationException("Cannot convert custom complex recipe");
+            default -> null;
+        };
+    }
 
     default Optional<Ingredient> toNMSOptional(RecipeChoice bukkit, boolean requireNotEmpty) {
         return (bukkit == null || bukkit == RecipeChoice.empty()) ? Optional.empty() : Optional.of(this.toNMS(bukkit, requireNotEmpty)); // Paper - support "empty" choices

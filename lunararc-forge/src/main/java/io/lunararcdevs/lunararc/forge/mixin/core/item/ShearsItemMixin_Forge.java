@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(ShearsItem.class)
 public abstract class ShearsItemMixin_Forge {
     @Inject(method = "interactLivingEntity", cancellable = true, at = @At(value = "INVOKE", remap = false,
-            target = "Lnet/minecraftforge/common/IForgeShearable;onSheared(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;I)Ljava/util/List;"))
+            target = "Lnet/minecraft/world/entity/Shearable;shear(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/sounds/SoundSource;Lnet/minecraft/world/item/ItemStack;)V"))
     private void lunararc$shear(ItemStack stack, Player player, LivingEntity entity, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
         if (CraftEventFactory.callPlayerShearEntityCancelled(player, entity, stack, hand)) {
             cir.setReturnValue(io.lunararcdevs.lunararc.common.util.LunarArcMojangNames.pass());

@@ -26,8 +26,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.function.Predicate;
 
 /** Bukkit bucket events for the separate vanilla cauldron bucket path. */
-@Mixin(CauldronInteraction.class)
-public interface CauldronInteractionMixin {
+@Mixin(net.minecraft.core.cauldron.CauldronInteractions.class)
+public abstract class CauldronInteractionMixin {
     @Inject(method = "fillBucket", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;isClientSide()Z"), cancellable = true, require = 0)
     private static void lunararc$bucketFillCauldron(
             BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand,

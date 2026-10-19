@@ -173,7 +173,7 @@ public class CraftEventFactory {
             if (problem == net.minecraft.world.entity.player.Player.BedSleepingProblem.TOO_FAR_AWAY) return io.papermc.paper.block.bed.BedEnterProblem.TOO_FAR_AWAY;
             if (problem == net.minecraft.world.entity.player.Player.BedSleepingProblem.NOT_SAFE) return io.papermc.paper.block.bed.BedEnterProblem.NOT_SAFE;
             if (problem == net.minecraft.world.entity.player.Player.BedSleepingProblem.OBSTRUCTED) return io.papermc.paper.block.bed.BedEnterProblem.OBSTRUCTED;
-            return rule.explodes() ? io.papermc.paper.block.bed.BedEnterProblem.EXPLOSION : io.papermc.paper.block.bed.BedEnterProblem.OTHER;
+            return rule.destroyOnUse() ? io.papermc.paper.block.bed.BedEnterProblem.EXPLOSION : io.papermc.paper.block.bed.BedEnterProblem.OTHER;
         }, unit -> null);
         io.papermc.paper.block.bed.BedEnterAction action = new io.papermc.paper.block.bed.BedEnterActionImpl(
                 asBedRuleResult(rule.canSleep(), rule.canSleep().test(level)),
@@ -430,7 +430,7 @@ public class CraftEventFactory {
             throw new IllegalStateException("NMS LivingEntity is not backed by a Bukkit LivingEntity: " + entity);
         }
         var event = new org.bukkit.event.entity.EntityPotionEffectEvent(
-                living, bukkitOld, bukkitNew, cause, action, willOverride);
+                living, bukkitOld, bukkitNew, null, cause, action, willOverride);
         Bukkit.getPluginManager().callEvent(event);
         return event;
     }

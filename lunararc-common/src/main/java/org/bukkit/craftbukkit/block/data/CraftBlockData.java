@@ -32,6 +32,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 
 public class CraftBlockData implements BlockData {
+    public static final BlockFace[] ROTATION_CYCLE = {
+        BlockFace.SOUTH, BlockFace.SOUTH_SOUTH_WEST, BlockFace.SOUTH_WEST, BlockFace.WEST_SOUTH_WEST,
+        BlockFace.WEST, BlockFace.WEST_NORTH_WEST, BlockFace.NORTH_WEST, BlockFace.NORTH_NORTH_WEST,
+        BlockFace.NORTH, BlockFace.NORTH_NORTH_EAST, BlockFace.NORTH_EAST, BlockFace.EAST_NORTH_EAST,
+        BlockFace.EAST, BlockFace.EAST_SOUTH_EAST, BlockFace.SOUTH_EAST, BlockFace.SOUTH_SOUTH_EAST
+    };
+
     private BlockState state;
     private Set<String> parsedProperties;
 
@@ -101,6 +108,10 @@ public class CraftBlockData implements BlockData {
         this.parsedProperties = null;
         Enum<?> vanilla = toVanilla(value, (Class) property.getValueClass());
         this.state = this.state.setValue((Property) property, (Comparable) vanilla);
+    }
+
+    public static org.bukkit.Instrument instrumentFromVanilla(net.minecraft.world.level.block.state.properties.NoteBlockInstrument instrument) {
+        return fromVanilla(instrument, org.bukkit.Instrument.class);
     }
 
     private static <A extends Enum<A>> A fromVanilla(Enum<?> vanilla, Class<A> bukkitClass) {
@@ -246,13 +257,39 @@ public class CraftBlockData implements BlockData {
             } catch (IOException ex) {
                 throw new IllegalStateException("Could not read " + resourceName, ex);
             }
+            loadImplementationMap(loader);
             generatedImplementationsLoaded = true;
+        }
+    }
+
+    /** Paper 26.x registers its implementations in CraftBlockData's static initializer; LunarArc reads the same table from a resource. */
+    @SuppressWarnings("unchecked")
+    private static void loadImplementationMap(ClassLoader loader) {
+        try (InputStream input = loader.getResourceAsStream("META-INF/lunararc/paper-block-impl-map.properties")) {
+            if (input == null) return;
+            java.util.Properties map = new java.util.Properties();
+            map.load(new InputStreamReader(input, StandardCharsets.UTF_8));
+            for (String blockName : map.stringPropertyNames()) {
+                try {
+                    Class<?> block = Class.forName(blockName, false, loader);
+                    Class<?> impl = Class.forName(map.getProperty(blockName), true, loader);
+                    GENERATED_IMPLEMENTATIONS.putIfAbsent((Class<? extends Block>) block,
+                            ((Class<? extends CraftBlockData>) impl).getConstructor(BlockState.class));
+                } catch (ReflectiveOperationException | LinkageError ex) {
+                    throw new IllegalStateException("Could not register block data implementation for " + blockName, ex);
+                }
+            }
+        } catch (IOException ex) {
+            throw new IllegalStateException("Could not read paper-block-impl-map.properties", ex);
         }
     }
 
     private static CraftBlockData createConcreteData(BlockState state) {
         ensureGeneratedImplementationsLoaded();
-        Constructor<? extends CraftBlockData> constructor = GENERATED_IMPLEMENTATIONS.get(state.getBlock().getClass());
+        Constructor<? extends CraftBlockData> constructor = null;
+        for (Class<?> type = state.getBlock().getClass(); type != null && type != Object.class && constructor == null; type = type.getSuperclass()) {
+            constructor = GENERATED_IMPLEMENTATIONS.get(type);
+        }
         if (constructor == null) return new CraftBlockData(state);
         try {
             return constructor.newInstance(state);
@@ -578,11 +615,11 @@ public class CraftBlockData implements BlockData {
     @Override
     public @NotNull org.bukkit.block.PistonMoveReaction getPistonMoveReaction() {
         return switch (this.state.getPistonPushReaction()) {
-            case NORMAL -> org.bukkit.block.PistonMoveReaction.MOVE;
-            case DESTROY -> org.bukkit.block.PistonMoveReaction.BREAK;
-            case BLOCK -> org.bukkit.block.PistonMoveReaction.BLOCK;
-            case PUSH_ONLY -> org.bukkit.block.PistonMoveReaction.PUSH_ONLY;
-            case IGNORE -> org.bukkit.block.PistonMoveReaction.IGNORE;
+            case PUSH_PULL -> org.bukkit.block.PistonMoveReaction.MOVE;
+            case POPPED -> org.bukkit.block.PistonMoveReaction.BREAK;
+            case IMMOVEABLE -> org.bukkit.block.PistonMoveReaction.BLOCK;
+            case PUSH -> org.bukkit.block.PistonMoveReaction.PUSH_ONLY;
+            case IGNORE_ENTITY -> org.bukkit.block.PistonMoveReaction.IGNORE;
         };
     }
 
@@ -644,11 +681,10 @@ public class CraftBlockData implements BlockData {
     public java.util.Map<String, String> toStates() {
         java.util.Map<String, String> states = new java.util.HashMap<>();
 
-        for (java.util.Map.Entry<net.minecraft.world.level.block.state.properties.Property<?>, Comparable<?>> entry
-                : this.state.getValues().entrySet()) {
-            net.minecraft.world.level.block.state.properties.Property property = entry.getKey();
-            states.put(property.getName(), property.getName(entry.getValue()));
-        }
+        this.state.getValues().forEach(value -> {
+            net.minecraft.world.level.block.state.properties.Property property = value.property();
+            states.put(property.getName(), property.getName(value.value()));
+        });
 
         return states;
     }

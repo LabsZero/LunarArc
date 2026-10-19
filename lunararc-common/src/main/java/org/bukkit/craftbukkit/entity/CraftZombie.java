@@ -34,11 +34,11 @@ public class CraftZombie extends CraftMonster implements Zombie {
     }
     @Override public void setConversionTime(int time) {
         if (time < 0) zombieBridge().lunararc$stopDrowning();
-        else getHandle().startUnderWaterConversion(time);
+        else getHandle().drowningTracker.startConversion(time);
     }
 
     @Override public boolean isDrowning() { return getHandle().isUnderWaterConverting(); }
-    @Override public void startDrowning(int ticks) { getHandle().startUnderWaterConversion(ticks); }
+    @Override public void startDrowning(int ticks) { getHandle().drowningTracker.startConversion(ticks); }
     @Override public void stopDrowning() { zombieBridge().lunararc$stopDrowning(); }
     @Override public boolean shouldBurnInDay() { return zombieBridge().lunararc$shouldBurnInDay(); }
     @Override public void setShouldBurnInDay(boolean burn) { zombieBridge().lunararc$setShouldBurnInDay(burn); }

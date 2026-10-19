@@ -30,6 +30,17 @@ public abstract class RecipeManagerMixin implements RecipeManagerBridge {
 
     @Unique private FeatureFlagSet lunararc$featureFlags;
 
+    @Unique
+    private static RecipeMap lunararc$build(Collection<RecipeHolder<?>> all) {
+        com.google.common.collect.Multimap<net.minecraft.world.item.crafting.RecipeType<?>, RecipeHolder<?>> byType = com.google.common.collect.ArrayListMultimap.create();
+        java.util.Map<ResourceKey<net.minecraft.world.item.crafting.Recipe<?>>, RecipeHolder<?>> byKey = new java.util.LinkedHashMap<>();
+        for (RecipeHolder<?> holder : all) {
+            byType.put(holder.value().getType(), holder);
+            byKey.put(holder.id(), holder);
+        }
+        return new RecipeMap(byType, byKey);
+    }
+
     @Inject(method = "finalizeRecipeLoading(Lnet/minecraft/world/flag/FeatureFlagSet;)V", at = @At("HEAD"))
     private void lunararc$captureFeatureFlags(FeatureFlagSet enabledFeatures, CallbackInfo ci) {
         this.lunararc$featureFlags = enabledFeatures;
@@ -76,7 +87,7 @@ public abstract class RecipeManagerMixin implements RecipeManagerBridge {
         if (this.recipes.byKey.containsKey(recipe.id())) return false;
         List<RecipeHolder<?>> all = new ArrayList<>(this.recipes.values());
         all.add(recipe);
-        this.recipes = RecipeMap.create(all);
+        this.recipes = lunararc$build(all);
         this.lunararc$refresh();
         return true;
     }
@@ -87,14 +98,14 @@ public abstract class RecipeManagerMixin implements RecipeManagerBridge {
         if (!this.recipes.byKey.containsKey(key)) return false;
         List<RecipeHolder<?>> all = new ArrayList<>(this.recipes.values());
         all.removeIf(holder -> holder.id().equals(key));
-        this.recipes = RecipeMap.create(all);
+        this.recipes = lunararc$build(all);
         this.lunararc$refresh();
         return true;
     }
 
     @Override
     public synchronized void lunararc$clearRecipes() {
-        this.recipes = RecipeMap.create(List.of());
+        this.recipes = lunararc$build(List.of());
         this.lunararc$refresh();
     }
 }

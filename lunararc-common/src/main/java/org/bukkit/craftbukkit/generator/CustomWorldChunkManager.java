@@ -37,10 +37,16 @@ public final class CustomWorldChunkManager extends BiomeSource {
     }
 
     @Override
-    public Holder<net.minecraft.world.level.biome.Biome> getNoiseBiome(int x, int y, int z, Climate.Sampler sampler) {
-        Biome biome = this.provider.getBiome(this.worldInfo, x << 2, y << 2, z << 2);
-        Preconditions.checkNotNull(biome, "BiomeProvider returned null at %s,%s,%s", x << 2, y << 2, z << 2);
-        return CraftBiome.bukkitToMinecraftHolder(biome);
+    public net.minecraft.world.level.biome.BiomeResolver createResolver(final Climate.Sampler sampler) {
+        return (quartX, quartY, quartZ) -> {
+            int x = net.minecraft.core.QuartPos.toBlock(quartX);
+            int y = net.minecraft.core.QuartPos.toBlock(quartY);
+            int z = net.minecraft.core.QuartPos.toBlock(quartZ);
+            Biome biome = this.provider.getBiome(this.worldInfo, x, y, z,
+                    CraftBiomeParameterPoint.createBiomeParameterPoint(sampler, sampler.sample(quartX, quartY, quartZ)));
+            Preconditions.checkNotNull(biome, "BiomeProvider returned null at %s,%s,%s", x, y, z);
+            return CraftBiome.bukkitToMinecraftHolder(biome);
+        };
     }
 
     @Override protected Stream<Holder<net.minecraft.world.level.biome.Biome>> collectPossibleBiomes() {

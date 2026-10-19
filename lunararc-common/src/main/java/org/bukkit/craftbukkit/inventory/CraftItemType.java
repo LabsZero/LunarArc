@@ -49,6 +49,10 @@ public final class CraftItemType<M extends ItemMeta> implements ItemType.Typed<M
 
     @Override public Item getHandle() { return this.handle; }
 
+    public static ItemType minecraftHolderToBukkitNew(net.minecraft.core.Holder<Item> holder) {
+        return minecraftToBukkitNew(holder.value());
+    }
+
     public static ItemType minecraftToBukkitNew(Item item) {
         Identifier id = BuiltInRegistries.ITEM.getKey(item);
         return id == null ? null : Registry.ITEM.get(new NamespacedKey(id.getNamespace(), id.getPath()));
@@ -92,19 +96,44 @@ public final class CraftItemType<M extends ItemMeta> implements ItemType.Typed<M
     @Override public short getMaxDurability() { return this.handle.components().getOrDefault(DataComponents.MAX_DAMAGE, 0).shortValue(); }
     @Override public boolean isEdible() { return this.handle.components().has(DataComponents.FOOD); }
     @Override public boolean isRecord() { return this.handle.components().has(DataComponents.JUKEBOX_PLAYABLE); }
-    @Override public boolean isFuel() { return io.lunararcdevs.lunararc.common.mod.server.LunarArcServer.minecraftServer().fuelValues().isFuel(new net.minecraft.world.item.ItemStack(this.handle)); }
-    @Override public boolean isCompostable() { return ComposterBlock.COMPOSTABLES.containsKey(this.handle); }
+    @Override public boolean isFuel() { return this.handle.components().has(net.minecraft.core.component.DataComponents.COOKING_FUEL); }
+    @Override public boolean isCompostable() { return this.handle.components().has(net.minecraft.core.component.DataComponents.COMPOSTABLE); }
 
     @Override
     public float getCompostChance() {
-        Preconditions.checkArgument(this.isCompostable(), "The item type %s is not compostable", this.key);
-        return ComposterBlock.COMPOSTABLES.getFloat(this.handle);
+        net.minecraft.world.item.component.Compostable compostable = this.handle.components().get(net.minecraft.core.component.DataComponents.COMPOSTABLE);
+        Preconditions.checkArgument(compostable != null, "The item type %s is not compostable", this.key);
+        if (compostable.layers() instanceof net.minecraft.world.level.storage.loot.providers.number.ints.ResolvableInt.Reference reference) {
+            net.minecraft.server.MinecraftServer server = io.lunararcdevs.lunararc.common.mod.server.LunarArcServer.minecraftServer();
+            if (server == null) {
+                throw new IllegalArgumentException("Too early to call this method");
+            }
+            net.minecraft.core.Holder.Reference<net.minecraft.world.level.storage.loot.providers.number.ints.ContextIntProvider> provider =
+                    server.reloadableRegistries().lookup().getOrThrow(reference.key());
+            net.minecraft.world.level.storage.loot.providers.number.ints.ConstantValue oneLayerValue = new net.minecraft.world.level.storage.loot.providers.number.ints.ConstantValue(1);
+            if (provider.value().equals(oneLayerValue)) {
+                return 1.0F;
+            }
+            if (provider.value() instanceof net.minecraft.world.level.storage.loot.providers.number.ints.NumberDispatcher dispatcher
+                    && dispatcher.defaultValue().value() instanceof net.minecraft.world.level.storage.loot.providers.number.ints.WeightedListValue(net.minecraft.util.random.WeightedList<net.minecraft.core.Holder<net.minecraft.world.level.storage.loot.providers.number.ints.ContextIntProvider>> distribution)) {
+                int total = 0;
+                int current = 0;
+                for (net.minecraft.util.random.Weighted<net.minecraft.core.Holder<net.minecraft.world.level.storage.loot.providers.number.ints.ContextIntProvider>> weighted : distribution.unwrap()) {
+                    total += weighted.weight();
+                    if (weighted.value().value().equals(oneLayerValue)) {
+                        current = weighted.weight();
+                    }
+                }
+                return (float) current / total;
+            }
+        }
+        return 0.0F;
     }
 
     @Override
     public @Nullable ItemType getCraftingRemainingItem() {
-        net.minecraft.world.item.ItemStack remaining = this.handle.getCraftingRemainder();
-        return remaining.isEmpty() ? null : minecraftToBukkitNew(remaining.getItem());
+        net.minecraft.world.item.ItemStackTemplate remaining = this.handle.getCraftingRemainder();
+        return remaining == null ? null : org.bukkit.craftbukkit.CraftRegistry.minecraftHolderToBukkit(remaining.item(), net.minecraft.core.registries.Registries.ITEM);
     }
 
     @Override public @NotNull Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers() { return this.defaultAttributes(group -> true); }
@@ -168,15 +197,34 @@ public final class CraftItemType<M extends ItemMeta> implements ItemType.Typed<M
         return org.bukkit.craftbukkit.util.CraftMagicNumbers.getItem(material);
     }
 
+    public static net.minecraft.core.Holder<Item> bukkitToMinecraftHolderNew(org.bukkit.inventory.ItemType bukkit) {
+        return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraftHolder(bukkit, net.minecraft.core.registries.Registries.ITEM);
+    }
+
     public static net.minecraft.world.item.Item bukkitToMinecraftNew(org.bukkit.inventory.ItemType bukkit) {
         return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraft(bukkit);
     }
 
     @Override
     public int getBurnDuration() {
-        net.minecraft.world.level.block.entity.FuelValues fuelValues = io.lunararcdevs.lunararc.common.mod.server.LunarArcServer.minecraftServer().fuelValues();
-        net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(this.handle);
-        return fuelValues.isFuel(stack) ? fuelValues.burnDuration(stack) : 0;
+        net.minecraft.world.item.component.CookingFuel cookingFuel = this.handle.components().get(net.minecraft.core.component.DataComponents.COOKING_FUEL);
+        if (cookingFuel == null) {
+            return 0;
+        }
+        if (cookingFuel.burnTime() instanceof net.minecraft.world.level.storage.loot.providers.number.ints.ResolvableInt.Reference burnTime) {
+            net.minecraft.server.MinecraftServer server = io.lunararcdevs.lunararc.common.mod.server.LunarArcServer.minecraftServer();
+            if (server == null) {
+                throw new IllegalArgumentException("Too early to call this method");
+            }
+            net.minecraft.core.Holder.Reference<net.minecraft.world.level.storage.loot.providers.number.ints.ContextIntProvider> provider =
+                    server.reloadableRegistries().lookup().getOrThrow(burnTime.key());
+            net.minecraft.world.level.storage.loot.LootContext fakeContext = new net.minecraft.world.level.storage.loot.LootContext.Builder(
+                    new net.minecraft.world.level.storage.loot.LootParams.Builder(null).create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.EMPTY))
+                    .withOptionalRandomSeed(42L)
+                    .create(java.util.Optional.empty());
+            return provider.value().getInt(fakeContext);
+        }
+        return 0;
     }
 
     @Override

@@ -32,7 +32,7 @@ public final class CraftStructureManager implements StructureManager {
 
     public CraftStructureManager(MinecraftServer server) {
         this.server = Objects.requireNonNull(server, "server");
-        this.handle = server.getStructureManager();
+        this.handle = server.getStructureTemplateManager();
     }
 
     @SuppressWarnings("unchecked")
@@ -132,7 +132,7 @@ public final class CraftStructureManager implements StructureManager {
 
     @Override
     public @NotNull File getStructureFile(@NotNull NamespacedKey structureKey) {
-        return handle.createAndValidatePathToGeneratedStructure(id(structureKey), ".nbt").toFile();
+        return handle.worldTemplates().createAndValidatePathToStructure(id(structureKey), net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager.WORLD_STRUCTURE_LISTER).toFile();
     }
 
     @Override

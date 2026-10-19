@@ -28,7 +28,7 @@ public abstract class BlockAttachedEntityMixin {
     }
 
     @Inject(method = "hurtServer", cancellable = true,
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/decoration/BlockAttachedEntity;kill(Lnet/minecraft/server/level/ServerLevel;)V"))
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/decoration/BlockAttachedEntity;kill(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;)V"))
     private void lunararc$breakOnHurt(net.minecraft.server.level.ServerLevel level, DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         Entity damager = !source.isDirect() && source.getEntity() != null ? source.getEntity() : source.getDirectEntity();
         boolean explosion = source.is(DamageTypeTags.IS_EXPLOSION);
@@ -46,7 +46,8 @@ public abstract class BlockAttachedEntityMixin {
     private boolean lunararc$breakCancelled(RemoveCause cause, Entity damager) {
         if (!(((EntityBridge) this).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Hanging hanging)) return false;
         HangingBreakEvent event = damager != null
-                ? new HangingBreakByEntityEvent(hanging, ((EntityBridge) damager).lunararc$getBukkitEntity(), cause)
+                ? new HangingBreakByEntityEvent(hanging, ((EntityBridge) damager).lunararc$getBukkitEntity(),
+                        new org.bukkit.craftbukkit.damage.CraftDamageSource(damager.damageSources().generic()), cause)
                 : new HangingBreakEvent(hanging, cause);
         org.bukkit.Bukkit.getPluginManager().callEvent(event);
         return ((Entity) (Object) this).isRemoved() || event.isCancelled();

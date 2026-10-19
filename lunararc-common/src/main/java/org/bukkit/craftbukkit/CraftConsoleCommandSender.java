@@ -43,12 +43,6 @@ public class CraftConsoleCommandSender extends org.bukkit.craftbukkit.command.Se
                 .legacySection().serialize(message));
     }
 
-    @SuppressWarnings("deprecation")
-    @Override
-    public void sendMessage(net.kyori.adventure.identity.Identity identity,
-            net.kyori.adventure.text.Component message, net.kyori.adventure.audience.MessageType type) {
-        sendMessage(message);
-    }
 
     private static void writeConsole(String text) {
         if (text == null) {

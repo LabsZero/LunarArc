@@ -25,6 +25,10 @@ public class CraftPlayerProfile implements PlayerProfile, SharedPlayerProfile {
     private final Set<ProfileProperty> properties = new HashSet<>();
     private CraftPlayerTextures textures;
 
+    public CraftPlayerProfile(net.minecraft.server.players.NameAndId nameAndId) {
+        this(nameAndId.id(), nameAndId.name());
+    }
+
     public CraftPlayerProfile(UUID uuid, String name) {
         this.uuid = uuid;
         this.name = name;

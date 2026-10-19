@@ -8,20 +8,20 @@ import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Enderman;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 /** Paper's EndermanEscapeEvent: every teleport an enderman makes to get away can be vetoed. */
-@Mixin(EnderMan.class)
+@Mixin(Enderman.class)
 public abstract class EndermanEscapeEventMixin {
-    @WrapOperation(method = "customServerAiStep", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/monster/EnderMan;teleport()Z"))
-    private boolean lunararc$runaway(EnderMan self, Operation<Boolean> original) {
+    @WrapOperation(method = "customServerAiStep", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/monster/Enderman;teleport()Z"))
+    private boolean lunararc$runaway(Enderman self, Operation<Boolean> original) {
         return lunararc$escape(EndermanEscapeEvent.Reason.RUNAWAY) && original.call(self);
     }
 
-    @WrapOperation(method = "hurtServer", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/monster/EnderMan;teleport()Z"))
-    private boolean lunararc$hurt(EnderMan self, Operation<Boolean> original, ServerLevel level, DamageSource source, float amount) {
+    @WrapOperation(method = "hurtServer", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/monster/Enderman;teleport()Z"))
+    private boolean lunararc$hurt(Enderman self, Operation<Boolean> original, ServerLevel level, DamageSource source, float amount) {
         EndermanEscapeEvent.Reason reason = source.is(DamageTypeTags.IS_DROWNING) ? EndermanEscapeEvent.Reason.DROWN
                 : source.is(DamageTypeTags.IS_PROJECTILE) ? EndermanEscapeEvent.Reason.CRITICAL_HIT : EndermanEscapeEvent.Reason.INDIRECT;
         return lunararc$escape(reason) && original.call(self);

@@ -50,10 +50,6 @@ public final class PluginTransformRegressionTest {
             names.remove(child);
             names.remove(parent);
         }
-        String packetMethod = new LunarArcRemapper().mapRuntimeMethodName(
-                net.minecraft.server.network.ServerGamePacketListenerImpl.class, "b",
-                new Class<?>[]{net.minecraft.network.protocol.Packet.class});
-        if (!packetMethod.equals("send")) throw new AssertionError("1.21.1 packet-send mapping: " + packetMethod);
         var registry = io.lunararcdevs.lunararc.common.mod.LunarArcReflectionBridge.getMethod(
                 net.minecraft.server.dedicated.DedicatedServer.class, "getDefaultRegistryAccess", new Class<?>[0]);
         if (!registry.getName().equals("getMinecraftRegistry") || registry.getReturnType() != net.minecraft.core.RegistryAccess.class) {

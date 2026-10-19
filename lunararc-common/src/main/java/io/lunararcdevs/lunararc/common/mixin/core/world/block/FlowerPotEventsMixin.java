@@ -17,10 +17,10 @@ import org.spongepowered.asm.mixin.injection.At;
 public abstract class FlowerPotEventsMixin {
 
     @WrapOperation(method = "useItemOn", require = 0,
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean lunararc$plant(Level level, BlockPos pos, BlockState state, int flags, Operation<Boolean> original,
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
+    private boolean lunararc$plant(Level level, BlockPos pos, BlockState state, Operation<Boolean> original,
             @Local(argsOnly = true) Player player, @Local(argsOnly = true) ItemStack stack) {
-        if (LunarArcMoreEvents.flowerPot(player, level, pos, stack)) return original.call(level, pos, state, flags);
+        if (LunarArcMoreEvents.flowerPot(player, level, pos, stack)) return original.call(level, pos, state);
         if (!player.hasInfiniteMaterials()) stack.grow(1);
         return false;
     }

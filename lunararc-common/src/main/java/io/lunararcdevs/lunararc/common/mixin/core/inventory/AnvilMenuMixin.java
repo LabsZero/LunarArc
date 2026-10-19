@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+@SuppressWarnings("mixin")
 @Mixin(AnvilMenu.class)
 public abstract class AnvilMenuMixin implements AnvilMenuBridge {
     @Unique private int lunararc$maximumRepairCost = 40;
@@ -24,7 +25,7 @@ public abstract class AnvilMenuMixin implements AnvilMenuBridge {
     @Override public boolean lunararc$bypassesEnchantmentLevelRestriction() { return this.lunararc$bypassEnchantmentLevelRestriction; }
     @Override public void lunararc$setBypassEnchantmentLevelRestriction(boolean value) { this.lunararc$bypassEnchantmentLevelRestriction = value; }
 
-    // NeoForge moves this logic into createResultInternal, handled by AnvilMenuMixin_NeoForge; vanilla and Forge keep it in createResult.
+    // NeoForge moves the cost and enchantment logic into createResultInternal; vanilla and Forge keep it in createResult.
     @ModifyConstant(method = "createResult", constant = @Constant(intValue = 40), require = 0)
     private int lunararc$maximumRepairCostConstant(int original) {
         return this.lunararc$maximumRepairCost;

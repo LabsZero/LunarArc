@@ -83,4 +83,30 @@ public final class CraftPig extends CraftAnimals implements Pig {
 
     @Override public Material getSteerMaterial() { return Material.CARROT_ON_A_STICK; }
     @Override public String toString() { return "CraftPig"; }
+
+    @Override
+    public Pig.SoundVariant getSoundVariant() {
+        return CraftSoundVariant.minecraftHolderToBukkit(this.getHandle().getSoundVariant());
+    }
+
+    @Override
+    public void setSoundVariant(Pig.SoundVariant soundVariant) {
+        com.google.common.base.Preconditions.checkArgument(soundVariant != null, "soundVariant cannot be null");
+        this.getHandle().setSoundVariant(CraftSoundVariant.bukkitToMinecraftHolder(soundVariant));
+    }
+
+    public static class CraftSoundVariant extends io.papermc.paper.registry.HolderableBase<net.minecraft.world.entity.animal.pig.PigSoundVariant> implements Pig.SoundVariant {
+
+        public static Pig.SoundVariant minecraftHolderToBukkit(net.minecraft.core.Holder<net.minecraft.world.entity.animal.pig.PigSoundVariant> minecraft) {
+            return org.bukkit.craftbukkit.CraftRegistry.minecraftHolderToBukkit(minecraft, net.minecraft.core.registries.Registries.PIG_SOUND_VARIANT);
+        }
+
+        public static net.minecraft.core.Holder<net.minecraft.world.entity.animal.pig.PigSoundVariant> bukkitToMinecraftHolder(Pig.SoundVariant bukkit) {
+            return org.bukkit.craftbukkit.CraftRegistry.bukkitToMinecraftHolder(bukkit);
+        }
+
+        public CraftSoundVariant(final net.minecraft.core.Holder<net.minecraft.world.entity.animal.pig.PigSoundVariant> holder) {
+            super(holder);
+        }
+    }
 }

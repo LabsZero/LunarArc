@@ -40,8 +40,8 @@ public final class CraftChunk implements Chunk {
 
     public CraftChunk(LevelChunk chunk, CraftWorld world) {
         this.world = Objects.requireNonNull(world, "world");
-        this.x = chunk.getPos().x;
-        this.z = chunk.getPos().z;
+        this.x = chunk.getPos().x();
+        this.z = chunk.getPos().z();
         this.knownHandle = chunk;
     }
 

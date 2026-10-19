@@ -18,7 +18,7 @@ public final class CraftParticle {
         }
         if (data instanceof org.bukkit.inventory.ItemStack stack) {
             @SuppressWarnings("unchecked") var typed=(net.minecraft.core.particles.ParticleType<net.minecraft.core.particles.ItemParticleOption>) type;
-            return new net.minecraft.core.particles.ItemParticleOption(typed, org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(stack));
+            return new net.minecraft.core.particles.ItemParticleOption(typed, net.minecraft.world.item.ItemStackTemplate.fromNonEmptyStack(org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(stack)));
         }
         if (data instanceof org.bukkit.Particle.DustOptions dust) {
             org.bukkit.Color c=dust.getColor();

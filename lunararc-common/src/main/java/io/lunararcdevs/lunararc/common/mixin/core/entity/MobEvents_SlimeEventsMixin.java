@@ -11,19 +11,20 @@ import net.minecraft.world.entity.LightningBolt;
 import net.minecraft.world.entity.animal.pig.Pig;
 import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.world.entity.animal.equine.AbstractHorse;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(Slime.class)
+@Mixin(net.minecraft.world.entity.monster.cubemob.AbstractCubeMob.class)
 public abstract class MobEvents_SlimeEventsMixin {
     @WrapOperation(method = "remove", require = 0,
-            at = @At(value = "INVOKE", ordinal = 0, target = "Lnet/minecraft/util/RandomSource;nextInt(I)I"))
-    private int lunararc$split(RandomSource random, int bound, Operation<Integer> original) {
-        int count = 2 + original.call(random, bound);
-        return LunarArcMoreEvents.slimeSplit((Slime) (Object) this, count) - 2;
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/monster/cubemob/AbstractCubeMob;getSplitCount()I"))
+    private int lunararc$split(net.minecraft.world.entity.monster.cubemob.AbstractCubeMob cube, Operation<Integer> original) {
+        int count = original.call(cube);
+        if (!(cube instanceof Slime slime)) return count;
+        return LunarArcMoreEvents.slimeSplit(slime, count);
     }
 }

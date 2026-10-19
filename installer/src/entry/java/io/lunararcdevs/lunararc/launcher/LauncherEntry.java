@@ -4,8 +4,8 @@ import java.lang.reflect.InvocationTargetException;
 
 public final class LauncherEntry {
 
-    private static final int MIN_JAVA = 21;
-    private static final int MIN_CLASS_VERSION = 65;
+    private static final int MIN_JAVA = 25;
+    private static final int MIN_CLASS_VERSION = 69;
     private static final int MAX_TESTED_JAVA = 25;
     private static final int MAX_TESTED_CLASS_VERSION = 69;
 

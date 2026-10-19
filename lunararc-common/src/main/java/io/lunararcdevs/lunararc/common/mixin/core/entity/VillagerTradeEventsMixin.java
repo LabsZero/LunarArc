@@ -44,10 +44,15 @@ public abstract class VillagerTradeEventsMixin {
         if (this.lunararc$tradeEvent == null || this.lunararc$tradeEvent.isRewardingExp()) original.call(villager, offer);
     }
 
-    @WrapOperation(method = "addOffersFromItemListings", require = 0,
+    // 26.x builds villager offers in static helpers driven by a LootContext; the villager is the context's THIS_ENTITY.
+    @WrapOperation(method = {"addOffersFromItemListings", "addOffersFromItemListingsWithoutDuplicates"}, require = 0,
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/item/trading/MerchantOffers;add(Ljava/lang/Object;)Z"))
-    private boolean lunararc$acquire(MerchantOffers offers, Object offer, Operation<Boolean> original) {
-        MerchantOffer acquired = LunarArcPaperEvents.acquire((AbstractVillager) (Object) this, (MerchantOffer) offer);
+    private static boolean lunararc$acquire(MerchantOffers offers, Object offer, Operation<Boolean> original,
+            net.minecraft.world.level.storage.loot.LootContext context) {
+        net.minecraft.world.entity.Entity entity = context.getOptional(
+                net.minecraft.world.level.storage.loot.parameters.LootContextParams.THIS_ENTITY);
+        if (!(entity instanceof AbstractVillager villager)) return original.call(offers, offer);
+        MerchantOffer acquired = LunarArcPaperEvents.acquire(villager, (MerchantOffer) offer);
         return acquired != null && original.call(offers, acquired);
     }
 }

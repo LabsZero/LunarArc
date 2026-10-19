@@ -22,7 +22,7 @@ public abstract class MobEvents_PigEventsMixin {
     private Mob lunararc$zap(Pig pig, EntityType<?> type, ConversionParams params, ConversionParams.AfterConversion<?> after,
             Operation<Mob> original, @Local(argsOnly = true) ServerLevel level, @Local(argsOnly = true) LightningBolt bolt) {
         // PigZapEvent needs the piglin; build an unspawned stand-in. A null result makes vanilla take its normal lightning path.
-        ZombifiedPiglin preview = EntityType.ZOMBIFIED_PIGLIN.create(level, EntitySpawnReason.CONVERSION);
+        ZombifiedPiglin preview = net.minecraft.world.entity.EntityTypes.ZOMBIFIED_PIGLIN.create(level, EntitySpawnReason.CONVERSION);
         if (preview != null) {
             preview.snapTo(pig.getX(), pig.getY(), pig.getZ(), pig.getYRot(), pig.getXRot());
             if (!LunarArcMoreEvents.pigZap(pig, bolt, preview)) return null;

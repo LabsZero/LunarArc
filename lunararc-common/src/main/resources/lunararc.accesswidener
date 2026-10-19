@@ -1,4 +1,4 @@
-accessWidener v2 named
+accessWidener v2 official
 
 # ServerLoginPacketListenerImpl - Velocity forwarding hooks
 accessible field net/minecraft/server/network/ServerLoginPacketListenerImpl state Lnet/minecraft/server/network/ServerLoginPacketListenerImpl$State;
@@ -45,19 +45,19 @@ accessible method net/minecraft/world/entity/monster/warden/WardenSpawnTracker i
 # Runtime Fix 04 - direct NMS access for mapping-sensitive Paper compatibility surfaces.
 # These replace fragile Mixin accessors/invokers and are converted to ATs on Forge/NeoForge.
 accessible method net/minecraft/world/entity/LivingEntity getExperienceReward (Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;)I
-accessible field net/minecraft/world/level/dimension/end/EndDragonFight level Lnet/minecraft/server/level/ServerLevel;
-accessible field net/minecraft/world/level/dimension/end/EndDragonFight dragonUUID Ljava/util/UUID;
-accessible field net/minecraft/world/level/dimension/end/EndDragonFight dragonEvent Lnet/minecraft/server/level/ServerBossEvent;
-accessible field net/minecraft/world/level/dimension/end/EndDragonFight portalLocation Lnet/minecraft/core/BlockPos;
-accessible field net/minecraft/world/level/dimension/end/EndDragonFight previouslyKilled Z
-mutable field net/minecraft/world/level/dimension/end/EndDragonFight previouslyKilled Z
-accessible field net/minecraft/world/level/dimension/end/EndDragonFight respawnStage Lnet/minecraft/world/level/dimension/end/DragonRespawnAnimation;
-accessible field net/minecraft/world/level/dimension/end/EndDragonFight gateways Lit/unimi/dsi/fastutil/objects/ObjectArrayList;
-accessible field net/minecraft/world/level/dimension/end/EndDragonFight respawnCrystals Ljava/util/List;
-accessible method net/minecraft/world/level/dimension/end/EndDragonFight findExitPortal ()Lnet/minecraft/world/level/block/state/pattern/BlockPattern$BlockPatternMatch;
-accessible method net/minecraft/world/level/dimension/end/EndDragonFight spawnExitPortal (Z)V
-accessible method net/minecraft/world/level/dimension/end/EndDragonFight spawnNewGateway (Lnet/minecraft/core/BlockPos;)V
-accessible method net/minecraft/world/level/dimension/end/EndDragonFight respawnDragon (Ljava/util/List;)V
+accessible field net/minecraft/world/level/dimension/end/EnderDragonFight level Lnet/minecraft/server/level/ServerLevel;
+accessible field net/minecraft/world/level/dimension/end/EnderDragonFight dragonUUID Ljava/util/UUID;
+accessible field net/minecraft/world/level/dimension/end/EnderDragonFight dragonEvent Lnet/minecraft/server/level/ServerBossEvent;
+accessible field net/minecraft/world/level/dimension/end/EnderDragonFight exitPortalLocation Lnet/minecraft/core/BlockPos;
+accessible field net/minecraft/world/level/dimension/end/EnderDragonFight hasPreviouslyKilledDragon Z
+mutable field net/minecraft/world/level/dimension/end/EnderDragonFight hasPreviouslyKilledDragon Z
+accessible field net/minecraft/world/level/dimension/end/EnderDragonFight respawnStage Lnet/minecraft/world/level/dimension/end/DragonRespawnStage;
+accessible field net/minecraft/world/level/dimension/end/EnderDragonFight gateways Ljava/util/List;
+accessible field net/minecraft/world/level/dimension/end/EnderDragonFight respawnCrystals Ljava/util/List;
+accessible method net/minecraft/world/level/dimension/end/EnderDragonFight findExitPortal ()Lnet/minecraft/world/level/block/state/pattern/BlockPattern$BlockPatternMatch;
+accessible method net/minecraft/world/level/dimension/end/EnderDragonFight spawnExitPortal (Z)V
+accessible method net/minecraft/world/level/dimension/end/EnderDragonFight spawnNewGateway (Lnet/minecraft/core/BlockPos;)V
+accessible method net/minecraft/world/level/dimension/end/EnderDragonFight respawnDragon (Ljava/util/List;)V
 accessible field net/minecraft/world/effect/MobEffect attributeModifiers Ljava/util/Map;
 # Compile repair 33 - package-private vanilla effect target used by a narrow Mixin.
 accessible class net/minecraft/world/effect/HungerMobEffect
@@ -131,7 +131,7 @@ accessible method net/minecraft/world/entity/animal/bee/Bee setHasStung (Z)V
 accessible method net/minecraft/world/entity/animal/bee/Bee setHasNectar (Z)V
 accessible method net/minecraft/advancements/Advancement decorateName (Lnet/minecraft/advancements/DisplayInfo;)Lnet/minecraft/network/chat/Component;
 accessible method net/minecraft/world/entity/ai/attributes/AttributeSupplier getAttributeInstance (Lnet/minecraft/core/Holder;)Lnet/minecraft/world/entity/ai/attributes/AttributeInstance;
-accessible method net/minecraft/world/level/dimension/end/EndDragonFight setRespawnStage (Lnet/minecraft/world/level/dimension/end/DragonRespawnAnimation;)V
+accessible method net/minecraft/world/level/dimension/end/EnderDragonFight setRespawnStage (Lnet/minecraft/world/level/dimension/end/DragonRespawnStage;)V
 accessible method net/minecraft/world/entity/projectile/arrow/AbstractArrow setPierceLevel (B)V
 accessible field net/minecraft/world/entity/animal/Animal loveCause Lnet/minecraft/world/entity/EntityReference;
 mutable field net/minecraft/world/entity/animal/Animal loveCause Lnet/minecraft/world/entity/EntityReference;
@@ -146,7 +146,6 @@ accessible method net/minecraft/world/entity/animal/feline/Cat isRelaxStateOne (
 accessible method net/minecraft/world/entity/animal/equine/Horse setVariantAndMarkings (Lnet/minecraft/world/entity/animal/equine/Variant;Lnet/minecraft/world/entity/animal/equine/Markings;)V
 accessible method net/minecraft/world/entity/npc/villager/Villager setUnhappy ()V
 accessible method net/minecraft/world/entity/animal/wolf/Wolf setCollarColor (Lnet/minecraft/world/item/DyeColor;)V
-accessible method net/minecraft/world/entity/monster/zombie/Zombie startUnderWaterConversion (I)V
 accessible method net/minecraft/server/players/StoredUserEntry getUser ()Ljava/lang/Object;
 accessible field net/minecraft/network/chat/numbers/StyledFormat style Lnet/minecraft/network/chat/Style;
 accessible field net/minecraft/network/chat/numbers/FixedFormat value Lnet/minecraft/network/chat/Component;
@@ -158,7 +157,6 @@ accessible method net/minecraft/world/damagesource/DamageSource <init> (Lnet/min
 accessible class net/minecraft/world/effect/MobEffect$AttributeTemplate
 accessible field net/minecraft/server/ServerAdvancementManager advancements Ljava/util/Map;
 mutable field net/minecraft/server/ServerAdvancementManager advancements Ljava/util/Map;
-accessible field net/minecraft/world/entity/Entity ENTITY_COUNTER Ljava/util/concurrent/atomic/AtomicInteger;
 accessible field net/minecraft/server/level/ServerChunkCache chunkMap Lnet/minecraft/server/level/ChunkMap;
 accessible field net/minecraft/server/level/ChunkMap visibleChunkMap Lit/unimi/dsi/fastutil/longs/Long2ObjectLinkedOpenHashMap;
 
@@ -450,7 +448,6 @@ accessible field net/minecraft/network/protocol/game/ServerboundMovePlayerPacket
 accessible method net/minecraft/network/syncher/SynchedEntityData getItem (Lnet/minecraft/network/syncher/EntityDataAccessor;)Lnet/minecraft/network/syncher/SynchedEntityData$DataItem;
 accessible field net/minecraft/resources/RegistryOps lookupProvider Lnet/minecraft/resources/RegistryOps$RegistryInfoLookup;
 accessible class net/minecraft/resources/RegistryOps$HolderLookupAdapter
-accessible method net/minecraft/server/Main forceUpgrade (Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;Lnet/minecraft/world/level/storage/WorldData;Lcom/mojang/datafixers/DataFixer;ZLjava/util/function/BooleanSupplier;Lnet/minecraft/core/RegistryAccess;Z)V
 accessible field net/minecraft/server/MinecraftServer LOGGER Lorg/slf4j/Logger;
 accessible method net/minecraft/server/MinecraftServer doRunTask (Lnet/minecraft/server/TickTask;)V
 accessible field net/minecraft/server/MinecraftServer fixerUpper Lcom/mojang/datafixers/DataFixer;
@@ -637,18 +634,15 @@ accessible method net/minecraft/world/entity/monster/Creeper explodeCreeper ()V
 accessible field net/minecraft/world/entity/monster/Creeper explosionRadius I
 accessible field net/minecraft/world/entity/monster/Creeper maxSwell I
 accessible field net/minecraft/world/entity/monster/Creeper swell I
-accessible method net/minecraft/world/entity/monster/EnderMan teleport ()Z
-accessible method net/minecraft/world/entity/monster/EnderMan teleportTowards (Lnet/minecraft/world/entity/Entity;)Z
+accessible method net/minecraft/world/entity/monster/Enderman teleport ()Z
+accessible method net/minecraft/world/entity/monster/Enderman teleportTowards (Lnet/minecraft/world/entity/Entity;)Z
 accessible field net/minecraft/world/entity/monster/Guardian randomStrollGoal Lnet/minecraft/world/entity/ai/goal/RandomStrollGoal;
 accessible field net/minecraft/world/entity/monster/Vex owner Lnet/minecraft/world/entity/EntityReference;
 accessible class net/minecraft/world/entity/monster/illager/SpellcasterIllager$IllagerSpell
 accessible field net/minecraft/world/entity/monster/illager/Vindicator DOOR_BREAKING_PREDICATE Ljava/util/function/Predicate;
 accessible field net/minecraft/world/entity/monster/skeleton/Skeleton DATA_STRAY_CONVERSION_ID Lnet/minecraft/network/syncher/EntityDataAccessor;
-accessible field net/minecraft/world/entity/monster/skeleton/Skeleton conversionTime I
-accessible field net/minecraft/world/entity/monster/skeleton/Skeleton inPowderSnowTime I
 accessible field net/minecraft/world/entity/monster/zombie/Zombie DATA_DROWNED_CONVERSION_ID Lnet/minecraft/network/syncher/EntityDataAccessor;
 accessible field net/minecraft/world/entity/monster/zombie/Zombie DOOR_BREAKING_PREDICATE Ljava/util/function/Predicate;
-accessible field net/minecraft/world/entity/monster/zombie/Zombie conversionTime I
 accessible method net/minecraft/world/entity/monster/zombie/Zombie isSunSensitive ()Z
 accessible method net/minecraft/world/entity/monster/zombie/ZombieVillager startConverting (Ljava/util/UUID;I)V
 accessible field net/minecraft/world/entity/npc/villager/Villager numberOfRestocksToday I
@@ -739,7 +733,6 @@ accessible field net/minecraft/world/inventory/Slot slot I
 accessible field net/minecraft/world/item/AdventureModePredicate predicates Ljava/util/List;
 accessible field net/minecraft/world/item/BucketItem content Lnet/minecraft/world/level/material/Fluid;
 accessible field net/minecraft/world/item/CrossbowItem FIREWORK_POWER F
-accessible method net/minecraft/world/item/DebugStickItem handleInteraction (Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;ZLnet/minecraft/world/item/ItemStack;)Z
 accessible field net/minecraft/world/item/ItemCooldowns cooldowns Ljava/util/Map;
 accessible field net/minecraft/world/item/ItemCooldowns tickCount I
 accessible class net/minecraft/world/item/ItemCooldowns$CooldownInstance
@@ -747,9 +740,7 @@ accessible field net/minecraft/world/item/ItemStackLinkedSet TYPE_AND_TAG Lit/un
 accessible field net/minecraft/world/item/JukeboxSongPlayer song Lnet/minecraft/core/Holder;
 accessible method net/minecraft/world/item/MapItem createNewSavedData (Lnet/minecraft/server/level/ServerLevel;IIIZZLnet/minecraft/resources/ResourceKey;)Lnet/minecraft/world/level/saveddata/maps/MapId;
 accessible field net/minecraft/world/item/StandingAndWallBlockItem wallBlock Lnet/minecraft/world/level/block/Block;
-accessible method net/minecraft/world/item/component/BundleContents$Mutable getMaxAmountToAdd (Lnet/minecraft/world/item/ItemStack;)I
 accessible field net/minecraft/world/item/component/ItemContainerContents MAX_SIZE I
-accessible field net/minecraft/world/item/component/ItemContainerContents items Lnet/minecraft/core/NonNullList;
 accessible method net/minecraft/world/item/component/ResolvableProfile unpack ()Lcom/mojang/datafixers/util/Either;
 accessible class net/minecraft/world/item/component/ResolvableProfile$Partial
 accessible field net/minecraft/world/item/component/ResolvableProfile$Partial MAP_CODEC Lcom/mojang/serialization/MapCodec;
@@ -779,8 +770,8 @@ accessible class net/minecraft/world/level/block/ComposterBlock$EmptyContainer
 accessible class net/minecraft/world/level/block/ComposterBlock$InputContainer
 accessible class net/minecraft/world/level/block/ComposterBlock$OutputContainer
 accessible field net/minecraft/world/level/block/FireBlock igniteOdds Lit/unimi/dsi/fastutil/objects/Object2IntMap;
-accessible method net/minecraft/world/level/block/RedStoneWireBlock canSurvive (Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelReader;Lnet/minecraft/core/BlockPos;)Z
-accessible field net/minecraft/world/level/block/RedStoneWireBlock shouldSignal Z
+accessible method net/minecraft/world/level/block/RedstoneWireBlock canSurvive (Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelReader;Lnet/minecraft/core/BlockPos;)Z
+accessible field net/minecraft/world/level/block/RedstoneWireBlock shouldSignal Z
 accessible method net/minecraft/world/level/block/SelectableSlotContainer getSection (FI)I
 accessible field net/minecraft/world/level/block/SoundType breakSound Lnet/minecraft/sounds/SoundEvent;
 accessible field net/minecraft/world/level/block/SoundType hitSound Lnet/minecraft/sounds/SoundEvent;
@@ -789,7 +780,6 @@ accessible field net/minecraft/world/level/block/entity/AbstractFurnaceBlockEnti
 accessible method net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity getTotalCookTime (Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;)I
 accessible field net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity litTimeRemaining I
 accessible field net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity recipesUsed Lit/unimi/dsi/fastutil/objects/Reference2IntOpenHashMap;
-accessible field net/minecraft/world/level/block/entity/BedBlockEntity color Lnet/minecraft/world/item/DyeColor;
 accessible field net/minecraft/world/level/block/entity/BellBlockEntity resonationTicks I
 accessible method net/minecraft/world/level/block/entity/BlockEntity saveId (Lnet/minecraft/world/level/storage/ValueOutput;)V
 accessible field net/minecraft/world/level/block/entity/BlockEntityType validBlocks Ljava/util/Set;
@@ -817,7 +807,6 @@ accessible method net/minecraft/world/level/block/entity/vault/VaultSharedData g
 accessible method net/minecraft/world/level/block/state/BlockBehaviour getMenuProvider (Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/MenuProvider;
 accessible field net/minecraft/world/level/block/state/BlockBehaviour hasCollision Z
 accessible field net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase destroySpeed F
-accessible field net/minecraft/world/level/block/state/StateHolder PROPERTY_ENTRY_TO_STRING_FUNCTION Ljava/util/function/Function;
 accessible field net/minecraft/world/level/block/state/properties/IntegerProperty max I
 accessible field net/minecraft/world/level/block/state/properties/IntegerProperty min I
 accessible field net/minecraft/world/level/chunk/ChunkAccess blockEntities Ljava/util/Map;
@@ -830,33 +819,14 @@ accessible method net/minecraft/world/level/chunk/status/ChunkStatusTasks postLo
 accessible field net/minecraft/world/level/chunk/storage/EntityStorage entityDeserializerQueue Lnet/minecraft/util/thread/ConsecutiveExecutor;
 accessible field net/minecraft/world/level/chunk/storage/EntityStorage level Lnet/minecraft/server/level/ServerLevel;
 accessible field net/minecraft/world/level/chunk/storage/RegionFileStorage regionCache Lit/unimi/dsi/fastutil/longs/Long2ObjectLinkedOpenHashMap;
-accessible field net/minecraft/world/level/dimension/end/EndDragonFight GATEWAY_COUNT I
+accessible field net/minecraft/world/level/dimension/end/EnderDragonFight GATEWAY_COUNT I
 accessible method net/minecraft/world/level/entity/PersistentEntitySectionManager ensureChunkQueuedForLoad (J)V
 accessible field net/minecraft/world/level/entity/PersistentEntitySectionManager permanentStorage Lnet/minecraft/world/level/entity/EntityPersistentStorage;
 accessible field net/minecraft/world/level/gamerules/GameRules rules Lnet/minecraft/world/level/gamerules/GameRuleMap;
 accessible field net/minecraft/world/level/levelgen/NoiseBasedChunkGenerator settings Lnet/minecraft/core/Holder;
-accessible class net/minecraft/world/level/levelgen/SurfaceRules$Condition
-accessible class net/minecraft/world/level/levelgen/SurfaceRules$Context
-accessible field net/minecraft/world/level/levelgen/SurfaceRules$Context blockX I
-accessible field net/minecraft/world/level/levelgen/SurfaceRules$Context blockY I
-accessible field net/minecraft/world/level/levelgen/SurfaceRules$Context blockZ I
-accessible field net/minecraft/world/level/levelgen/SurfaceRules$Context context Lnet/minecraft/world/level/levelgen/WorldGenerationContext;
-accessible field net/minecraft/world/level/levelgen/SurfaceRules$Context randomState Lnet/minecraft/world/level/levelgen/RandomState;
-accessible class net/minecraft/world/level/levelgen/SurfaceRules$LazyCondition
-accessible class net/minecraft/world/level/levelgen/SurfaceRules$LazyYCondition
-accessible class net/minecraft/world/level/levelgen/SurfaceRules$SurfaceRule
-accessible class net/minecraft/world/level/levelgen/SurfaceRules$VerticalGradientConditionSource
 accessible field net/minecraft/world/level/levelgen/structure/StructurePiece SHAPE_CHECK_BLOCKS Ljava/util/Set;
-accessible field net/minecraft/world/level/levelgen/structure/placement/StructurePlacement exclusionZone Ljava/util/Optional;
-accessible field net/minecraft/world/level/levelgen/structure/placement/StructurePlacement frequency F
-accessible field net/minecraft/world/level/levelgen/structure/placement/StructurePlacement frequencyReductionMethod Lnet/minecraft/world/level/levelgen/structure/placement/StructurePlacement$FrequencyReductionMethod;
-accessible field net/minecraft/world/level/levelgen/structure/placement/StructurePlacement locateOffset Lnet/minecraft/core/Vec3i;
-accessible field net/minecraft/world/level/levelgen/structure/placement/StructurePlacement salt I
 accessible field net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate entityInfoList Ljava/util/List;
 accessible field net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate palettes Ljava/util/List;
-accessible method net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager loadFromGenerated (Lnet/minecraft/resources/Identifier;)Ljava/util/Optional;
-accessible method net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager loadFromResource (Lnet/minecraft/resources/Identifier;)Ljava/util/Optional;
-accessible method net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager readStructure (Ljava/io/InputStream;)Lnet/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate;
 accessible field net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager structureRepository Ljava/util/Map;
 accessible field net/minecraft/world/level/material/MapColor MATERIAL_COLORS [Lnet/minecraft/world/level/material/MapColor;
 accessible field net/minecraft/world/level/pathfinder/Path nodes Ljava/util/List;
@@ -865,12 +835,8 @@ accessible field net/minecraft/world/level/saveddata/maps/MapItemSavedData carri
 accessible field net/minecraft/world/level/saveddata/maps/MapItemSavedData carriedByPlayers Ljava/util/Map;
 accessible method net/minecraft/world/level/saveddata/maps/MapItemSavedData setColorsDirty (II)V
 accessible method net/minecraft/world/level/saveddata/maps/MapItemSavedData setDecorationsDirty ()V
-accessible field net/minecraft/world/level/storage/DimensionDataStorage cache Ljava/util/Map;
-accessible field net/minecraft/world/level/storage/LevelStorageSource baseDir Ljava/nio/file/Path;
 accessible field net/minecraft/world/level/storage/TagValueInput input Lnet/minecraft/nbt/CompoundTag;
 accessible field net/minecraft/world/scores/Objective displayName Lnet/minecraft/network/chat/Component;
-accessible field net/minecraft/server/MinecraftServer potionBrewing Lnet/minecraft/world/item/alchemy/PotionBrewing;
-mutable field net/minecraft/server/MinecraftServer potionBrewing Lnet/minecraft/world/item/alchemy/PotionBrewing;
 accessible field net/minecraft/server/MinecraftServer storageSource Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;
 mutable field net/minecraft/server/MinecraftServer storageSource Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;
 accessible field net/minecraft/server/ReloadableServerResources commands Lnet/minecraft/commands/Commands;
@@ -899,8 +865,6 @@ accessible field net/minecraft/world/item/trading/MerchantOffer rewardExp Z
 mutable field net/minecraft/world/item/trading/MerchantOffer rewardExp Z
 accessible field net/minecraft/world/item/trading/MerchantOffer xp I
 mutable field net/minecraft/world/item/trading/MerchantOffer xp I
-accessible field net/minecraft/world/level/LevelSettings hardcore Z
-mutable field net/minecraft/world/level/LevelSettings hardcore Z
 accessible field net/minecraft/world/level/LevelSettings levelName Ljava/lang/String;
 mutable field net/minecraft/world/level/LevelSettings levelName Ljava/lang/String;
 accessible field net/minecraft/world/level/block/ChestBlock MENU_PROVIDER_COMBINER Lnet/minecraft/world/level/block/DoubleBlockCombiner$Combiner;
@@ -933,8 +897,6 @@ mutable field net/minecraft/server/MinecraftServer connection Lnet/minecraft/ser
 mutable field net/minecraft/server/MinecraftServer levels Ljava/util/Map;
 accessible field net/minecraft/world/item/ItemStack components Lnet/minecraft/core/component/PatchedDataComponentMap;
 mutable field net/minecraft/world/item/ItemStack components Lnet/minecraft/core/component/PatchedDataComponentMap;
-accessible field net/minecraft/world/item/ItemStack item Lnet/minecraft/world/item/Item;
-mutable field net/minecraft/world/item/ItemStack item Lnet/minecraft/world/item/Item;
 accessible field net/minecraft/world/level/block/entity/BeehiveBlockEntity stored Ljava/util/List;
 mutable field net/minecraft/world/level/block/entity/BeehiveBlockEntity stored Ljava/util/List;
 accessible method net/minecraft/nbt/ListTag <init> (Ljava/util/List;)V
@@ -967,3 +929,38 @@ accessible field net/minecraft/server/network/ServerLoginPacketListenerImpl tran
 
 # Minecart behaviours read the cart they belong to
 accessible field net/minecraft/world/entity/vehicle/minecart/MinecartBehavior minecart Lnet/minecraft/world/entity/vehicle/minecart/AbstractMinecart;
+# 26.x: Bukkit Entity#getAirDrag()
+accessible method net/minecraft/world/entity/Entity getAirDrag ()F
+accessible method net/minecraft/world/entity/projectile/ThrowableProjectile getAirDrag ()F
+# 26.x: Bukkit Cow/Pig/Chicken/Cat SoundVariant
+accessible method net/minecraft/world/entity/animal/cow/Cow getSoundVariant ()Lnet/minecraft/core/Holder;
+accessible method net/minecraft/world/entity/animal/cow/Cow setSoundVariant (Lnet/minecraft/core/Holder;)V
+accessible method net/minecraft/world/entity/animal/pig/Pig getSoundVariant ()Lnet/minecraft/core/Holder;
+accessible method net/minecraft/world/entity/animal/pig/Pig setSoundVariant (Lnet/minecraft/core/Holder;)V
+accessible method net/minecraft/world/entity/animal/chicken/Chicken getSoundVariant ()Lnet/minecraft/core/Holder;
+accessible method net/minecraft/world/entity/animal/chicken/Chicken setSoundVariant (Lnet/minecraft/core/Holder;)V
+accessible method net/minecraft/world/entity/animal/feline/Cat getSoundVariant ()Lnet/minecraft/core/Holder;
+accessible method net/minecraft/world/entity/animal/feline/Cat setSoundVariant (Lnet/minecraft/core/Holder;)V
+# 26.x: Bukkit Entity#getDefaultGravity()
+accessible method net/minecraft/world/entity/Entity getDefaultGravity ()D
+# 26.x: Player#resetFlyingTicks()
+accessible field net/minecraft/server/network/ServerGamePacketListenerImpl aboveGroundTickCount I
+mutable field net/minecraft/server/network/ServerGamePacketListenerImpl aboveGroundTickCount I
+accessible field net/minecraft/server/network/ServerGamePacketListenerImpl aboveGroundVehicleTickCount I
+mutable field net/minecraft/server/network/ServerGamePacketListenerImpl aboveGroundVehicleTickCount I
+# 26.x: conversion trackers (Skeleton freezing / Zombie drowning)
+accessible field net/minecraft/world/entity/monster/skeleton/Skeleton freezingTracker Lnet/minecraft/world/entity/ConversionTracker;
+accessible field net/minecraft/world/entity/monster/zombie/Zombie drowningTracker Lnet/minecraft/world/entity/ConversionTracker;
+accessible field net/minecraft/world/entity/ConversionTracker conversionTime I
+mutable field net/minecraft/world/entity/ConversionTracker conversionTime I
+accessible field net/minecraft/world/entity/ConversionTracker afflictionTime I
+mutable field net/minecraft/world/entity/ConversionTracker afflictionTime I
+accessible method net/minecraft/world/entity/ConversionTracker setConverting (Z)V
+# 26.x: brewing inventory, recipe map construction, translatable argument codec
+accessible method net/minecraft/world/level/block/entity/BrewingStandBlockEntity getItems ()Lnet/minecraft/core/NonNullList;
+accessible method net/minecraft/world/item/crafting/RecipeMap <init> (Lcom/google/common/collect/Multimap;Ljava/util/Map;)V
+accessible field net/minecraft/network/chat/contents/TranslatableContents PRIMITIVE_ARG_CODEC Lcom/mojang/serialization/Codec;
+# 26.x: structure template loading
+accessible field net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager resourceManagerSource Lnet/minecraft/world/level/levelgen/structure/templatesystem/loader/ResourceManagerTemplateSource;
+accessible method net/minecraft/world/level/levelgen/structure/templatesystem/loader/TemplateSource readStructure (Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate;
+accessible method net/minecraft/world/level/levelgen/structure/templatesystem/loader/TemplateSource readStructure (Ljava/io/InputStream;)Lnet/minecraft/nbt/CompoundTag;

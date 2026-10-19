@@ -23,8 +23,8 @@ public final class LunarArcAdvancementEvents {
         if (bukkitPlayer == null) return null;
 
         net.kyori.adventure.text.Component message = advancement.value().display()
-                .filter(DisplayInfo::shouldAnnounceChat)
-                .map(info -> LunarArcComponentPipeline.toAdventure(info.getType().createAnnouncement(advancement, player)))
+                .filter(DisplayInfo::announceToChat)
+                .map(info -> LunarArcComponentPipeline.toAdventure(info.type().createAnnouncement(advancement, player)))
                 .orElse(null);
         PlayerAdvancementDoneEvent event =
                 new PlayerAdvancementDoneEvent(bukkitPlayer, new CraftAdvancement(advancement), message);

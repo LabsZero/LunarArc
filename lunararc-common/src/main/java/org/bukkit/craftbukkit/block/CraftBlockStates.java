@@ -3,7 +3,6 @@ package org.bukkit.craftbukkit.block;
 import com.google.common.base.Preconditions;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.BiFunction;
 import org.jetbrains.annotations.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
@@ -33,19 +32,25 @@ public final class CraftBlockStates {
             World world,
             BlockPos blockPosition,
             net.minecraft.world.level.block.state.BlockState blockData,
-            BlockEntity tileEntity
+            BlockEntity tileEntity,
+            boolean useSnapshot
         );
+    }
+
+    @FunctionalInterface
+    private interface BlockEntityStateConstructor<T, B> {
+        B create(World world, T blockEntity, boolean useSnapshot);
     }
 
     private static final class BlockEntityStateFactory<T extends BlockEntity, B extends CraftBlockEntityState<T>>
         extends BlockStateFactory<B> {
 
-        private final BiFunction<World, T, B> blockStateConstructor;
+        private final BlockEntityStateConstructor<T, B> blockStateConstructor;
         private final BlockEntityType<? extends T> tileEntityConstructor;
 
         private BlockEntityStateFactory(
             Class<B> blockStateType,
-            BiFunction<World, T, B> blockStateConstructor,
+            BlockEntityStateConstructor<T, B> blockStateConstructor,
             BlockEntityType<? extends T> tileEntityConstructor
         ) {
             super(blockStateType);
@@ -58,7 +63,8 @@ public final class CraftBlockStates {
             World world,
             BlockPos blockPosition,
             net.minecraft.world.level.block.state.BlockState blockData,
-            BlockEntity tileEntity
+            BlockEntity tileEntity,
+            boolean useSnapshot
         ) {
             if (world != null) {
                 Preconditions.checkState(
@@ -69,7 +75,7 @@ public final class CraftBlockStates {
             } else if (tileEntity == null) {
                 tileEntity = createTileEntity(blockPosition, blockData);
             }
-            return createBlockState(world, (T) tileEntity);
+            return createBlockState(world, (T) tileEntity, useSnapshot);
         }
 
         private T createTileEntity(
@@ -79,8 +85,8 @@ public final class CraftBlockStates {
             return this.tileEntityConstructor.create(blockPosition, blockData);
         }
 
-        private B createBlockState(World world, T tileEntity) {
-            return this.blockStateConstructor.apply(world, tileEntity);
+        private B createBlockState(World world, T tileEntity, boolean useSnapshot) {
+            return this.blockStateConstructor.create(world, tileEntity, useSnapshot);
         }
     }
 
@@ -99,10 +105,11 @@ public final class CraftBlockStates {
                 World world,
                 BlockPos blockPosition,
                 net.minecraft.world.level.block.state.BlockState blockData,
-                BlockEntity tileEntity
+                BlockEntity tileEntity,
+                boolean useSnapshot
             ) {
                 Preconditions.checkState(tileEntity != null, "Missing block entity for hybrid TileState at %s", blockPosition);
-                return new CraftBlockEntityState(world, tileEntity);
+                return new CraftBlockEntityState(world, tileEntity, useSnapshot);
             }
         };
 
@@ -112,7 +119,8 @@ public final class CraftBlockStates {
             World world,
             BlockPos blockPosition,
             net.minecraft.world.level.block.state.BlockState blockData,
-            BlockEntity tileEntity
+            BlockEntity tileEntity,
+            boolean useSnapshot
         ) {
             Preconditions.checkState(
                 tileEntity == null,
@@ -124,52 +132,57 @@ public final class CraftBlockStates {
     };
 
     static {
-        // Paper 1.21.1 block-entity state mappings. The registered factories are also
+        // Paper 26.3 block-entity state mappings. The registered factories are also
         // keyed by BlockEntityType so modded block entities can fall back correctly.
-        register(BlockEntityType.SIGN, CraftSign.class, CraftSign::new);
-        register(BlockEntityType.HANGING_SIGN, CraftHangingSign.class, CraftHangingSign::new);
-        register(BlockEntityType.SKULL, CraftSkull.class, CraftSkull::new);
-        register(BlockEntityType.COMMAND_BLOCK, CraftCommandBlock.class, CraftCommandBlock::new);
-        register(BlockEntityType.BANNER, CraftBanner.class, CraftBanner::new);
-        register(BlockEntityType.SHULKER_BOX, CraftShulkerBox.class, CraftShulkerBox::new);
-        register(BlockEntityType.BED, CraftBed.class, CraftBed::new);
-        register(BlockEntityType.BEEHIVE, CraftBeehive.class, CraftBeehive::new);
-        register(BlockEntityType.CAMPFIRE, CraftCampfire.class, CraftCampfire::new);
-        register(BlockEntityType.BARREL, CraftBarrel.class, CraftBarrel::new);
-        register(BlockEntityType.BEACON, CraftBeacon.class, CraftBeacon::new);
-        register(BlockEntityType.BELL, CraftBell.class, CraftBell::new);
-        register(BlockEntityType.BLAST_FURNACE, CraftBlastFurnace.class, CraftBlastFurnace::new);
-        register(BlockEntityType.BREWING_STAND, CraftBrewingStand.class, CraftBrewingStand::new);
-        register(BlockEntityType.CHEST, CraftChest.class, CraftChest::new);
-        register(BlockEntityType.CHISELED_BOOKSHELF, CraftChiseledBookshelf.class, CraftChiseledBookshelf::new);
-        register(BlockEntityType.COMPARATOR, CraftComparator.class, CraftComparator::new);
-        register(BlockEntityType.CONDUIT, CraftConduit.class, CraftConduit::new);
-        register(BlockEntityType.DAYLIGHT_DETECTOR, CraftDaylightDetector.class, CraftDaylightDetector::new);
-        register(BlockEntityType.DECORATED_POT, CraftDecoratedPot.class, CraftDecoratedPot::new);
-        register(BlockEntityType.DISPENSER, CraftDispenser.class, CraftDispenser::new);
-        register(BlockEntityType.DROPPER, CraftDropper.class, CraftDropper::new);
-        register(BlockEntityType.ENCHANTING_TABLE, CraftEnchantingTable.class, CraftEnchantingTable::new);
-        register(BlockEntityType.ENDER_CHEST, CraftEnderChest.class, CraftEnderChest::new);
-        register(BlockEntityType.END_GATEWAY, CraftEndGateway.class, CraftEndGateway::new);
-        register(BlockEntityType.END_PORTAL, CraftEndPortal.class, CraftEndPortal::new);
-        register(BlockEntityType.FURNACE, CraftFurnaceFurnace.class, CraftFurnaceFurnace::new);
-        register(BlockEntityType.HOPPER, CraftHopper.class, CraftHopper::new);
-        register(BlockEntityType.JIGSAW, CraftJigsaw.class, CraftJigsaw::new);
-        register(BlockEntityType.JUKEBOX, CraftJukebox.class, CraftJukebox::new);
-        register(BlockEntityType.LECTERN, CraftLectern.class, CraftLectern::new);
-        register(BlockEntityType.PISTON, CraftMovingPiston.class, CraftMovingPiston::new);
-        register(BlockEntityType.SCULK_CATALYST, CraftSculkCatalyst.class, CraftSculkCatalyst::new);
-        register(BlockEntityType.SCULK_SENSOR, CraftSculkSensor.class, CraftSculkSensor::new);
-        register(BlockEntityType.SCULK_SHRIEKER, CraftSculkShrieker.class, CraftSculkShrieker::new);
-        register(BlockEntityType.CALIBRATED_SCULK_SENSOR, CraftCalibratedSculkSensor.class, CraftCalibratedSculkSensor::new);
-        register(BlockEntityType.SMOKER, CraftSmoker.class, CraftSmoker::new);
-        register(BlockEntityType.MOB_SPAWNER, CraftCreatureSpawner.class, CraftCreatureSpawner::new);
-        register(BlockEntityType.STRUCTURE_BLOCK, CraftStructureBlock.class, CraftStructureBlock::new);
-        register(BlockEntityType.BRUSHABLE_BLOCK, CraftBrushableBlock.class, CraftBrushableBlock::new);
-        register(BlockEntityType.TRAPPED_CHEST, CraftChest.class, CraftChest::new);
-        register(BlockEntityType.CRAFTER, CraftCrafter.class, CraftCrafter::new);
-        register(BlockEntityType.TRIAL_SPAWNER, CraftTrialSpawner.class, CraftTrialSpawner::new);
-        register(BlockEntityType.VAULT, CraftVault.class, CraftVault::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.BANNER, CraftBanner.class, CraftBanner::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.BARREL, CraftBarrel.class, CraftBarrel::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.BEACON, CraftBeacon.class, CraftBeacon::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.BEEHIVE, CraftBeehive.class, CraftBeehive::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.BELL, CraftBell.class, CraftBell::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.BLAST_FURNACE, CraftBlastFurnace.class, CraftBlastFurnace::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.BREWING_STAND, CraftBrewingStand.class, CraftBrewingStand::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.BRUSHABLE_BLOCK, CraftBrushableBlock.class, CraftBrushableBlock::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.CALIBRATED_SCULK_SENSOR, CraftCalibratedSculkSensor.class, CraftCalibratedSculkSensor::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.CAMPFIRE, CraftCampfire.class, CraftCampfire::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.CHEST, CraftChest.class, CraftChest::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.CHISELED_BOOKSHELF, CraftChiseledBookshelf.class, CraftChiseledBookshelf::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.COMMAND_BLOCK, CraftCommandBlock.class, CraftCommandBlock::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.COMPARATOR, CraftComparator.class, CraftComparator::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.CONDUIT, CraftConduit.class, CraftConduit::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.COPPER_GOLEM_STATUE, CraftCopperGolemStatue.class, CraftCopperGolemStatue::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.CRAFTER, CraftCrafter.class, CraftCrafter::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.CREAKING_HEART, CraftCreakingHeart.class, CraftCreakingHeart::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.DAYLIGHT_DETECTOR, CraftDaylightDetector.class, CraftDaylightDetector::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.DECORATED_POT, CraftDecoratedPot.class, CraftDecoratedPot::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.DISPENSER, CraftDispenser.class, CraftDispenser::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.DROPPER, CraftDropper.class, CraftDropper::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.ENCHANTING_TABLE, CraftEnchantingTable.class, CraftEnchantingTable::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.END_GATEWAY, CraftEndGateway.class, CraftEndGateway::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.END_PORTAL, CraftEndPortal.class, CraftEndPortal::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.ENDER_CHEST, CraftEnderChest.class, CraftEnderChest::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.FURNACE, CraftFurnaceFurnace.class, CraftFurnaceFurnace::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.HANGING_SIGN, CraftHangingSign.class, CraftHangingSign::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.HOPPER, CraftHopper.class, CraftHopper::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.JIGSAW, CraftJigsaw.class, CraftJigsaw::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.JUKEBOX, CraftJukebox.class, CraftJukebox::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.LECTERN, CraftLectern.class, CraftLectern::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.MOB_SPAWNER, CraftCreatureSpawner.class, CraftCreatureSpawner::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.PISTON, CraftMovingPiston.class, CraftMovingPiston::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.POTENT_SULFUR, CraftPotentSulfur.class, CraftPotentSulfur::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.SCULK_CATALYST, CraftSculkCatalyst.class, CraftSculkCatalyst::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.SCULK_SENSOR, CraftSculkSensor.class, CraftSculkSensor::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.SCULK_SHRIEKER, CraftSculkShrieker.class, CraftSculkShrieker::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.SHELF, CraftShelf.class, CraftShelf::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.SHULKER_BOX, CraftShulkerBox.class, CraftShulkerBox::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.SIGN, CraftSign.class, CraftSign::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.SKULL, CraftSkull.class, CraftSkull::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.SMOKER, CraftSmoker.class, CraftSmoker::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.STRUCTURE_BLOCK, CraftStructureBlock.class, CraftStructureBlock::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.TEST_BLOCK, CraftTestBlock.class, CraftTestBlock::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.TEST_INSTANCE_BLOCK, CraftTestInstanceBlock.class, CraftTestInstanceBlock::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.TRAPPED_CHEST, CraftChest.class, CraftChest::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.TRIAL_SPAWNER, CraftTrialSpawner.class, CraftTrialSpawner::new);
+        register(net.minecraft.world.level.block.entity.BlockEntityTypes.VAULT, CraftVault.class, CraftVault::new);
     }
 
     private static void register(Material blockType, BlockStateFactory<?> factory) {
@@ -183,7 +196,7 @@ public final class CraftBlockStates {
     private static <T extends BlockEntity, B extends CraftBlockEntityState<T>> void register(
         BlockEntityType<? extends T> blockEntityType,
         Class<B> blockStateType,
-        BiFunction<World, T, B> blockStateConstructor
+        BlockEntityStateConstructor<T, B> blockStateConstructor
     ) {
         BlockStateFactory<B> factory = new BlockEntityStateFactory<>(blockStateType, blockStateConstructor, blockEntityType);
 
@@ -221,7 +234,7 @@ public final class CraftBlockStates {
         return getFactory(material).blockStateType;
     }
 
-    public static BlockEntity createNewTileEntity(Material material) {
+    public static BlockEntity createNewBlockEntity(Material material) {
         BlockStateFactory<?> factory = getFactory(material);
         if (factory instanceof BlockEntityStateFactory) {
             return ((BlockEntityStateFactory<?, ?>) factory).createTileEntity(
@@ -230,6 +243,12 @@ public final class CraftBlockStates {
             );
         }
         return null;
+    }
+
+    /** @deprecated pre-26 name, use {@link #createNewBlockEntity(Material)}. */
+    @Deprecated
+    public static BlockEntity createNewTileEntity(Material material) {
+        return createNewBlockEntity(material);
     }
 
     public static Class<? extends CraftBlockState> getBlockStateType(BlockEntityType<?> blockEntityType) {
@@ -249,15 +268,9 @@ public final class CraftBlockStates {
         net.minecraft.world.level.block.state.BlockState blockData = craftBlock.getHandle().getBlockState(blockPosition);
         BlockEntity tileEntity = craftBlock.getHandle().getBlockEntity(blockPosition);
 
-        boolean previous = CraftBlockEntityState.DISABLE_SNAPSHOT;
-        CraftBlockEntityState.DISABLE_SNAPSHOT = !useSnapshot;
-        try {
-            CraftBlockState blockState = getBlockState(world, blockPosition, blockData, tileEntity);
-            blockState.setWorldHandle(craftBlock.getHandle());
-            return blockState;
-        } finally {
-            CraftBlockEntityState.DISABLE_SNAPSHOT = previous;
-        }
+        CraftBlockState blockState = getBlockState(world, blockPosition, blockData, tileEntity, useSnapshot);
+        blockState.setWorldHandle(craftBlock.getHandle());
+        return blockState;
     }
 
     @Deprecated
@@ -312,19 +325,35 @@ public final class CraftBlockStates {
         net.minecraft.world.level.block.state.BlockState blockData,
         BlockEntity tileEntity
     ) {
+        return getBlockState(world, blockPosition, blockData, tileEntity, true);
+    }
+
+    public static CraftBlockState getBlockState(
+        World world,
+        BlockPos blockPosition,
+        net.minecraft.world.level.block.state.BlockState blockData,
+        BlockEntity tileEntity,
+        boolean useSnapshot
+    ) {
         Material material = CraftMagicNumbers.getMaterial(blockData.getBlock());
         BlockStateFactory<?> factory;
 
-        if (world != null && tileEntity == null && isTileEntityOptional(material)) {
+        if (world != null && tileEntity == null && isBlockEntityOptional(material)) {
             factory = DEFAULT_FACTORY;
         } else {
             factory = getFactory(material, tileEntity != null ? tileEntity.getType() : null);
         }
-        return factory.createBlockState(world, blockPosition, blockData, tileEntity);
+        return factory.createBlockState(world, blockPosition, blockData, tileEntity, useSnapshot);
     }
 
-    public static boolean isTileEntityOptional(Material material) {
+    public static boolean isBlockEntityOptional(Material material) {
         return material == Material.MOVING_PISTON;
+    }
+
+    /** @deprecated pre-26 name, use {@link #isBlockEntityOptional(Material)}. */
+    @Deprecated
+    public static boolean isTileEntityOptional(Material material) {
+        return isBlockEntityOptional(material);
     }
 
     public static CraftBlockState getBlockState(LevelAccessor world, BlockPos pos) {

@@ -28,15 +28,15 @@ public final class QuiltPluginMessaging {
 
         synchronized (QuiltPluginMessaging.class) {
             if (CHANNELS.containsKey(id) || BLOCKED.contains(id)) return;
-            if (PayloadTypeRegistryImpl.PLAY_C2S.get(id) != null || PayloadTypeRegistryImpl.PLAY_S2C.get(id) != null) {
+            if (PayloadTypeRegistryImpl.SERVERBOUND_PLAY.get(id) != null || PayloadTypeRegistryImpl.CLIENTBOUND_PLAY.get(id) != null) {
                 BLOCKED.add(id);
                 LunarArcPluginChannelPolicy.reportNativeConflict("Quilt", id, "payload");
                 return;
             }
 
             CustomPacketPayload.Type<LunarArcRawPayload> type = new CustomPacketPayload.Type<>(id);
-            PayloadTypeRegistry.playC2S().register(type, LunarArcRawPayload.codec(id, LunarArcRawPayload.MAX_BYTES));
-            PayloadTypeRegistry.playS2C().register(type, LunarArcRawPayload.codec(id, LunarArcRawPayload.MAX_BYTES));
+            PayloadTypeRegistry.serverboundPlay().register(type, LunarArcRawPayload.codec(id, LunarArcRawPayload.MAX_BYTES));
+            PayloadTypeRegistry.clientboundPlay().register(type, LunarArcRawPayload.codec(id, LunarArcRawPayload.MAX_BYTES));
             ServerPlayNetworking.registerGlobalReceiver(type, (payload, context) -> {
                 byte[] data = payload.data();
                 org.bukkit.entity.Entity entity = ((EntityBridge) (Object) context.player()).lunararc$getBukkitEntity();

@@ -31,9 +31,9 @@ public abstract class ServerPlayerActionsMixin {
         ((LivingEntityBridge) this).lunararc$pushHealReason(org.bukkit.event.entity.EntityRegainHealthEvent.RegainReason.REGEN, false);
     }
 
-    @Inject(method = "drop(Lnet/minecraft/world/item/ItemStack;ZZ)Lnet/minecraft/world/entity/item/ItemEntity;", require = 1,
+    @Inject(method = "drop(Lnet/minecraft/world/item/ItemStack;ZLnet/minecraft/util/Prediction;)Lnet/minecraft/world/entity/item/ItemEntity;", require = 1,
             at = @At("RETURN"), cancellable = true)
-    private void lunararc$onDrop(ItemStack droppedStack, boolean randomizeMotion, boolean traceItem, CallbackInfoReturnable<ItemEntity> cir) {
+    private void lunararc$onDrop(ItemStack droppedStack, boolean traceItem, net.minecraft.util.Prediction prediction, CallbackInfoReturnable<ItemEntity> cir) {
         ItemEntity dropped = cir.getReturnValue();
         if (dropped == null || droppedStack.isEmpty()) return;
         ServerPlayer serverPlayer = (ServerPlayer) (Object) this;

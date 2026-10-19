@@ -279,7 +279,7 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
 
     private void captureUnhandledComponents(ItemStack nms) {
         try {
-            for (Map.Entry<net.minecraft.core.component.DataComponentType<?>, Optional<?>> entry : nms.getComponentsPatch().entrySet()) {
+            for (Map.Entry<net.minecraft.core.component.DataComponentType<?>, Optional<?>> entry : ComponentPatches.entries(nms.getComponentsPatch()).entrySet()) {
                 if (!HANDLED_COMPONENT_TYPES.contains(entry.getKey())) {
                     unhandledDataComponents.put(entry.getKey(), entry.getValue());
                 }
@@ -392,7 +392,7 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
         net.minecraft.world.item.enchantment.Enchantable enchantable = nms.get(DataComponents.ENCHANTABLE);
         if (enchantable != null) enchantableValue = enchantable.value();
         net.minecraft.world.item.component.DamageResistant resistant = nms.get(DataComponents.DAMAGE_RESISTANT);
-        if (resistant != null) damageResistant = resistant.types();
+        if (resistant != null) damageResistant = resistant.types().unwrapKey().orElse(null);
         net.minecraft.world.item.component.UseCooldown cooldown = nms.get(DataComponents.USE_COOLDOWN);
         if (cooldown != null) useCooldown = new org.bukkit.craftbukkit.inventory.components.CraftUseCooldownComponent(cooldown);
         net.minecraft.world.item.equipment.Equippable equip = nms.get(DataComponents.EQUIPPABLE);
@@ -404,7 +404,8 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
     private void writeNewComponents(ItemStack nms) {
         if (itemModel != null) nms.set(DataComponents.ITEM_MODEL, net.minecraft.resources.Identifier.parse(itemModel.toString()));
         if (enchantableValue != null) nms.set(DataComponents.ENCHANTABLE, new net.minecraft.world.item.enchantment.Enchantable(enchantableValue));
-        if (damageResistant != null) nms.set(DataComponents.DAMAGE_RESISTANT, new net.minecraft.world.item.component.DamageResistant(damageResistant));
+        if (damageResistant != null) nms.set(DataComponents.DAMAGE_RESISTANT, new net.minecraft.world.item.component.DamageResistant(
+                    org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(net.minecraft.core.registries.Registries.DAMAGE_TYPE).getOrThrow(damageResistant)));
         if (useCooldown != null) nms.set(DataComponents.USE_COOLDOWN, useCooldown.getHandle());
         if (equippable != null) nms.set(DataComponents.EQUIPPABLE, equippable.getHandle());
         if (customModelDataComponent != null) nms.set(DataComponents.CUSTOM_MODEL_DATA, customModelDataComponent.getHandle());
@@ -831,7 +832,7 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
             net.minecraft.core.Registry<net.minecraft.core.component.DataComponentType<?>> componentRegistry =
                     registryAccess.lookupOrThrow(net.minecraft.core.registries.Registries.DATA_COMPONENT_TYPE);
             StringJoiner out = new StringJoiner(",", "[", "]");
-            for (Map.Entry<net.minecraft.core.component.DataComponentType<?>, Optional<?>> entry : patch.entrySet()) {
+            for (Map.Entry<net.minecraft.core.component.DataComponentType<?>, Optional<?>> entry : ComponentPatches.entries(patch).entrySet()) {
                 String key = componentRegistry.getResourceKey(entry.getKey()).orElseThrow().identifier().toString();
                 if (entry.getValue().isEmpty()) {
                     out.add("!" + key);
@@ -872,7 +873,7 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
     @Override public @NotNull org.bukkit.inventory.meta.components.JukeboxPlayableComponent getJukeboxPlayable() {
         if (jukeboxPlayable instanceof CraftJukeboxComponent c) return new CraftJukeboxComponent(c);
         return new CraftJukeboxComponent(new net.minecraft.world.item.JukeboxPlayable(
-                new net.minecraft.world.item.EitherHolder<>(net.minecraft.world.item.JukeboxSongs.THIRTEEN)));
+                org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(net.minecraft.core.registries.Registries.JUKEBOX_SONG).getOrThrow(net.minecraft.world.item.JukeboxSongs.THIRTEEN)));
     }
     @Override public void setJukeboxPlayable(@Nullable org.bukkit.inventory.meta.components.JukeboxPlayableComponent value) {
         this.jukeboxPlayable = value == null ? null : new CraftJukeboxComponent((CraftJukeboxComponent) value);
@@ -1145,6 +1146,23 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
     @Override public void setDamageResistant(@Nullable org.bukkit.Tag<org.bukkit.damage.DamageType> tag) {
         this.damageResistant = tag == null ? null : net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.DAMAGE_TYPE,
                 net.minecraft.resources.Identifier.fromNamespaceAndPath(tag.getKey().getNamespace(), tag.getKey().getKey()));
+    }
+
+    @Override public io.papermc.paper.registry.set.@Nullable RegistryKeySet<org.bukkit.damage.DamageType> getDamageResistantTypes() {
+        if (damageResistant == null) return null;
+        net.minecraft.core.Registry<net.minecraft.world.damagesource.DamageType> registry =
+                org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(net.minecraft.core.registries.Registries.DAMAGE_TYPE);
+        return io.papermc.paper.registry.set.PaperRegistrySets.convertToApi(io.papermc.paper.registry.RegistryKey.DAMAGE_TYPE, registry.getOrThrow(damageResistant));
+    }
+    @Override public void setDamageResistantTypes(io.papermc.paper.registry.set.@Nullable RegistryKeySet<org.bukkit.damage.DamageType> types) {
+        if (types == null) {
+            this.damageResistant = null;
+        } else if (io.papermc.paper.registry.set.PaperRegistrySets.convertToNms(net.minecraft.core.registries.Registries.DAMAGE_TYPE,
+                io.papermc.paper.registry.data.util.Conversions.global().lookup(), types) instanceof net.minecraft.core.HolderSet.Named<net.minecraft.world.damagesource.DamageType> named) {
+            this.damageResistant = named.key();
+        } else {
+            throw new IllegalArgumentException("Damage resistance can only be set from a damage type tag, not a custom list of damage types");
+        }
     }
 
     @Override public boolean hasUseCooldown() { return useCooldown != null; }

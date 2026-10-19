@@ -27,7 +27,7 @@ public abstract class VehicleEntityMixin {
                 ? null
                 : ((EntityBridge) source.getEntity()).lunararc$getBukkitEntity();
         org.bukkit.event.vehicle.VehicleDamageEvent event =
-                new org.bukkit.event.vehicle.VehicleDamageEvent(bukkitVehicle, attacker, amount);
+                new org.bukkit.event.vehicle.VehicleDamageEvent(bukkitVehicle, new org.bukkit.craftbukkit.damage.CraftDamageSource(source), attacker, amount);
         org.bukkit.Bukkit.getPluginManager().callEvent(event);
         if (event.isCancelled()) {
             return false;
@@ -61,7 +61,7 @@ public abstract class VehicleEntityMixin {
                 ? null
                 : ((EntityBridge) source.getEntity()).lunararc$getBukkitEntity();
         org.bukkit.event.vehicle.VehicleDestroyEvent event =
-                new org.bukkit.event.vehicle.VehicleDestroyEvent(bukkitVehicle, attacker);
+                new org.bukkit.event.vehicle.VehicleDestroyEvent(bukkitVehicle, new org.bukkit.craftbukkit.damage.CraftDamageSource(source), attacker);
         org.bukkit.Bukkit.getPluginManager().callEvent(event);
         return !event.isCancelled();
     }

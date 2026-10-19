@@ -21,13 +21,12 @@ public final class CraftEffect {
     public static <T> int getDataValue(Effect effect, T data, RegistryAccess registryAccess) {
         Objects.requireNonNull(effect, "effect");
         return switch (effect) {
-            case PARTICLES_SCULK_CHARGE,
+            case SCULK_CHARGE,
                     TRIAL_SPAWNER_DETECT_PLAYER,
                     BEE_GROWTH,
                     TURTLE_EGG_PLACEMENT,
                     SMASH_ATTACK,
                     TRIAL_SPAWNER_DETECT_PLAYER_OMINOUS,
-                    VILLAGER_PLANT_GROW,
                     BONE_MEAL_USE -> ((Number) data).intValue();
             case POTION_BREAK, INSTANT_POTION_BREAK -> ((Color) data).asRGB();
             case RECORD_PLAY -> {
@@ -38,12 +37,12 @@ public final class CraftEffect {
                 net.minecraft.world.item.Item item = org.bukkit.craftbukkit.util.CraftMagicNumbers.getItem(material);
                 yield item == null ? 0 : net.minecraft.world.item.Item.getId(item);
             }
-            case SHOOT_WHITE_SMOKE -> {
+            case WHITE_SMOKE_SHOOT -> {
                 BlockFace face = (BlockFace) data;
                 if (!face.isCartesian()) throw new IllegalArgumentException(face + " isn't cartesian");
                 yield to3dData(face);
             }
-            case SMOKE -> switch ((BlockFace) data) {
+            case SMOKE_SHOOT -> switch ((BlockFace) data) {
                 case UP -> 1;
                 case NORTH -> 2;
                 case SOUTH -> 3;
@@ -64,7 +63,7 @@ public final class CraftEffect {
                 }
                 throw new IllegalArgumentException("STEP_SOUND requires Material or CraftBlockData");
             }
-            case PARTICLES_AND_SOUND_BRUSH_BLOCK_COMPLETE -> {
+            case BRUSH_BLOCK_COMPLETE -> {
                 if (!(data instanceof org.bukkit.craftbukkit.block.data.CraftBlockData blockData)) {
                     throw new IllegalArgumentException("PARTICLES_AND_SOUND_BRUSH_BLOCK_COMPLETE requires CraftBlockData");
                 }
