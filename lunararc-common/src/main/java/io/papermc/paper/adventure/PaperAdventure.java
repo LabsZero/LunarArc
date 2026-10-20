@@ -438,12 +438,16 @@ public final class PaperAdventure {
 
     // Colors
 
-    public static @NotNull TextColor asAdventure(final net.minecraft.world.scores.TeamColor teamColor) {
+    public static @NotNull net.kyori.adventure.text.format.NamedTextColor asAdventure(final net.minecraft.world.scores.TeamColor teamColor) {
         final net.kyori.adventure.text.format.NamedTextColor color = net.kyori.adventure.text.format.NamedTextColor.NAMES.value(teamColor.getSerializedName());
         if (color == null) {
             throw new IllegalArgumentException("Not a valid color");
         }
         return color;
+    }
+
+    public static @Nullable net.minecraft.world.scores.TeamColor asVanilla(final net.kyori.adventure.text.format.NamedTextColor color) {
+        return net.minecraft.world.scores.TeamColor.byName(color.toString());
     }
 
     public static @Nullable net.minecraft.world.scores.TeamColor asVanilla(final TextColor color) {

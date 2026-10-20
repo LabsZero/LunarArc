@@ -50,6 +50,35 @@ public final class WorldEditRegenPatchRegressionTest {
                 throw new AssertionError("WorldEdit v26_3 //regen ServerLevel constructor was not redirected to the LunarArc regen level");
             }
         }
+        checkSetValueRedirect();
         System.out.println("WorldEdit regen patch regressions passed");
+    }
+
+    private static void checkSetValueRedirect() {
+        String name = "com/sk89q/worldedit/bukkit/adapter/impl/v26_3/PaperweightAdapter";
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, name, null, "java/lang/Object", null);
+        var method = writer.visitMethod(Opcodes.ACC_PUBLIC, "apply", "()V", null, null);
+        method.visitCode();
+        method.visitInsn(Opcodes.ACONST_NULL);
+        method.visitInsn(Opcodes.ACONST_NULL);
+        method.visitInsn(Opcodes.ACONST_NULL);
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "net/minecraft/world/level/block/state/BlockState", "setValue",
+                "(Lnet/minecraft/world/level/block/state/properties/Property;Ljava/lang/Comparable;)Ljava/lang/Object;", false);
+        method.visitInsn(Opcodes.POP);
+        method.visitInsn(Opcodes.RETURN);
+        method.visitMaxs(0, 1);
+        method.visitEnd();
+        writer.visitEnd();
+        ClassNode node = new ClassNode();
+        new ClassReader(writer.toByteArray()).accept(node, 0);
+        new LunarArcIntegratedPatcher().handleClass(node, null);
+        boolean redirected = false;
+        for (MethodNode m : node.methods) {
+            for (AbstractInsnNode insn : m.instructions) {
+                if (insn instanceof MethodInsnNode call && "worldEditSetValue".equals(call.name)) redirected = true;
+            }
+        }
+        if (!redirected) throw new AssertionError("WorldEdit setValue was not routed through the property-name helper");
     }
 }
