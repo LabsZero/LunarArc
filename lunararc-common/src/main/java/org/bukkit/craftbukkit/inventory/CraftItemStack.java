@@ -402,7 +402,8 @@ public class CraftItemStack extends ItemStack {
         if (CraftItemFactory.isLeather(type)) return new CraftMetaColorableArmor(handle);
         if (type.name().endsWith("_HELMET") || type.name().endsWith("_CHESTPLATE") || type.name().endsWith("_LEGGINGS") || type.name().endsWith("_BOOTS")) return new CraftMetaArmor(handle);
         if (type.name().endsWith("_BANNER")) return new CraftMetaBanner(handle);
-        return new CraftItemMeta(handle);
+        CraftItemMeta extra = CraftItemFactory.extraMeta(type, handle);
+        return extra != null ? extra : new CraftItemMeta(handle);
     }
 
 

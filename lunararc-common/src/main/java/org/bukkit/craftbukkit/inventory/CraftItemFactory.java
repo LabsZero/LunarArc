@@ -70,7 +70,18 @@ public final class CraftItemFactory implements ItemFactory {
         if (isLeather(material)) return new CraftMetaColorableArmor(prototype);
         if (isArmor(material)) return new CraftMetaArmor(prototype);
         if (material.name().endsWith("_BANNER")) return new CraftMetaBanner(prototype);
-        return new CraftMetaItem(prototype);
+        CraftItemMeta extra = extraMeta(material, prototype);
+        return extra != null ? extra : new CraftMetaItem(prototype);
+    }
+
+    /** Metas for materials whose API sub-interface LunarArc implements through a single data component. */
+    static @Nullable CraftItemMeta extraMeta(Material material, net.minecraft.world.item.ItemStack nms) {
+        if (material == Material.ENCHANTED_BOOK) return new CraftMetaEnchantedBook(nms);
+        if (material == Material.CROSSBOW) return new CraftMetaCrossbow(nms);
+        if (material == Material.COMPASS || material == Material.RECOVERY_COMPASS) return new CraftMetaCompass(nms);
+        if (material == Material.OMINOUS_BOTTLE) return new CraftMetaOminousBottle(nms);
+        if (material.name().endsWith("BUNDLE")) return new CraftMetaBundle(nms);
+        return null;
     }
 
     @Override
@@ -92,6 +103,11 @@ public final class CraftItemFactory implements ItemFactory {
         if (meta instanceof CraftMetaColorableArmor) return isLeather(material);
         if (meta instanceof CraftMetaArmor) return isArmor(material);
         if (meta instanceof CraftMetaBanner) return material.name().endsWith("_BANNER");
+        if (meta instanceof CraftMetaEnchantedBook) return material == Material.ENCHANTED_BOOK;
+        if (meta instanceof CraftMetaCrossbow) return material == Material.CROSSBOW;
+        if (meta instanceof CraftMetaCompass) return material == Material.COMPASS || material == Material.RECOVERY_COMPASS;
+        if (meta instanceof CraftMetaOminousBottle) return material == Material.OMINOUS_BOTTLE;
+        if (meta instanceof CraftMetaBundle) return material.name().endsWith("BUNDLE");
         return true;
     }
 
@@ -132,7 +148,8 @@ public final class CraftItemFactory implements ItemFactory {
         if (isLeather(material)) return new CraftMetaColorableArmor(temp);
         if (isArmor(material)) return new CraftMetaArmor(temp);
         if (material.name().endsWith("_BANNER")) return new CraftMetaBanner(temp);
-        return new CraftItemMeta(temp);
+        CraftItemMeta extra = extraMeta(material, temp);
+        return extra != null ? extra : new CraftItemMeta(temp);
     }
 
     static boolean isLeather(Material material) {

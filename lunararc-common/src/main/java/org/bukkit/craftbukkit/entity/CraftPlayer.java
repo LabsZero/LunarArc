@@ -574,6 +574,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
     }
 
     @Override
+    public java.net.SocketAddress getSocketAddress() {
+        if (getHandle().connection == null) return null;
+        return getHandle().connection.getRemoteAddress();
+    }
+
+    @Override
     public InetSocketAddress getAddress() {
         if (getHandle().connection == null) return null;
         return (InetSocketAddress) getHandle().connection.getRemoteAddress();

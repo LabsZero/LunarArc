@@ -16,7 +16,7 @@ LunarArc also provides native [EssentialsX](https://essentialsx.net) integration
 
 |        Release        |  Forge  | NeoForge |  Fabric  |  QuiltMC  | Status |                                                                                                                                              Build                                                           
 |:--------------------:|:-------:|:--------:|:--------:|:--------:|:------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| Outland Bound (26.3) | 66.0.13 | 26.3.0.94 |  0.20.0  |  0.30.1  | ACTIVE | [![26.3 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=OutlandBound&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3AOutlandBound) |
+| Outland Bound (26.3) | 66.0.13 | 26.3.0.95 |  0.20.1  |  0.30.1  | ACTIVE | [![26.3 Status](https://img.shields.io/github/actions/workflow/status/LunarArcDevs/LunarArc/gradle.yml?branch=OutlandBound&style=for-the-badge)](https://github.com/LunarArcDevs/LunarArc/actions?query=branch%3AOutlandBound) |
 
 ---
 

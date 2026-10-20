@@ -38,6 +38,14 @@ public final class CraftChunk implements Chunk {
         this.knownHandle = null;
     }
 
+    public CraftChunk(net.minecraft.server.level.ServerLevel level, int x, int z) {
+        this(((CraftServer) org.bukkit.Bukkit.getServer()).getCraftWorld(level), x, z);
+    }
+
+    public CraftChunk(LevelChunk chunk) {
+        this(chunk, ((CraftServer) org.bukkit.Bukkit.getServer()).getCraftWorld((net.minecraft.server.level.ServerLevel) chunk.getLevel()));
+    }
+
     public CraftChunk(LevelChunk chunk, CraftWorld world) {
         this.world = Objects.requireNonNull(world, "world");
         this.x = chunk.getPos().x();

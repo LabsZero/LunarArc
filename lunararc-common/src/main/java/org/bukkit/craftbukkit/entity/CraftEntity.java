@@ -779,6 +779,43 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         if (snapshot == null) throw new IllegalArgumentException("Error creating entity snapshot");
         return snapshot.createEntity(this.getWorld());
     }
+    private final java.util.Map<net.kyori.adventure.key.Key, java.util.function.Predicate<org.bukkit.entity.Entity>> additionalAlliedRules = new java.util.HashMap<>();
+
+    public boolean considersEntityAsAlly0(@NotNull org.bukkit.entity.Entity other) {
+        if (this.additionalAlliedRules.isEmpty()) return false;
+        return this.additionalAlliedRules.values().stream().anyMatch(rule -> rule.test(other));
+    }
+
+    @Override
+    public boolean isAlliedTo(@NotNull org.bukkit.entity.Entity other) {
+        com.google.common.base.Preconditions.checkArgument(other != null, "other cannot be null");
+        return this.entity.isAlliedTo(((CraftEntity) other).getHandle());
+    }
+
+    @Override
+    public @NotNull java.util.Map<net.kyori.adventure.key.Key, java.util.function.Predicate<org.bukkit.entity.Entity>> getAdditionalAlliedRules() {
+        return Collections.unmodifiableMap(this.additionalAlliedRules);
+    }
+
+    @Override
+    public void addAdditionalAlliedRule(@NotNull net.kyori.adventure.key.Key key, @NotNull java.util.function.Predicate<org.bukkit.entity.Entity> predicate) {
+        com.google.common.base.Preconditions.checkArgument(key != null, "key cannot be null");
+        com.google.common.base.Preconditions.checkArgument(predicate != null, "predicate cannot be null");
+        this.additionalAlliedRules.put(key, predicate);
+    }
+
+    @Override
+    public void removeAdditionalAlliedRule(@NotNull net.kyori.adventure.key.Key key) {
+        com.google.common.base.Preconditions.checkArgument(key != null, "key cannot be null");
+        this.additionalAlliedRules.remove(key);
+    }
+
+    @Override
+    public void removeAdditionalAlliedRule(@NotNull net.kyori.adventure.key.Namespaced namespaced) {
+        com.google.common.base.Preconditions.checkArgument(namespaced != null, "namespaced cannot be null");
+        this.additionalAlliedRules.keySet().removeIf(key -> key.namespace().equals(namespaced.namespace()));
+    }
+
     @Override public @Nullable org.bukkit.entity.EntitySnapshot createSnapshot() { return CraftEntitySnapshot.create(this); }
     @Override public boolean isInWorld() { return this.bridge().lunararc$isInWorld(); }
     @Override public @NotNull org.bukkit.entity.SpawnCategory getSpawnCategory() {

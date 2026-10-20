@@ -65,6 +65,21 @@ public abstract class MinecraftServerMixin_Branding {
             LUNARARC_BRANDING_LOGGER.error("PaperAdventure check FAILED", failure);
         }
         try {
+            org.bukkit.inventory.ItemStack book = new org.bukkit.inventory.ItemStack(org.bukkit.Material.ENCHANTED_BOOK);
+            org.bukkit.inventory.meta.EnchantmentStorageMeta storage = (org.bukkit.inventory.meta.EnchantmentStorageMeta) book.getItemMeta();
+            storage.addStoredEnchant(org.bukkit.enchantments.Enchantment.SHARPNESS, 3, true);
+            book.setItemMeta(storage);
+            org.bukkit.inventory.ItemStack bundle = new org.bukkit.inventory.ItemStack(org.bukkit.Material.BUNDLE);
+            org.bukkit.inventory.meta.BundleMeta bundleMeta = (org.bukkit.inventory.meta.BundleMeta) bundle.getItemMeta();
+            bundleMeta.addItem(new org.bukkit.inventory.ItemStack(org.bukkit.Material.DIAMOND, 5));
+            bundle.setItemMeta(bundleMeta);
+            LUNARARC_BRANDING_LOGGER.info("Item meta check: stored enchants {}, bundle items {}",
+                    ((org.bukkit.inventory.meta.EnchantmentStorageMeta) book.getItemMeta()).getStoredEnchants(),
+                    ((org.bukkit.inventory.meta.BundleMeta) bundle.getItemMeta()).getItems());
+        } catch (Throwable t) {
+            LUNARARC_BRANDING_LOGGER.error("Item meta check failed", t);
+        }
+        try {
             Object bed = org.bukkit.craftbukkit.block.data.CraftBlockData.createData(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getValue(net.minecraft.resources.Identifier.parse("minecraft:red_bed")).defaultBlockState());
             LUNARARC_BRANDING_LOGGER.info("Block data check: white_bed -> {} (typed Bed: {})", bed.getClass().getSimpleName(), bed instanceof org.bukkit.block.data.type.Bed);
         } catch (Throwable t) {

@@ -352,6 +352,7 @@ public abstract class ServerGamePacketListenerImplMixin {
     private void lunararc$onInteractEntity(
             net.minecraft.network.protocol.game.ServerboundInteractPacket packet,
             CallbackInfo ci) {
+        if (!this.player.server.isSameThread()) return; // vanilla re-queues onto the main thread, then we run again
         net.minecraft.world.entity.Entity target = this.player.level().getEntity(packet.entityId());
         if (target == null || target == this.player) {
             return;
@@ -364,7 +365,7 @@ public abstract class ServerGamePacketListenerImplMixin {
             return;
         }
 
-        // 26.x sends one interact packet that carries the clicked position; vanilla runs interactAt and then interact.
+        // 26.x sends one interact packet that carries the clicked position, and Paper fires a single PlayerInteractAtEntityEvent for it.
         org.bukkit.inventory.EquipmentSlot slot = packet.hand() == net.minecraft.world.InteractionHand.OFF_HAND
                 ? org.bukkit.inventory.EquipmentSlot.OFF_HAND
                 : org.bukkit.inventory.EquipmentSlot.HAND;
@@ -373,13 +374,8 @@ public abstract class ServerGamePacketListenerImplMixin {
                 new org.bukkit.event.player.PlayerInteractAtEntityEvent(
                         bukkitPlayer, bukkitTarget, new org.bukkit.util.Vector(position.x, position.y, position.z), slot);
         LunarArcServerAccess.getCraftServer(this.player.server).getPluginManager().callEvent(atEvent);
-        boolean cancelled = atEvent.isCancelled();
-        org.bukkit.event.player.PlayerInteractEntityEvent event =
-                new org.bukkit.event.player.PlayerInteractEntityEvent(bukkitPlayer, bukkitTarget, slot);
-        LunarArcServerAccess.getCraftServer(this.player.server).getPluginManager().callEvent(event);
-        cancelled |= event.isCancelled();
-
-        if (cancelled) {
+        // PlayerInteractAtEntityEvent extends PlayerInteractEntityEvent, so firing a second event would hand plugins every click twice.
+        if (atEvent.isCancelled()) {
             ci.cancel();
         }
     }

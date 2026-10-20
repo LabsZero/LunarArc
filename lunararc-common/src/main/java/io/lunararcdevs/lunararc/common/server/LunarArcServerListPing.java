@@ -32,6 +32,11 @@ public final class LunarArcServerListPing {
         }
 
         @Override
+        public java.net.SocketAddress getSocketAddress() {
+            return this.connection.getRemoteAddress();
+        }
+
+        @Override
         public InetSocketAddress getAddress() {
             return this.connection.getRemoteAddress() instanceof InetSocketAddress address ? address : null;
         }

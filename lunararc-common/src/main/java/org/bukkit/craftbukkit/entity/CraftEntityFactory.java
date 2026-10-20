@@ -47,7 +47,8 @@ public final class CraftEntityFactory implements EntityFactory {
         }
         EntityType bukkitType = Registry.ENTITY_TYPE.get(new NamespacedKey(id.getNamespace(), id.getPath()));
         if (bukkitType == null) {
-            throw new IllegalArgumentException("No Bukkit EntityType wrapper exists for " + id);
+            // modded entity types have no Bukkit constant; the snapshot still round-trips through its NBT
+            bukkitType = EntityType.UNKNOWN;
         }
 
         EntitySnapshot snapshot = CraftEntitySnapshot.create(tag, bukkitType);

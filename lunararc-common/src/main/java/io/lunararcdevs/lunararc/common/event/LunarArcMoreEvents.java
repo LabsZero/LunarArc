@@ -231,9 +231,8 @@ public final class LunarArcMoreEvents {
     }
 
     public static void connectionClose(net.minecraft.server.level.ServerPlayer who, java.net.SocketAddress address) {
-        if (who == null || !listened(com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent.getHandlerList())
-                || !(address instanceof java.net.InetSocketAddress inet)) return;
-        fire(new com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent(who.getUUID(), who.getGameProfile().name(), inet.getAddress(), !org.bukkit.Bukkit.isPrimaryThread()));
+        if (who == null || address == null || !listened(com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent.getHandlerList())) return;
+        fire(new com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent(who.getUUID(), who.getGameProfile().name(), address, !org.bukkit.Bukkit.isPrimaryThread()));
     }
 
     public static boolean setSpawn(org.bukkit.entity.Player player, org.bukkit.Location location, boolean forced, boolean notify, String cause) {

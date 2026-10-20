@@ -18,7 +18,8 @@ import org.bukkit.inventory.meta.ItemMeta;
 public final class SerializableMeta implements ConfigurationSerializable {
     private static final String[] LEGACY_TYPES = {
             "CraftItemMeta", "CraftMetaItem", "CraftMetaArmor", "CraftMetaBanner", "CraftMetaBook", "CraftMetaBookSigned",
-            "CraftMetaCharge", "CraftMetaColorableArmor", "CraftMetaFirework", "CraftMetaPotion", "CraftMetaSkull"};
+            "CraftMetaCharge", "CraftMetaColorableArmor", "CraftMetaFirework", "CraftMetaPotion", "CraftMetaSkull",
+            "CraftMetaEnchantedBook", "CraftMetaBundle", "CraftMetaCrossbow", "CraftMetaCompass", "CraftMetaOminousBottle"};
 
     private SerializableMeta() {
     }

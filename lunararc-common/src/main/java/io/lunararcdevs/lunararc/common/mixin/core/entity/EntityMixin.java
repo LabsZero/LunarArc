@@ -63,6 +63,15 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
     private java.util.UUID lunararc$originWorld;
     private boolean lunararc$inWorld;
     private boolean lunararc$persistent = true;
+    @org.spongepowered.asm.mixin.injection.Inject(method = "isAlliedTo(Lnet/minecraft/world/entity/Entity;)Z", at = @At("HEAD"), cancellable = true, require = 0)
+    private void lunararc$additionalAlliedRules(Entity other, org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<Boolean> cir) {
+        // only entities a plugin already wrapped can carry rules, so never create wrappers here
+        if (this.lunararc$bukkitEntity instanceof CraftEntity craft && other != null && craft.considersEntityAsAlly0(
+                ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) other).lunararc$getBukkitEntity())) {
+            cir.setReturnValue(true);
+        }
+    }
+
     @Override public void lunararc$setBukkitEntity(org.bukkit.entity.Entity entity) { this.lunararc$bukkitEntity = entity; }
     @Override public org.bukkit.entity.Entity lunararc$peekBukkitEntity() { return this.lunararc$bukkitEntity; }
     @Override public CreatureSpawnEvent.SpawnReason lunararc$getSpawnReason() { return this.lunararc$spawnReason; }
@@ -107,6 +116,7 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
     private boolean lunararc$visualFireState(boolean isOnFire) {
         return this.visualFire.toBooleanOrElse(isOnFire);
     }
+    @org.spongepowered.asm.mixin.Shadow private Entity.RemovalReason removalReason;
     @Override public boolean lunararc$isPersistent() { return this.lunararc$persistent; }
     @Override public void lunararc$setPersistent(boolean persistent) { this.lunararc$persistent = persistent; }
     @Override public void lunararc$setLevel(Level level) { ((Entity) (Object) this).setLevel(level); }
@@ -114,7 +124,17 @@ public abstract class EntityMixin implements EntityBridge, CommandSourceBridge {
         Entity self = (Entity) (Object) this;
         try (net.minecraft.util.ProblemReporter.ScopedCollector problems = new net.minecraft.util.ProblemReporter.ScopedCollector(self.problemPath(), org.slf4j.LoggerFactory.getLogger(EntityMixin.class))) {
             net.minecraft.world.level.storage.TagValueOutput output = net.minecraft.world.level.storage.TagValueOutput.createWithContext(problems, self.registryAccess());
-            if (!self.saveAsPassenger(output)) return false;
+            // Paper snapshots entities that are already being removed (e.g. plugins that pick up a mob), so do not let the
+            // removal reason veto the save.
+            Entity.RemovalReason reason = this.removalReason;
+            if (reason != null && !reason.shouldSave()) this.removalReason = null;
+            boolean saved;
+            try {
+                saved = self.saveAsPassenger(output);
+            } finally {
+                if (reason != null) this.removalReason = reason;
+            }
+            if (!saved) return false;
             tag.merge(output.buildResult());
             return true;
         }

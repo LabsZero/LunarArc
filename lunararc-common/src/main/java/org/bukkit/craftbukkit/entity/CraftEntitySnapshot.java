@@ -76,8 +76,15 @@ public final class CraftEntitySnapshot implements EntitySnapshot {
         try (net.minecraft.util.ProblemReporter.ScopedCollector problems = new net.minecraft.util.ProblemReporter.ScopedCollector(
                 () -> "CraftEntitySnapshot.create", org.slf4j.LoggerFactory.getLogger(CraftEntitySnapshot.class))) {
             return net.minecraft.world.entity.EntityType.by(net.minecraft.world.level.storage.TagValueInput.create(problems, org.bukkit.craftbukkit.CraftRegistry.getMinecraftRegistry(), tag))
-                    .map(org.bukkit.craftbukkit.entity.CraftEntityType::minecraftToBukkit)
-                    .map(type -> create(tag, type))
+                    .map(type -> {
+                        EntityType bukkit;
+                        try {
+                            bukkit = org.bukkit.craftbukkit.entity.CraftEntityType.minecraftToBukkit(type);
+                        } catch (RuntimeException unknownToBukkit) {
+                            bukkit = null;
+                        }
+                        return create(tag, bukkit != null ? bukkit : EntityType.UNKNOWN);
+                    })
                     .orElse(null);
         }
     }

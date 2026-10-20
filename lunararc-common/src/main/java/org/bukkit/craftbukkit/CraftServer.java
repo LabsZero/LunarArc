@@ -1237,6 +1237,10 @@ public class CraftServer implements Server {
                 UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8)), name);
     }
 
+    public @NotNull OfflinePlayer getOfflinePlayer(net.minecraft.server.players.NameAndId nameAndId) {
+        return getOfflinePlayer(nameAndId.id());
+    }
+
     @Override
     public @NotNull OfflinePlayer getOfflinePlayer(@NotNull UUID id) {
         Player online = getPlayer(id);
@@ -1435,12 +1439,12 @@ public class CraftServer implements Server {
     }
 
     @Override
-    public @NotNull org.bukkit.entity.EntityFactory getEntityFactory() {
+    public @NotNull org.bukkit.craftbukkit.entity.CraftEntityFactory getEntityFactory() {
         return org.bukkit.craftbukkit.entity.CraftEntityFactory.instance();
     }
 
     @Override
-    public @NotNull org.bukkit.inventory.ItemFactory getItemFactory() {
+    public @NotNull org.bukkit.craftbukkit.inventory.CraftItemFactory getItemFactory() {
         return org.bukkit.craftbukkit.inventory.CraftItemFactory.instance();
     }
 
