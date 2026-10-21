@@ -46,6 +46,7 @@ public abstract class WitherBuildSpawnMixin {
         wither.snapTo(spawn.getX() + 0.5, spawn.getY() + 0.55, spawn.getZ() + 0.5, yaw, 0.0F);
         wither.yBodyRot = yaw;
         wither.makeInvulnerable();
+        if (!io.lunararcdevs.lunararc.common.event.LunarArcGameplayEvents.construct(level, wither, match)) return;
         if (!((ServerLevelBridge) level).lunararc$addFreshEntity(wither, CreatureSpawnEvent.SpawnReason.BUILD_WITHER)) return;
         CarvedPumpkinBlock.clearPatternBlocks(level, match);
         for (ServerPlayer player : level.getEntitiesOfClass(ServerPlayer.class, wither.getBoundingBox().inflate(50.0))) {

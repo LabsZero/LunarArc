@@ -48,6 +48,20 @@ public final class CraftStructureTransformer {
     private BlockTransformer[] blockTransformers;
     private EntityTransformer[] entityTransformers;
 
+    /** World-generation constructor: fires AsyncStructureGenerateEvent and keeps the transformers plugins registered on it. */
+    public CraftStructureTransformer(org.bukkit.event.world.AsyncStructureGenerateEvent.Cause cause, WorldGenLevel level,
+            net.minecraft.world.level.levelgen.structure.Structure structure,
+            net.minecraft.world.level.levelgen.structure.BoundingBox box, ChunkPos center) {
+        org.bukkit.World world = io.lunararcdevs.lunararc.common.LunarArcServerAccess.getCraftWorld(level.getLevel());
+        org.bukkit.event.world.AsyncStructureGenerateEvent event = new org.bukkit.event.world.AsyncStructureGenerateEvent(world,
+                !org.bukkit.Bukkit.isPrimaryThread(), cause, org.bukkit.craftbukkit.generator.structure.CraftStructure.minecraftToBukkit(structure),
+                new org.bukkit.util.BoundingBox(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()), center.x(), center.z());
+        org.bukkit.Bukkit.getPluginManager().callEvent(event);
+        this.blockTransformers = event.getBlockTransformers().values().toArray(BlockTransformer[]::new);
+        this.entityTransformers = event.getEntityTransformers().values().toArray(EntityTransformer[]::new);
+        this.limitedRegion = new CraftLimitedRegion(level, center);
+    }
+
     public CraftStructureTransformer(WorldGenLevel access, ChunkPos center,
             Collection<BlockTransformer> blockTransformers,
             Collection<EntityTransformer> entityTransformers) {

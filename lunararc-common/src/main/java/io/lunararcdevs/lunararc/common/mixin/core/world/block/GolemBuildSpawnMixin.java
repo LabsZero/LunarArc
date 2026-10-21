@@ -29,6 +29,7 @@ public abstract class GolemBuildSpawnMixin {
         if (golem.getType() == net.minecraft.world.entity.EntityTypes.SNOW_GOLEM) reason = CreatureSpawnEvent.SpawnReason.BUILD_SNOWMAN;
         else if (golem.getType() == net.minecraft.world.entity.EntityTypes.COPPER_GOLEM) reason = CreatureSpawnEvent.SpawnReason.BUILD_COPPERGOLEM;
         else reason = CreatureSpawnEvent.SpawnReason.BUILD_IRONGOLEM;
+        if (!io.lunararcdevs.lunararc.common.event.LunarArcGameplayEvents.construct(level, golem, match)) return;
         if (!((ServerLevelBridge) level).lunararc$addFreshEntity(golem, reason)) return;
         CarvedPumpkinBlock.clearPatternBlocks(level, match);
         for (ServerPlayer player : level.getEntitiesOfClass(ServerPlayer.class, golem.getBoundingBox().inflate(5.0))) {

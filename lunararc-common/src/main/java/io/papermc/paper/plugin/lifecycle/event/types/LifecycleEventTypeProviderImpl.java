@@ -41,13 +41,13 @@ public final class LifecycleEventTypeProviderImpl implements LifecycleEventTypeP
         @Override
         public <T> LifecycleEventType.Prioritizable<BootstrapContext, ReloadableRegistrarEvent<PreFlattenTagRegistrar<T>>> preFlatten(
                 RegistryKey<T> key) {
-            return new PrioritizableLifecycleEventType.Simple<>("pre_flatten:" + key, BootstrapContext.class);
+            return io.lunararcdevs.lunararc.common.server.LunarArcTagEvents.preFlattenType(key);
         }
 
         @Override
         public <T> LifecycleEventType.Prioritizable<BootstrapContext, ReloadableRegistrarEvent<PostFlattenTagRegistrar<T>>> postFlatten(
                 RegistryKey<T> key) {
-            return new PrioritizableLifecycleEventType.Simple<>("post_flatten:" + key, BootstrapContext.class);
+            return io.lunararcdevs.lunararc.common.server.LunarArcTagEvents.postFlattenType(key);
         }
     }
 }

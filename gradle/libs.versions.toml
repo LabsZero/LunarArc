@@ -12,7 +12,7 @@ parchment = "2025.12.20"
 
 # lunararc
 lunararc-api = "1.2.1"
-project-version = "1.0.0-EXPERIMENTAL"
+project-version = "1.0.0-SNAPSHOT"
 build-name = "Outland Bound"
 java-runtime = "25"
 
@@ -28,10 +28,12 @@ quilt-loader = "0.30.1"
 quilt-installer = "0.15.1"
 
 # Paper dependencies
-paper-build = "206"
+paper-build = "209"
 data-version = "5023"
 bungeecord-chat-api = "1.21-R0.4"
-paper-api = "26.3.build.206-stable"
+paper-api = "26.3.build.209-stable"
+# paper-api:  https://repo.papermc.io/repository/maven-public/io/papermc/paper/paper-api/
+# data-version: https://minecraft.wiki/w/Data_version
 
 # LunarArc runtime libraries
 adventure = "5.2.0"
@@ -57,8 +59,6 @@ asm-commons = { group = "org.ow2.asm", name = "asm-commons", version.ref = "asm"
 asm-tree = { group = "org.ow2.asm", name = "asm-tree", version.ref = "asm" }
 mixin = { module = "org.spongepowered:mixin", version.ref = "mixin" }
 mixinextras-common = { module = "io.github.llamalad7:mixinextras-common", version.ref = "mixinextras" }
-
-# lunararc
 lunararc-api = { group = "com.github.LunarArcDevs", name = "api", version.ref = "lunararc-api" }
 
 # subProjects (lunararc-common, and others in platforms)

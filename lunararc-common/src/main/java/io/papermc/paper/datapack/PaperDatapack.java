@@ -27,6 +27,7 @@ public final class PaperDatapack implements Datapack {
         PACK_SOURCES.put(PackSource.FEATURE, DatapackSource.FEATURE);
         PACK_SOURCES.put(PackSource.WORLD, DatapackSource.WORLD);
         PACK_SOURCES.put(PackSource.SERVER, DatapackSource.SERVER);
+        PACK_SOURCES.put(io.lunararcdevs.lunararc.common.server.LunarArcDatapackDiscovery.PLUGIN_SOURCE, DatapackSource.PLUGIN);
     }
 
     private final MinecraftServer server;

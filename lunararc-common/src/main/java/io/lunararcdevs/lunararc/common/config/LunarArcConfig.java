@@ -18,6 +18,7 @@ public class LunarArcConfig {
     private static final Path CONFIG_PATH = Paths.get("lunararc.conf");
 
     private static boolean velocityEnabled = false;
+    private static boolean pluginDataReloadOnStartup = false;
     private static byte[] velocitySecret = new byte[0];
 
     public static void load() {
@@ -32,7 +33,12 @@ public class LunarArcConfig {
             props.setProperty("proxy.velocity.secret", "");
             changed = true;
         }
+        if (!props.containsKey("plugin-data.reload-on-startup")) {
+            props.setProperty("plugin-data.reload-on-startup", "false");
+            changed = true;
+        }
         if (changed) writeProps(props);
+        pluginDataReloadOnStartup = Boolean.parseBoolean(props.getProperty("plugin-data.reload-on-startup", "false"));
 
         velocityEnabled = Boolean.parseBoolean(props.getProperty("proxy.velocity.enabled", "false"));
         String secret = props.getProperty("proxy.velocity.secret", "");
@@ -59,6 +65,14 @@ public class LunarArcConfig {
         } catch (IOException e) {
             LOGGER.error("[LunarArc] Could not write lunararc.conf", e);
         }
+    }
+
+    /**
+     * Whether plugin-supplied datapacks and tag handlers are applied with a data reload at startup. Off by default: a reload makes some
+     * mods (Curios, for one, reads its slot data only once at boot) lose data they loaded earlier. Without it they apply on the next /reload.
+     */
+    public static boolean isPluginDataReloadOnStartup() {
+        return pluginDataReloadOnStartup;
     }
 
     public static boolean isVelocityEnabled() {

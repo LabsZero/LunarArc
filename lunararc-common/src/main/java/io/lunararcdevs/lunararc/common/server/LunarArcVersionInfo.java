@@ -30,7 +30,12 @@ public final class LunarArcVersionInfo {
     }
 
     public static String projectVersion() {
-        return projectName() + " " + lunarArcVersion() + " (MC: " + minecraftVersion() + ")";
+        return projectName() + " " + lunarArcVersion() + " (MC: " + minecraftVersion() + ")" + paperBuildSuffix();
+    }
+
+    public static String paperBuildSuffix() {
+        int build = paperBuild();
+        return build > 0 ? " (Paper build " + build + ")" : "";
     }
 
 
@@ -83,13 +88,12 @@ public final class LunarArcVersionInfo {
         return property("gitBranch", "unknown");
     }
 
-    /** One line identifying exactly which LunarArc this is, for logs and crash reports. */
     public static String brandingLine() {
         return "LunarArc " + lunarArcVersion()
                 + " (build " + buildNumber()
                 + ", branch " + gitBranch()
                 + ", commit " + gitHash()
-                + ") for Minecraft " + minecraftVersion();
+                + ") for Minecraft " + minecraftVersion() + paperBuildSuffix();
     }
 
     public static String buildNumber() {

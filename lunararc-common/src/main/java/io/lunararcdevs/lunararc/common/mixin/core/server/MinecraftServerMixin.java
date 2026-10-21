@@ -262,8 +262,6 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
             this.lunararc$tps5.add(currentTps, elapsed);
             this.lunararc$tps15.add(currentTps, elapsed);
             this.lunararc$tpsSampleStartedNanos = now;
-            // Publish to the CraftBukkit-named field in the same place, so a plugin reading
-            // recentTps directly and one calling getTPS() can never disagree.
             this.recentTps[0] = this.lunararc$tps1.getAverage();
             this.recentTps[1] = this.lunararc$tps5.getAverage();
             this.recentTps[2] = this.lunararc$tps15.getAverage();
@@ -312,6 +310,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
             throw fatal;
         }
 
+        io.lunararcdevs.lunararc.common.server.LunarArcDatapackDiscovery.discover();
         this.lunararc$enablePlugins(craftServer, PluginLoadOrder.STARTUP);
     }
 
@@ -342,6 +341,7 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
             craftServer.getPluginManager().callEvent(new org.bukkit.event.world.WorldLoadEvent(craftWorld));
         }
 
+        io.lunararcdevs.lunararc.common.server.LunarArcDatapackDiscovery.apply((MinecraftServer) (Object) this);
         this.lunararc$enablePlugins(craftServer, PluginLoadOrder.POSTWORLD);
 
         long commandSyncStarted = System.nanoTime();

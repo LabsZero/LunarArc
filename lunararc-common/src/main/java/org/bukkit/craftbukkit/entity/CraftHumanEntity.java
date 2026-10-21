@@ -102,6 +102,12 @@ public abstract class CraftHumanEntity extends CraftLivingEntity {
         return instance == null ? null : new CraftAttributeInstance(instance, attribute);
     }
 
+    public boolean canCriticalAttack(@NotNull org.bukkit.entity.Entity entity) {
+        java.util.Objects.requireNonNull(entity, "entity cannot be null");
+        return ((io.lunararcdevs.lunararc.common.mixin.core.entity.PlayerCriticalAccessor) getHandle())
+                .lunararc$canCriticalAttack(((CraftEntity) entity).getHandle());
+    }
+
     @Override
     public void registerAttribute(@NotNull Attribute attribute) { super.registerAttribute(attribute); }
 

@@ -1354,8 +1354,8 @@ public class CraftWorld implements World {
         net.minecraft.core.Holder<net.minecraft.world.level.gameevent.GameEvent> nmsEvent =
                 net.minecraft.core.registries.BuiltInRegistries.GAME_EVENT.get(eventKey)
                         .orElseThrow(() -> new IllegalArgumentException("Unknown game event " + event.getKey()));
-        world.gameEvent(nmsSource, nmsEvent, new net.minecraft.core.BlockPos(
-                (int) Math.floor(position.getX()), (int) Math.floor(position.getY()), (int) Math.floor(position.getZ())));
+        world.gameEvent(nmsEvent, new net.minecraft.world.phys.Vec3(position.getX(), position.getY(), position.getZ()),
+                net.minecraft.world.level.gameevent.GameEvent.Context.of(nmsSource));
     }
 
     @Override

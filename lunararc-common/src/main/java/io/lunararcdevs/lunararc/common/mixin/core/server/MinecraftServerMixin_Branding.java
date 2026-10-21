@@ -20,6 +20,7 @@ public abstract class MinecraftServerMixin_Branding {
     private void lunararc$brandSystemReport(SystemReport report, CallbackInfoReturnable<SystemReport> cir) {
         report.setDetail("LunarArc", LunarArcVersionInfo::brandingLine);
         report.setDetail("LunarArc Paper API", LunarArcVersionInfo::paperApiVersion);
+        report.setDetail("LunarArc Paper build", () -> String.valueOf(LunarArcVersionInfo.paperBuild()));
     }
 
     @Inject(method = "runServer", at = @At("HEAD"), require = 0)

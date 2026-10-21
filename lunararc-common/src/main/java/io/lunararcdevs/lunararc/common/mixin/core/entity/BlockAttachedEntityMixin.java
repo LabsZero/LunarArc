@@ -44,12 +44,28 @@ public abstract class BlockAttachedEntityMixin {
 
     @Unique
     private boolean lunararc$breakCancelled(RemoveCause cause, Entity damager) {
-        if (!(((EntityBridge) this).lunararc$getBukkitEntity() instanceof org.bukkit.entity.Hanging hanging)) return false;
-        HangingBreakEvent event = damager != null
-                ? new HangingBreakByEntityEvent(hanging, ((EntityBridge) damager).lunararc$getBukkitEntity(),
-                        new org.bukkit.craftbukkit.damage.CraftDamageSource(damager.damageSources().generic()), cause)
-                : new HangingBreakEvent(hanging, cause);
-        org.bukkit.Bukkit.getPluginManager().callEvent(event);
-        return ((Entity) (Object) this).isRemoved() || event.isCancelled();
+        org.bukkit.entity.Entity bukkit = ((EntityBridge) this).lunararc$getBukkitEntity();
+        org.bukkit.entity.Entity bukkitDamager = damager == null ? null : ((EntityBridge) damager).lunararc$getBukkitEntity();
+        org.bukkit.damage.DamageSource damageSource = damager == null ? null
+                : new org.bukkit.craftbukkit.damage.CraftDamageSource(damager.damageSources().generic());
+        boolean cancelled = false;
+        if (bukkit instanceof org.bukkit.entity.Hanging hanging) {
+            HangingBreakEvent event = damager != null
+                    ? new HangingBreakByEntityEvent(hanging, bukkitDamager, damageSource, cause)
+                    : new HangingBreakEvent(hanging, cause);
+            org.bukkit.Bukkit.getPluginManager().callEvent(event);
+            cancelled = event.isCancelled();
+        }
+        if (bukkit != null) {
+            io.papermc.paper.event.entity.EntityBreakEvent.RemoveCause paperCause =
+                    io.papermc.paper.event.entity.EntityBreakEvent.RemoveCause.valueOf(cause.name());
+            io.papermc.paper.event.entity.EntityBreakEvent paper = damager != null
+                    ? new io.papermc.paper.event.entity.EntityBreakByEntityEvent(bukkit, bukkitDamager, damageSource, paperCause)
+                    : new io.papermc.paper.event.entity.EntityBreakEvent(bukkit, paperCause);
+            paper.setCancelled(cancelled);
+            org.bukkit.Bukkit.getPluginManager().callEvent(paper);
+            cancelled = paper.isCancelled();
+        }
+        return ((Entity) (Object) this).isRemoved() || cancelled;
     }
 }
