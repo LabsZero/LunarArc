@@ -791,7 +791,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
             entity.setPose(net.minecraft.world.entity.Pose.valueOf(pose.name()));
             fixedPose = fixed;
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Unsupported pose for Minecraft 1.21.1: " + pose, ex);
+            throw new IllegalArgumentException("Unsupported pose for Minecraft 1.21.11: " + pose, ex);
         }
     }
     @Override public void setSneaking(boolean sneak) { entity.setShiftKeyDown(sneak); }

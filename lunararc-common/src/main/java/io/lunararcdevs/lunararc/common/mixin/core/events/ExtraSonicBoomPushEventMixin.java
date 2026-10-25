@@ -26,7 +26,7 @@ public abstract class ExtraSonicBoomPushEventMixin {
         }
     }
 
-    @WrapOperation(method = {"lambda$tick$0", "lambda$tick$1", "lambda$tick$2"}, require = 0,
+    @WrapOperation(method = {"lambda$tick$0", "lambda$tick$1", "lambda$tick$2"}, remap = false, require = 0,
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/LivingEntity;push(DDD)V"))
     private static void lunararc$push(LivingEntity target, double x, double y, double z, Operation<Void> original) {
         Vec3 push = LunarArcMobEvents.pushedByAttack(target, LunarArcMobEvents.pusher, x, y, z);

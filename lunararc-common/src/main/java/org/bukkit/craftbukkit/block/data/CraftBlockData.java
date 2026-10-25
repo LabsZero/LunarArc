@@ -244,9 +244,9 @@ public class CraftBlockData implements BlockData {
                         try {
                             Class.forName(className, true, loader);
                         } catch (ClassNotFoundException ex) {
-                            throw new IllegalStateException("Missing generated Paper 1.21.1 CraftBlockData class " + className, ex);
+                            throw new IllegalStateException("Missing generated Paper 1.21.11 CraftBlockData class " + className, ex);
                         } catch (LinkageError error) {
-                            throw new IllegalStateException("Could not link generated Paper 1.21.1 CraftBlockData class " + className, error);
+                            throw new IllegalStateException("Could not link generated Paper 1.21.11 CraftBlockData class " + className, error);
                         }
                     }
                 }

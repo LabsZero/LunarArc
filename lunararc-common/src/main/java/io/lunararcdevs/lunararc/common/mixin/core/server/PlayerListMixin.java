@@ -330,7 +330,6 @@ public abstract class PlayerListMixin implements PlayerListBridge {
             this.players.add(player);
         }
 
-        io.lunararcdevs.lunararc.common.server.LunarArcIngredientDebug.scan(player.level().getServer());
         PlayerJoinEvent event = new PlayerJoinEvent(bukkitPlayer, LunarArcComponentPipeline.toAdventure(vanillaMessage));
         try {
             this.lunararc$getCraftServer().getPluginManager().callEvent(event);

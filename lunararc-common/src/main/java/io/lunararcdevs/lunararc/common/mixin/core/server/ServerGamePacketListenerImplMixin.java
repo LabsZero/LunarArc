@@ -845,6 +845,13 @@ public abstract class ServerGamePacketListenerImplMixin {
                     ? new org.bukkit.event.inventory.SmithItemEvent(view, slotType, rawSlot, click, action, hotbarKey)
                     : new org.bukkit.event.inventory.SmithItemEvent(view, slotType, rawSlot, click, action);
             this.lunararc$resyncAfterSpecialInventoryClick = true;
+        } else if (rawSlot == 2 && view.getTopInventory() instanceof org.bukkit.inventory.CartographyInventory cartography
+                && cartography.getItem(2) != null) {
+            // Paper raises this subclass, instead of a plain click, for the result slot of a cartography table.
+            event = hotbarKey >= 0
+                    ? new io.papermc.paper.event.player.CartographyItemEvent(view, slotType, rawSlot, click, action, hotbarKey)
+                    : new io.papermc.paper.event.player.CartographyItemEvent(view, slotType, rawSlot, click, action);
+            this.lunararc$resyncAfterSpecialInventoryClick = true;
         } else {
             event = new org.bukkit.event.inventory.InventoryClickEvent(view, slotType, rawSlot, click, action, hotbarKey);
         }

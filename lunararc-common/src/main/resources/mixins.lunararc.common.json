@@ -192,7 +192,7 @@
     "core.events.ExtraVehicleBlockCollisionEventMixin",
     "core.events.ExtraStructuresLocateEventMixin",
     "core.events.ExtraMapInitializeEventMixin",
-    "core.events.IngredientPacketDebugMixin",
+    "core.events.ExtraEndGatewayEventMixin",
     "core.events.CollarDyeEventMixin",
     "core.events.TurtleEggEventsMixin",
     "core.events.EndermanEscapeEventMixin",

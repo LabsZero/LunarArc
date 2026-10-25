@@ -28,7 +28,6 @@ quilt-loader = "0.30.1"
 quilt-installer = "0.15.1"
 
 # Paper dependencies
-craftbukkit-package = "v1_21_R7"
 bungeecord-chat-api = "1.21-R0.4"
 paper-api = "1.21.11-R0.1-SNAPSHOT"
 paper-build = "132"

@@ -366,7 +366,6 @@ public abstract class MinecraftServerMixin implements MinecraftServerBridge, Com
     private void lunararc$afterWorldLoad(CallbackInfo ci) {
         if (this.lunararc$postWorldPluginsEnabled) return;
         this.lunararc$postWorldPluginsEnabled = true;
-        io.lunararcdevs.lunararc.common.server.LunarArcIngredientDebug.scan((MinecraftServer) (Object) this);
 
         // Developer aid: -Dlunararc.auditMixins=true force-loads every mixin target so a broken injection fails here, at boot,
         // instead of the first time that class happens to load in play.

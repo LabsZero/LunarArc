@@ -2121,6 +2121,11 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             return makeView(menu, top, org.bukkit.event.inventory.InventoryType.GRINDSTONE,
                     net.kyori.adventure.text.Component.translatable("container.grindstone_title"));
         }
+        if (menu instanceof net.minecraft.world.inventory.CartographyTableMenu cartographyMenu) {
+            var top = new org.bukkit.craftbukkit.inventory.CraftCartographyInventory(cartographyMenu, this);
+            return makeView(menu, top, org.bukkit.event.inventory.InventoryType.CARTOGRAPHY,
+                    net.kyori.adventure.text.Component.translatable("container.cartography_table"));
+        }
         if (menu instanceof net.minecraft.world.inventory.CraftingMenu craftingMenu) {
             var recipe = getHandle().level().recipeAccess().getRecipeFor(
                     net.minecraft.world.item.crafting.RecipeType.CRAFTING,

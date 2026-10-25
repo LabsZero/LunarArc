@@ -191,10 +191,6 @@ public final class LunarArcMobEvents {
     /** The entity whose attack is currently pushing others, set by the attack hooks around their push calls. */
     public static Entity pusher;
 
-    /**
-     * An entity is pushed by another entity's attack. Returns the push to apply (a plugin may change it), or
-     * null if a plugin cancelled it.
-     */
     public static net.minecraft.world.phys.Vec3 pushedByAttack(Entity target, Entity attacker, double x, double y, double z) {
         net.minecraft.world.phys.Vec3 same = new net.minecraft.world.phys.Vec3(x, y, z);
         if (attacker == null || !ready(target) || !listened(io.papermc.paper.event.entity.EntityPushedByEntityAttackEvent.getHandlerList())) return same;
@@ -204,6 +200,39 @@ public final class LunarArcMobEvents {
         if (fire(event)) return null;
         org.bukkit.util.Vector changed = event.getAcceleration();
         return new net.minecraft.world.phys.Vec3(changed.getX(), changed.getY(), changed.getZ());
+    }
+
+    public static net.minecraft.world.level.portal.TeleportTransition endGateway(ServerLevel level, Entity entity, BlockPos pos,
+            net.minecraft.world.level.portal.TeleportTransition transition) {
+        boolean player = entity instanceof net.minecraft.server.level.ServerPlayer;
+        if (transition == null || !ready(entity)
+                || !listened(player ? com.destroystokyo.paper.event.player.PlayerTeleportEndGatewayEvent.getHandlerList()
+                        : com.destroystokyo.paper.event.entity.EntityTeleportEndGatewayEvent.getHandlerList())) return transition;
+        if (!(bukkit(entity) instanceof org.bukkit.entity.Entity bukkitEntity)) return transition;
+        org.bukkit.World toWorld = LunarArcServerAccess.getCraftWorld(transition.newLevel());
+        if (toWorld == null || !(org.bukkit.craftbukkit.block.CraftBlock.at(level, pos).getState() instanceof org.bukkit.block.EndGateway gateway)) {
+            return transition;
+        }
+        org.bukkit.Location from = bukkitEntity.getLocation();
+        org.bukkit.Location to = new org.bukkit.Location(toWorld, transition.position().x, transition.position().y, transition.position().z,
+                transition.yRot(), transition.xRot());
+        org.bukkit.Location changed;
+        if (player) {
+            com.destroystokyo.paper.event.player.PlayerTeleportEndGatewayEvent event =
+                    new com.destroystokyo.paper.event.player.PlayerTeleportEndGatewayEvent((org.bukkit.entity.Player) bukkitEntity, from, to, gateway);
+            if (fire(event)) return null;
+            changed = event.getTo();
+        } else {
+            com.destroystokyo.paper.event.entity.EntityTeleportEndGatewayEvent event =
+                    new com.destroystokyo.paper.event.entity.EntityTeleportEndGatewayEvent(bukkitEntity, from, to, gateway);
+            if (fire(event)) return null;
+            changed = event.getTo();
+        }
+        if (changed == null) return null;
+        if (changed.getX() == to.getX() && changed.getY() == to.getY() && changed.getZ() == to.getZ()
+                && changed.getYaw() == to.getYaw() && changed.getPitch() == to.getPitch()) return transition;
+        return transition.withPosition(new net.minecraft.world.phys.Vec3(changed.getX(), changed.getY(), changed.getZ()))
+                .withRotation(changed.getYaw(), changed.getPitch());
     }
 
     /** An entity is about to go through a Nether portal; returns false if a plugin cancelled it. */
