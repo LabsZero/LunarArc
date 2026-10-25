@@ -46,7 +46,7 @@
   "eula.header": "\u001b[33m\u001b[1mMinecraft End User License Agreement\u001b[0m\nBefore starting the server you must agree to the Minecraft EULA.",
   "eula.url": "\u001b[34mRead the EULA at: \u001b[36m\u001b[4mhttps://aka.ms/MinecraftEULA\u001b[0m",
   "eula.prompt": "\u001b[33mDo you agree to the Minecraft EULA? (yes/no) > \u001b[0m",
-  "eula.accepted": "\u001b[32m✔ EULA accepted. eula.txt written.\u001b[0m",
+  "eula.accepted": "\u001b[32m✔ EULA accepted.\u001b[0m",
   "eula.declined": "\u001b[31m✘ EULA not accepted. Server will not start. Edit eula.txt and set eula=true to agree.\u001b[0m",
   "migration.spigot.found": "Spigot world layout found. Copying {0} to {1} ({2} MB, one-time). The original folder will be kept in the Migrated folder afterwards.",
   "migration.spigot.copied": "Copied {0} file(s) into {1}.",
