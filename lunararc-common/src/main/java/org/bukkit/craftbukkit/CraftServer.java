@@ -477,22 +477,29 @@ public class CraftServer implements Server {
     private final Map<String, World> worlds = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<UUID, World> worldCache = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>, CraftWorld> worldByDimension = new java.util.concurrent.ConcurrentHashMap<>();
-    // Tracks which dimensions have already had WorldInitEvent/WorldLoadEvent fired, so the
-    // boot-time firing loop (MinecraftServerMixin.lunararc$afterWorldLoad) and the
-    // plugin-initiated createWorld() path below never double-fire for the same dimension
-    // regardless of which one reaches it first. Public: accessed from MinecraftServerMixin,
-    // a different package.
+    // LunarArc: dimensions that already fired WorldInitEvent/WorldLoadEvent. The boot loop
+    // (MinecraftServerMixin.lunararc$afterWorldLoad) and plugin createWorld() both fire them; whichever
+    // reaches a dimension first wins, the other skips. Public because MinecraftServerMixin reads it.
     public final java.util.Set<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>> worldLoadEventFired =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    // LunarArc: CraftWorlds for mod-made fake ServerLevels; weak so they go when the mod drops its level. Never in worlds/worldCache.
+    private final java.util.Map<net.minecraft.server.level.ServerLevel, CraftWorld> transientWorlds = new java.util.WeakHashMap<>();
+
     private CraftWorld craftWorld(net.minecraft.server.level.ServerLevel level) {
-        // Fast path: an already-registered world needs no index maintenance. This is not a
-        // micro-optimisation for its own sake - every chunk decoration looks its world up here,
-        // on the worldgen threads, and the registration block below touches four maps and used
-        // to hash a UUID out of the dimension name each time. Bulk terrain generation, such as a
-        // random-teleport search walking far chunks, ran all of that per chunk.
+        // LunarArc: keep this fast path first. Chunk decoration looks its world up here on the worldgen threads,
+        // and the registration below touches four maps; bulk generation (e.g. random-teleport searches) paid that per chunk.
         CraftWorld existing = worldByDimension.get(level.dimension());
-        if (existing != null) return existing;
+        if (existing != null) {
+            if (existing.getHandle() == level) return existing;
+            // LunarArc: a second ServerLevel claiming a registered dimension is a mod's fake world (Create schematic cannons
+            // and contraptions, Sable reuse the overworld key). Give it its own unlisted CraftWorld: reporting its events
+            // against the real world, or letting it replace the registered one, corrupts plugin state.
+            // See Arclight PR #2134 and issues #2123 / #2137 for the same bug there.
+            synchronized (transientWorlds) {
+                return transientWorlds.computeIfAbsent(level, CraftWorld::new);
+            }
+        }
 
         CraftWorld craft = worldByDimension.computeIfAbsent(level.dimension(), ignored -> new CraftWorld(level));
         worldCache.putIfAbsent(craft.getUID(), craft);
@@ -2731,41 +2738,70 @@ public class CraftServer implements Server {
     @SuppressWarnings("deprecation")
     public @NotNull ItemStack createExplorerMap(@NotNull World world, @NotNull Location location,
             @NotNull org.bukkit.StructureType structureType, int radius, boolean findUnexplored) {
+        Objects.requireNonNull(structureType, "structureType");
+        // LunarArc: legacy org.bukkit.StructureType keys match structure *type* ids ("mansion", "monument", ...);
+        // a key with no such type is treated as a single structure id instead
+        net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.fromNamespaceAndPath(
+                structureType.getKey().getNamespace(), structureType.getKey().getKey());
+        var nmsType = net.minecraft.core.registries.BuiltInRegistries.STRUCTURE_TYPE.getValue(id);
+        return lunararc$explorerMap(world, location, structureType.getKey(),
+                holder -> nmsType != null ? holder.value().type() == nmsType : holder.is(id),
+                structureType.getMapIcon(), radius, findUnexplored);
+    }
+
+    @Override
+    public @NotNull ItemStack createExplorerMap(@NotNull World world, @NotNull Location location,
+            @NotNull org.bukkit.generator.structure.Structure structure,
+            org.bukkit.map.MapCursor.@NotNull Type mapCursorType, int radius, boolean findUnexplored) {
+        Objects.requireNonNull(structure, "structure");
+        net.minecraft.world.level.levelgen.structure.Structure nms =
+                org.bukkit.craftbukkit.generator.structure.CraftStructure.bukkitToMinecraft(structure);
+        return lunararc$explorerMap(world, location, structure.getKey(), holder -> holder.value() == nms,
+                mapCursorType, radius, findUnexplored);
+    }
+
+    /**
+     * Vanilla's exploration map (ExplorationMapFunction): nearest matching structure, biome preview and a target marker.
+     * Paper: throws IllegalArgumentException when nothing is found; plugins catch that, so do not return an empty map instead.
+     * Runs a structure search, so it can block for a while on a large radius, the same as on Paper.
+     */
+    @SuppressWarnings("deprecation")
+    private @NotNull ItemStack lunararc$explorerMap(@NotNull World world, @NotNull Location location, org.bukkit.NamespacedKey what,
+            java.util.function.Predicate<net.minecraft.core.Holder<net.minecraft.world.level.levelgen.structure.Structure>> filter,
+            org.bukkit.map.MapCursor.@NotNull Type mapCursorType, int radius, boolean findUnexplored) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(location, "location");
-        Objects.requireNonNull(structureType, "structureType");
-        ItemStack stack = new ItemStack(org.bukkit.Material.FILLED_MAP);
-        try {
-            MapView view = createMap(world);
-            org.bukkit.inventory.meta.MapMeta meta = (org.bukkit.inventory.meta.MapMeta) stack.getItemMeta();
-            if (meta != null) {
-                meta.setMapView(view);
-                stack.setItemMeta(meta);
-            }
-        } catch (Throwable ignored) {}
-        return stack;
+        Objects.requireNonNull(mapCursorType, "mapCursorType");
+        net.minecraft.server.level.ServerLevel level = ((CraftWorld) world).getHandle();
+        var structures = level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.STRUCTURE);
+        net.minecraft.core.HolderSet<net.minecraft.world.level.levelgen.structure.Structure> holders =
+                net.minecraft.core.HolderSet.direct(structures.listElements().filter(filter).toList());
+        if (holders.size() == 0) throw new IllegalArgumentException("No structure matches " + what);
+        var found = level.getChunkSource().getGenerator().findNearestMapStructure(level, holders,
+                net.minecraft.core.BlockPos.containing(location.getX(), location.getY(), location.getZ()), radius, findUnexplored);
+        if (found == null) throw new IllegalArgumentException("Could not find structure for " + what);
+        net.minecraft.core.BlockPos pos = found.getFirst();
+
+        var decoration = level.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.MAP_DECORATION_TYPE)
+                .get(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.MAP_DECORATION_TYPE,
+                        net.minecraft.resources.Identifier.fromNamespaceAndPath(mapCursorType.getKey().getNamespace(), mapCursorType.getKey().getKey())))
+                .orElseThrow(() -> new IllegalArgumentException("Unknown map cursor type " + mapCursorType.getKey()));
+        net.minecraft.world.item.ItemStack stack = net.minecraft.world.item.MapItem.create(level, pos.getX(), pos.getZ(),
+                MapView.Scale.NORMAL.getValue(), true, true);
+        net.minecraft.world.item.MapItem.renderBiomePreviewMap(level, stack);
+        net.minecraft.world.level.saveddata.maps.MapItemSavedData.addTargetDecoration(stack, pos, "+", decoration);
+        return org.bukkit.craftbukkit.inventory.CraftItemStack.asBukkitCopy(stack);
     }
 
     @Override
     public @NotNull ItemStack createExplorerMap(@NotNull World world, @NotNull Location location,
             @NotNull org.bukkit.generator.structure.StructureType structureType,
             org.bukkit.map.MapCursor.@NotNull Type mapCursorType, int radius, boolean findUnexplored) {
-        Objects.requireNonNull(world, "world");
-        Objects.requireNonNull(location, "location");
         Objects.requireNonNull(structureType, "structureType");
-        Objects.requireNonNull(mapCursorType, "mapCursorType");
-        ItemStack stack = new ItemStack(org.bukkit.Material.FILLED_MAP);
-        try {
-            MapView view = createMap(world);
-            org.bukkit.inventory.meta.MapMeta meta = (org.bukkit.inventory.meta.MapMeta) stack.getItemMeta();
-            if (meta != null) {
-                meta.setMapView(view);
-                stack.setItemMeta(meta);
-            }
-        } catch (Throwable ignored) {
-
-        }
-        return stack;
+        net.minecraft.world.level.levelgen.structure.StructureType<?> nmsType =
+                org.bukkit.craftbukkit.generator.structure.CraftStructureType.bukkitToMinecraft(structureType);
+        return lunararc$explorerMap(world, location, structureType.getKey(), holder -> holder.value().type() == nmsType,
+                mapCursorType, radius, findUnexplored);
     }
 
     @Override

@@ -423,6 +423,7 @@
     "core.events.GameplayLungeMixin",
     "core.events.GameplayItemSortMixin",
     "core.events.GameplaySulfurCubeMixin",
+    "core.events.GameplayPotentSulfurMixin",
     "core.events.GameplayMinecartTntMixin",
     "core.events.GameplaySlotChangeMixin",
     "core.events.GameplayCodeOfConductMixin",

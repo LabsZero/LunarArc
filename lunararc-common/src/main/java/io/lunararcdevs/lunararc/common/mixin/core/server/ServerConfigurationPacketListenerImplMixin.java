@@ -35,6 +35,21 @@ public abstract class ServerConfigurationPacketListenerImplMixin implements io.l
         this.paperConnection = new io.papermc.paper.connection.PaperPlayerConfigurationConnection((ServerConfigurationPacketListenerImpl) (Object) this);
     }
 
+    // LunarArc: keep the configuration task chain on the server thread.
+    // Paper's AsyncPlayerConnectionConfigureEvent task runs on a virtual thread and finishes itself from there,
+    // and finishCurrentTask starts the next task inline. That next task is PrepareSpawnTask, which adds chunk
+    // tickets and loads spawn chunks, so it ran off-thread. Vanilla tolerates that by luck; C2ME does not and
+    // throws ConcurrentModificationException("Async update chunks") during join.
+    // See [C2ME] rewrites-chunk-system. Do not remove unless every config task is known to finish on the main thread.
+    @Inject(method = "finishCurrentTask", at = @At("HEAD"), cancellable = true, require = 1)
+    private void lunararc$finishOnServerThread(net.minecraft.server.network.ConfigurationTask.Type type, CallbackInfo ci) {
+        net.minecraft.server.MinecraftServer server = io.lunararcdevs.lunararc.common.LunarArcServerAccess.getMinecraftServer();
+        if (server == null || server.isSameThread()) return;
+        ServerConfigurationPacketListenerImpl self = (ServerConfigurationPacketListenerImpl) (Object) this;
+        server.execute(() -> self.finishCurrentTask(type));
+        ci.cancel();
+    }
+
     /** Paper: PlayerConnectionInitialConfigureEvent as soon as the configuration phase begins. */
     @Inject(method = "startConfiguration", at = @At("HEAD"))
     private void lunararc$initialConfigure(CallbackInfo ci) {

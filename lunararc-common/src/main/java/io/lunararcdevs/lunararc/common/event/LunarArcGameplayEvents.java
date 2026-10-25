@@ -89,6 +89,7 @@ public final class LunarArcGameplayEvents {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static void resync(ServerPlayer viewer, Mob target, EntityDataAccessor accessor) {
+        if (target.isRemoved()) return; // Paper: PR #14423 (build 223), no entity data for removed entities
         viewer.connection.send(new ClientboundSetEntityDataPacket(target.getId(),
                 List.of(net.minecraft.network.syncher.SynchedEntityData.DataValue.create(accessor, target.getEntityData().get(accessor)))));
     }
@@ -107,7 +108,6 @@ public final class LunarArcGameplayEvents {
         if (selectedIndex >= contents.size() || selectedIndex == previousIndex) return;
 
         io.papermc.paper.event.inventory.PlayerBundleItemSelectEvent.Direction direction = io.papermc.paper.event.inventory.PlayerBundleItemSelectEvent.Direction.UNKNOWN;
-        // the scroll direction is only knowable with three or more stacks, from the before and after index
         if (contents.size() >= 3) {
             if (previousIndex == BundleContents.NO_SELECTED_ITEM_INDEX) {
                 direction = selectedIndex == 0 ? io.papermc.paper.event.inventory.PlayerBundleItemSelectEvent.Direction.FORWARD
@@ -153,6 +153,23 @@ public final class LunarArcGameplayEvents {
         if (bukkit == null) return fuse;
         io.papermc.paper.event.entity.EntityIgniteEvent event = new io.papermc.paper.event.entity.EntityIgniteEvent(bukkit, fuse);
         return call(event) ? event.getFuseTime() : net.minecraft.world.entity.item.PrimedTnt.NO_FUSE;
+    }
+
+    /** EntityPotentSulfurLaunchEvent for an entity a potent sulfur geyser pushes upward. @return the push to apply, as a plugin left it. */
+    public static net.minecraft.world.phys.Vec3 sulfurLaunch(Entity entity, Level level, net.minecraft.core.BlockPos sulfur,
+            net.minecraft.core.BlockPos source, net.minecraft.world.phys.Vec3 push) {
+        if (!listened(io.papermc.paper.event.entity.EntityPotentSulfurLaunchEvent.getHandlerList())) return push;
+        org.bukkit.entity.Entity bukkit = bukkit(entity);
+        if (bukkit == null) return push;
+        org.bukkit.block.Block block = CraftBlock.at(level, sulfur);
+        // LunarArc: the source location is the geyser's gas source block (vanilla findNoxiousGasSourceBlock), not the sulfur block
+        var event = new io.papermc.paper.event.entity.EntityPotentSulfurLaunchEvent(bukkit, block,
+                new org.bukkit.Location(block.getWorld(), source.getX() + 0.5, source.getY() + 0.5, source.getZ() + 0.5),
+                new org.bukkit.util.Vector(push.x, push.y, push.z));
+        call(event);
+        // the Vector is mutable: plugins change the launch by editing it in place, so read it back after the call
+        org.bukkit.util.Vector velocity = event.getLaunchVelocity();
+        return new net.minecraft.world.phys.Vec3(velocity.getX(), velocity.getY(), velocity.getZ());
     }
 
     /**

@@ -439,6 +439,17 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     }
     @Override public void swingMainHand() { getHandle().swing(InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, true); }
     @Override public void swingOffHand() { getHandle().swing(InteractionHand.OFF_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, true); }
+    @Override public void swingHand(@NotNull org.bukkit.inventory.EquipmentSlot hand, io.papermc.paper.datacomponent.item.@NotNull SwingAnimation animation) {
+        Objects.requireNonNull(animation, "animation");
+        InteractionHand nmsHand = switch (Objects.requireNonNull(hand, "hand")) {
+            case HAND -> InteractionHand.MAIN_HAND;
+            case OFF_HAND -> InteractionHand.OFF_HAND;
+            default -> throw new IllegalArgumentException("Can only swing HAND or OFF_HAND, not " + hand);
+        };
+        // Paper and vanilla share the enum constant names (NONE, WHACK, STAB); a new vanilla type needs adding on Paper's side first
+        getHandle().swing(nmsHand, new net.minecraft.world.item.component.SwingAnimation(
+                net.minecraft.world.item.SwingAnimationType.valueOf(animation.type().name()), animation.duration()), true);
+    }
     @Override public void playHurtAnimation(float yaw) {
         if (getHandle().level() instanceof ServerLevel level) {
             level.getChunkSource().sendToTrackingPlayersAndSelf(getHandle(), new ClientboundHurtAnimationPacket(getEntityId(), yaw + 90.0F));
