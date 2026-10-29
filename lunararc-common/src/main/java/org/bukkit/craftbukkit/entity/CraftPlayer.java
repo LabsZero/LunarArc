@@ -2275,6 +2275,19 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         }
         throw new IllegalArgumentException("Unsupported merchant implementation: " + merchant.getClass().getName());
     }
+    @Override
+    public void showDialog(final net.kyori.adventure.dialog.DialogLike dialog) {
+        if (this.getHandle().connection == null) return;
+        this.getHandle().connection.send(new net.minecraft.network.protocol.common.ClientboundShowDialogPacket(
+                io.papermc.paper.dialog.PaperDialog.bukkitToMinecraftHolder((io.papermc.paper.dialog.Dialog) dialog)));
+    }
+
+    @Override
+    public void closeDialog() {
+        if (this.getHandle().connection == null) return;
+        this.getHandle().connection.send(net.minecraft.network.protocol.common.ClientboundClearDialogPacket.INSTANCE);
+    }
+
     @Override public void closeInventory() {
         closeInventory(InventoryCloseEvent.Reason.PLUGIN);
     }

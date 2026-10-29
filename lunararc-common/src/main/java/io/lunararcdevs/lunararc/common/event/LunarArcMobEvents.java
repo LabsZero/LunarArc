@@ -147,11 +147,20 @@ public final class LunarArcMobEvents {
         return event.getDuration();
     }
 
+    /** The Bukkit type for a vanilla entity type, or null for modded types that have none. */
+    private static org.bukkit.entity.EntityType bukkitEntityType(net.minecraft.world.entity.EntityType<?> type) {
+        try {
+            return org.bukkit.craftbukkit.entity.CraftEntityType.minecraftToBukkit(type);
+        } catch (IllegalArgumentException modded) {
+            return null;
+        }
+    }
+
     /** A mob is about to be spawned at a position; returns false if a plugin cancelled it. */
     public static boolean preCreatureSpawn(ServerLevel level, BlockPos pos, net.minecraft.world.entity.EntityType<?> type,
             org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason reason) {
         if (!org.bukkit.Bukkit.isPrimaryThread() || !listened(com.destroystokyo.paper.event.entity.PreCreatureSpawnEvent.getHandlerList())) return true;
-        org.bukkit.entity.EntityType bukkitType = org.bukkit.craftbukkit.entity.CraftEntityType.minecraftToBukkit(type);
+        org.bukkit.entity.EntityType bukkitType = bukkitEntityType(type);
         if (bukkitType == null) return true;
         org.bukkit.Location location = new org.bukkit.Location(LunarArcServerAccess.getCraftWorld(level), pos.getX(), pos.getY(), pos.getZ());
         return !fire(new com.destroystokyo.paper.event.entity.PreCreatureSpawnEvent(location, bukkitType, reason));
@@ -179,7 +188,7 @@ public final class LunarArcMobEvents {
     /** A spawner is about to spawn a mob; returns false if a plugin cancelled it. */
     public static boolean preSpawnerSpawn(ServerLevel level, net.minecraft.world.phys.Vec3 spawnAt, net.minecraft.world.entity.EntityType<?> type, BlockPos spawner) {
         if (!org.bukkit.Bukkit.isPrimaryThread() || !listened(com.destroystokyo.paper.event.entity.PreSpawnerSpawnEvent.getHandlerList())) return true;
-        org.bukkit.entity.EntityType bukkitType = org.bukkit.craftbukkit.entity.CraftEntityType.minecraftToBukkit(type);
+        org.bukkit.entity.EntityType bukkitType = bukkitEntityType(type);
         if (bukkitType == null) return true;
         org.bukkit.World world = LunarArcServerAccess.getCraftWorld(level);
         return !fire(new com.destroystokyo.paper.event.entity.PreSpawnerSpawnEvent(

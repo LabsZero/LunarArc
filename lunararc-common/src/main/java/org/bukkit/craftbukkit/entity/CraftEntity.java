@@ -224,6 +224,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
             return new CraftAnimals(server, animal);
         }
         if (entity instanceof net.minecraft.world.entity.AgeableMob ageable) {
+            if (entity instanceof net.minecraft.world.item.trading.Merchant) return new CraftModdedMerchant(server, ageable);
             return new CraftAgeable(server, ageable);
         }
         if (entity instanceof net.minecraft.world.entity.PathfinderMob creature) {
