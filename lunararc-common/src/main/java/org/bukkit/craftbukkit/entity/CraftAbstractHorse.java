@@ -10,6 +10,7 @@ import org.bukkit.entity.AnimalTamer;
 import org.bukkit.entity.Horse;
 import org.bukkit.inventory.AbstractHorseInventory;
 
+@SuppressWarnings({"deprecation"})
 public abstract class CraftAbstractHorse extends CraftAnimals implements org.bukkit.entity.AbstractHorse {
     protected CraftAbstractHorse(CraftServer server, net.minecraft.world.entity.animal.horse.AbstractHorse entity) { super(server, entity); }
     @Override public net.minecraft.world.entity.animal.horse.AbstractHorse getHandle() { return (net.minecraft.world.entity.animal.horse.AbstractHorse) entity; }

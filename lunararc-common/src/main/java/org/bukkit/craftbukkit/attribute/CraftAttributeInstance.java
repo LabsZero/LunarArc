@@ -17,6 +17,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 
+@SuppressWarnings({"rawtypes", "removal", "unchecked"})
 public class CraftAttributeInstance implements org.bukkit.attribute.AttributeInstance {
 
     private final AttributeInstance handle;
@@ -80,7 +81,7 @@ public class CraftAttributeInstance implements org.bukkit.attribute.AttributeIns
     }
 
     @Override
-    @SuppressWarnings("deprecation")
+    
     public @Nullable AttributeModifier getModifier(@NotNull UUID id) {
         Objects.requireNonNull(id, "id");
         for (AttributeModifier modifier : getModifiers()) {
@@ -100,7 +101,7 @@ public class CraftAttributeInstance implements org.bukkit.attribute.AttributeIns
     }
 
     @Override
-    @SuppressWarnings("deprecation")
+    
     public void removeModifier(@NotNull UUID id) {
         Objects.requireNonNull(id, "id");
         AttributeModifier modifier = getModifier(id);

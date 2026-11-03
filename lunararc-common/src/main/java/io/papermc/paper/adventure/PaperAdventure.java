@@ -63,6 +63,7 @@ import static java.util.Objects.requireNonNull;
  * same zero-loss conversion real Paper does — wrapping in {@link AdventureComponent} / delegating to
  * {@link WrapperAwareSerializer} — instead of a lossy round-trip through legacy JSON.
  */
+@SuppressWarnings({"deprecation"})
 public final class PaperAdventure {
     public static Component resolveWithContext(Component component, org.bukkit.command.CommandSender context,
             org.bukkit.entity.Entity scoreboardSubject, boolean bypassPermissions) throws java.io.IOException {

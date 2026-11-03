@@ -8,13 +8,11 @@ import io.papermc.paper.plugin.provider.PluginProvider;
 import io.papermc.paper.plugin.provider.type.paper.PaperPluginParent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.slf4j.Logger;
 
 import java.util.List;
 
 public class ServerPluginProviderStorage extends ConfiguredProviderStorage<JavaPlugin> {
 
-    private static final Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ServerPluginProviderStorage.class);
 
     public ServerPluginProviderStorage() {
         super(new ProviderConfiguration<>() {

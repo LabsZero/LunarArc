@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 
 
+@SuppressWarnings({"deprecation"})
 public final class CraftJukeboxComponent implements JukeboxPlayableComponent {
     private JukeboxPlayable handle;
     public CraftJukeboxComponent(JukeboxPlayable handle){this.handle=Objects.requireNonNull(handle,"handle");}

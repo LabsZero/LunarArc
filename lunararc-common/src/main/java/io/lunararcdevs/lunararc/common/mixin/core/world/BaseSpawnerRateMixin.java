@@ -3,8 +3,6 @@ package io.lunararcdevs.lunararc.common.mixin.core.world;
 import io.lunararcdevs.lunararc.common.server.LunarArcServerSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.BaseSpawner;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

@@ -18,6 +18,13 @@ public abstract class SpawnStateCapMixin {
         return LunarArcServerSettings.limit(category, original.call(category));
     }
 
+    @WrapOperation(method = "canSpawnForCategory", remap = true, require = 0,
+            at = @At(value = "INVOKE", remap = true,
+                    target = "Lit/unimi/dsi/fastutil/objects/Object2IntOpenHashMap;getInt(Ljava/lang/Object;)I"))
+    private int lunararc$globalCount(it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap<MobCategory> counts, Object category, Operation<Integer> original) {
+        return LunarArcServerSettings.perPlayerMobSpawns() ? 0 : original.call(counts, category);
+    }
+
     @WrapMethod(method = "canSpawnForCategory", remap = true, require = 0)
     private boolean lunararc$categoryCadence(MobCategory category, ChunkPos pos, Operation<Boolean> original) {
         return LunarArcServerSettings.cadenceAllows(category) && original.call(category, pos);

@@ -33,12 +33,10 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.block.Block;
-import org.bukkit.attribute.AttributeInstance;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Collection;
@@ -50,7 +48,6 @@ import java.util.Date;
 import java.util.function.Consumer;
 import org.bukkit.util.Vector;
 import org.bukkit.entity.Projectile;
-import org.bukkit.damage.DamageSource;
 import net.kyori.adventure.util.TriState;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.entity.Item;
@@ -67,7 +64,6 @@ import org.bukkit.entity.Firework;
 import org.bukkit.entity.EntityCategory;
 import org.bukkit.entity.memory.MemoryKey;
 import com.destroystokyo.paper.profile.PlayerProfile;
-import com.destroystokyo.paper.entity.TargetEntityInfo;
 
 @SuppressWarnings("all")
 public class CraftPlayer extends CraftHumanEntity implements Player {
@@ -2169,6 +2165,8 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         if (!this.equals(view.getPlayer())) throw new IllegalArgumentException("InventoryView must belong to this player");
         if (view instanceof org.bukkit.craftbukkit.inventory.CraftInventoryView civ) {
             if (civ.getHandle() == getHandle().containerMenu) return;
+            if (civ.getHandle() == getHandle().inventoryMenu) return;
+            if (getHandle().connection == null) return;
             if (getHandle().containerMenu != getHandle().inventoryMenu) {
                 closeHandle(org.bukkit.event.inventory.InventoryCloseEvent.Reason.OPEN_NEW, false);
             }
@@ -2179,7 +2177,18 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
             getHandle().containerMenu = civ.getHandle();
             ((io.lunararcdevs.lunararc.common.bridge.AbstractContainerMenuBridge) civ.getHandle()).lunararc$setOwner(getHandle());
             ((io.lunararcdevs.lunararc.common.bridge.AbstractContainerMenuBridge) civ.getHandle()).lunararc$setBukkitView(civ);
-            ((io.lunararcdevs.lunararc.common.bridge.ServerPlayerInventoryBridge) getHandle()).lunararc$initMenu(civ.getHandle());
+            net.minecraft.world.inventory.AbstractContainerMenu menu = civ.getHandle();
+            net.kyori.adventure.text.Component title = result.getFirst() != null ? result.getFirst() : view.title();
+            getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundOpenScreenPacket(menu.containerId, menu.getType(),
+                    io.lunararcdevs.lunararc.common.messaging.LunarArcComponentPipeline.fromAdventure(title)));
+            ((io.lunararcdevs.lunararc.common.bridge.ServerPlayerInventoryBridge) getHandle()).lunararc$initMenu(menu);
+            if (menu instanceof net.minecraft.world.inventory.MerchantMenu
+                    && ((io.lunararcdevs.lunararc.common.bridge.access.MerchantMenuAccessBridge) (Object) menu).lunararc$getTrader() instanceof net.minecraft.world.item.trading.Merchant trader) {
+                trader.setTradingPlayer(getHandle());
+                int level = trader instanceof net.minecraft.world.entity.npc.Villager villager ? villager.getVillagerData().getLevel() : 1;
+                getHandle().sendMerchantOffers(menu.containerId, trader.getOffers(), level, trader.getVillagerXp(),
+                        trader.showProgressBar(), trader.canRestock());
+            }
         } else {
             openInventory(view.getTopInventory());
         }
@@ -2246,7 +2255,9 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         if (merchant instanceof org.bukkit.craftbukkit.inventory.CraftMerchant craftMerchant) {
             net.minecraft.world.item.trading.Merchant nms = craftMerchant.getMerchant();
             nms.setTradingPlayer(getHandle());
-            nms.openTradingScreen(getHandle(), net.minecraft.network.chat.Component.literal("Merchant"), 1);
+            net.minecraft.network.chat.Component title = craftMerchant instanceof org.bukkit.craftbukkit.inventory.CraftMerchantCustom custom
+                    ? custom.getTitle() : net.minecraft.network.chat.Component.literal("Merchant");
+            nms.openTradingScreen(getHandle(), title, 1);
             if (getHandle().containerMenu == getHandle().inventoryMenu) return null;
             return getOpenInventory();
         }
@@ -2412,18 +2423,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
         getHandle().setAbsorptionAmount((float) amount);
     }
     @Override public void setMaxHealth(double health) { getHandle().getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(health); }
-    @Override public void setHealth(double health) { getHandle().setHealth((float) health); }
-    @Override public void heal(double amount, EntityRegainHealthEvent.RegainReason reason) { getHandle().heal((float) amount); }
     @Override public double getHealth() { return getHandle().getHealth(); }
-    @Override public void damage(double amount) {
-        getHandle().hurt(getHandle().level().damageSources().generic(), (float) amount);
-    }
-    @Override public void damage(double amount, Entity source) {
-        getHandle().hurt(getHandle().level().damageSources().generic(), (float) amount);
-    }
-    @Override public void damage(double amount, DamageSource damageSource) {
-        getHandle().hurt(getHandle().level().damageSources().generic(), (float) amount);
-    }
     @Override public void resetMaxHealth() { setMaxHealth(20.0); }
     @Override public double getMaxHealth() { return getHandle().getMaxHealth(); }
     @Override public double getAbsorptionAmount() { return getHandle().getAbsorptionAmount(); }

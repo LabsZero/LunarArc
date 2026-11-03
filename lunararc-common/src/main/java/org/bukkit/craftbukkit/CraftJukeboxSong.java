@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Objects;
 
+@SuppressWarnings({"deprecation"})
 public final class CraftJukeboxSong implements JukeboxSong, org.bukkit.craftbukkit.util.Handleable<net.minecraft.world.item.JukeboxSong> {
     private final NamespacedKey key;
     private final net.minecraft.world.item.JukeboxSong handle;

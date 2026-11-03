@@ -27,7 +27,7 @@ public class CraftCommandMap extends SimpleCommandMap {
         this.lunararc$server = java.util.Objects.requireNonNull(server, "server");
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    @SuppressWarnings({"rawtypes"})
     public static void removeBrigadierChild(com.mojang.brigadier.tree.CommandNode<?> node, String name) {
         if (node instanceof io.lunararcdevs.lunararc.common.bridge.access.CommandNodeAccessBridge bridge) {
             bridge.lunararc$getChildren().remove(name);

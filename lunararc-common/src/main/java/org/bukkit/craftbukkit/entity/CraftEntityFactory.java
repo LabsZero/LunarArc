@@ -6,8 +6,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.ResourceLocation;
-import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
 import org.bukkit.entity.EntityFactory;
 import org.bukkit.entity.EntitySnapshot;
 import org.bukkit.entity.EntityType;
@@ -41,7 +39,7 @@ public final class CraftEntityFactory implements EntityFactory {
         if (id == null) {
             throw new IllegalArgumentException("Entity type from snapshot is not registered: " + minecraftType);
         }
-        EntityType bukkitType = Registry.ENTITY_TYPE.get(new NamespacedKey(id.getNamespace(), id.getPath()));
+        EntityType bukkitType = io.lunararcdevs.lunararc.common.server.LunarArcDynamicBukkitEnums.entityType(id);
         if (bukkitType == null) {
             throw new IllegalArgumentException("No Bukkit EntityType wrapper exists for " + id);
         }

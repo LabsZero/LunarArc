@@ -29,6 +29,7 @@ import java.util.function.Predicate;
 import java.util.function.Consumer;
 import org.bukkit.block.BlockState;
 
+@SuppressWarnings({"deprecation", "removal"})
 public class CraftWorld implements World {
     private final java.util.concurrent.ConcurrentMap<Long, java.util.Set<org.bukkit.plugin.Plugin>> lunararcPluginChunkTickets = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Set<Long> lunararcHeldChunks = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -854,9 +855,7 @@ public class CraftWorld implements World {
 
     @Override
     public int getEntityCount() {
-        int count = 0;
-        for (net.minecraft.world.entity.Entity ignored : world.getAllEntities()) count++;
-        return count;
+        return (int) java.util.stream.StreamSupport.stream(world.getAllEntities().spliterator(), false).count();
     }
 
     @Override
@@ -1623,7 +1622,7 @@ public class CraftWorld implements World {
         return false;
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"rawtypes"})
     @Override
     public <T> @Nullable T getGameRuleDefault(@NotNull org.bukkit.GameRule<T> rule) {
         java.util.Objects.requireNonNull(rule, "rule");
@@ -1633,7 +1632,7 @@ public class CraftWorld implements World {
         return raw == null ? null : rule.getType().cast(raw);
     }
 
-    @SuppressWarnings("unchecked")
+    
     @Override
     public <T> @Nullable T getGameRuleValue(@NotNull org.bukkit.GameRule<T> rule) {
         java.util.Objects.requireNonNull(rule, "rule");
@@ -2064,20 +2063,20 @@ public class CraftWorld implements World {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    
     public <T extends Entity> @NotNull T spawn(@NotNull Location location, @NotNull Class<T> clazz) {
         return spawn(location, clazz, true, null);
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    
     public <T extends Entity> @NotNull T spawn(@NotNull Location location, @NotNull Class<T> clazz,
             boolean randomizeData, @Nullable java.util.function.Consumer<? super T> function) {
         return spawn(location, clazz, function, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.CUSTOM);
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    
     public <T extends Entity> @NotNull T spawn(@NotNull Location location, @NotNull Class<T> clazz,
             @Nullable java.util.function.Consumer<? super T> function,
             org.bukkit.event.entity.CreatureSpawnEvent.@NotNull SpawnReason reason) {
@@ -2128,7 +2127,7 @@ public class CraftWorld implements World {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    
     public <T extends org.bukkit.entity.LivingEntity> @NotNull T spawn(@NotNull org.bukkit.Location location,
             @NotNull Class<T> clazz, org.bukkit.event.entity.CreatureSpawnEvent.@NotNull SpawnReason reason,
             boolean randomizeData, @Nullable java.util.function.Consumer<? super T> function) {

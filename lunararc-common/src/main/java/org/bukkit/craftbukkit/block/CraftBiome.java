@@ -7,6 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Biome;
 
+@SuppressWarnings({"removal"})
 public final class CraftBiome {
     private CraftBiome() {}
 

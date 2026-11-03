@@ -228,6 +228,11 @@ public final class LunarArcServerSettings {
         return limit < 0 ? vanilla : limit;
     }
 
+    public static boolean perPlayerMobSpawns() {
+        ServerLevel level = CURRENT.get();
+        return level != null && tuning(level).perPlayerMobSpawns;
+    }
+
     public static long ticksPer(MobCategory category, long vanilla) {
         if (category == MobCategory.MISC) return vanilla;
         CraftWorld world = world();

@@ -3,12 +3,9 @@ package io.lunararcdevs.lunararc.common.mod;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.StackWalker;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 public final class LunarArcReflectionBridge {
-    private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc/ReflectionBridge");
     private static final LunarArcRemapper REMAPPER = new LunarArcRemapper(true);
 
     private LunarArcReflectionBridge() {

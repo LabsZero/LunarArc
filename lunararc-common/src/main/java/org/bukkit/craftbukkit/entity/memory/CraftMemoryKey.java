@@ -5,10 +5,11 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import org.bukkit.entity.memory.MemoryKey;
 
+@SuppressWarnings({"unchecked"})
 public final class CraftMemoryKey {
     private CraftMemoryKey() {}
 
-    @SuppressWarnings("unchecked")
+    
     public static <T, U> MemoryModuleType<U> bukkitToMinecraft(MemoryKey<T> key) {
         if (key == null) return null;
         ResourceLocation id = ResourceLocation.parse(key.getKey().toString());

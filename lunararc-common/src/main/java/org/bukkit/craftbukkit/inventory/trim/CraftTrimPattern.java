@@ -8,6 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Objects;
 
 /** Concrete trim pattern backed by the active dynamic Minecraft registry. */
+@SuppressWarnings({"deprecation"})
 public final class CraftTrimPattern implements TrimPattern, org.bukkit.craftbukkit.util.Handleable<net.minecraft.world.item.armortrim.TrimPattern> {
     private final NamespacedKey key;
     private final net.minecraft.world.item.armortrim.TrimPattern handle;

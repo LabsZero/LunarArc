@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+@SuppressWarnings({"deprecation", "unchecked"})
 public class CraftOfflinePlayer implements OfflinePlayer {
     private final UUID uuid;
     private final String name;
@@ -194,13 +195,13 @@ public class CraftOfflinePlayer implements OfflinePlayer {
     }
 
     @Override
-    @SuppressWarnings("deprecation")
+    
     public @Nullable BanEntry<PlayerProfile> ban(@Nullable String reason, @Nullable Duration duration, @Nullable String source) {
         return castBanEntry(lunararc$profileBanList().addBan(getPlayerProfile(), reason, duration, source));
     }
 
     @Override
-    @SuppressWarnings("deprecation")
+    
     public @Nullable BanEntry<PlayerProfile> ban(@Nullable String reason, @Nullable Instant expires, @Nullable String source) {
         return castBanEntry(lunararc$profileBanList().addBan(getPlayerProfile(), reason, expires, source));
     }
@@ -358,7 +359,7 @@ public class CraftOfflinePlayer implements OfflinePlayer {
 
     
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"rawtypes"})
     private static BanEntry<PlayerProfile> castBanEntry(BanEntry entry) {
         return (BanEntry<PlayerProfile>) entry;
     }

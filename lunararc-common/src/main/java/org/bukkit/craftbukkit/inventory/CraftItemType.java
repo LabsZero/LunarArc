@@ -32,6 +32,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+@SuppressWarnings({"deprecation"})
 public final class CraftItemType<M extends ItemMeta> implements ItemType.Typed<M> {
     private final NamespacedKey key;
     private final Item handle;

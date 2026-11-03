@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+@SuppressWarnings({"deprecation"})
 public final class LunarArcAntiXrayOreBridge {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LunarArcAntiXrayOreBridge.class);

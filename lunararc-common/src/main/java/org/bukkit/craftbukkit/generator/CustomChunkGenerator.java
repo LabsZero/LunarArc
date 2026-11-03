@@ -38,6 +38,7 @@ import java.util.concurrent.CompletableFuture;
  * It never replaces loader lifecycle/registries; it only controls generation
  * stages according to Bukkit's ChunkGenerator contract.
  */
+@SuppressWarnings({"deprecation"})
 public final class CustomChunkGenerator extends ChunkGenerator {
     private final ChunkGenerator delegate;
     private final org.bukkit.generator.ChunkGenerator generator;

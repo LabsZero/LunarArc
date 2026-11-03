@@ -46,6 +46,7 @@ public abstract class AbstractContainerMenuMixin implements io.lunararcdevs.luna
     @Override public ServerPlayer lunararc$getOwner() { return this.lunararc$owner; }
     @Override public void lunararc$setOwner(ServerPlayer owner) { this.lunararc$owner = owner; }
     @Override public org.bukkit.inventory.InventoryView lunararc$getBukkitView() { return this.lunararc$bukkitView; }
+    public org.bukkit.inventory.InventoryView getBukkitView() { return this.lunararc$bukkitView; }
     @Override public void lunararc$setBukkitView(org.bukkit.inventory.InventoryView view) { this.lunararc$bukkitView = view; }
     @Override public boolean lunararc$getCheckReachable() { return this.lunararc$checkReachable; }
     @Override public void lunararc$setCheckReachable(boolean checkReachable) { this.lunararc$checkReachable = checkReachable; }

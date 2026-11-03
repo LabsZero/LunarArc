@@ -60,7 +60,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-@SuppressWarnings("deprecation")
+@SuppressWarnings({"deprecation", "removal"})
 public final class CraftMagicNumbers implements UnsafeValues {
     public static final CraftMagicNumbers INSTANCE = new CraftMagicNumbers();
     public static final boolean DISABLE_OLD_API_SUPPORT = Boolean.getBoolean("paper.disableOldApiSupport");

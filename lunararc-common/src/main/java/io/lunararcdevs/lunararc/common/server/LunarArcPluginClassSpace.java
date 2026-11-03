@@ -26,6 +26,7 @@ public final class LunarArcPluginClassSpace {
     }
 
     public synchronized void unregister(PluginClassLoader loader) {
+        io.lunararcdevs.lunararc.common.server.LunarArcModPluginBridge.unregister(loader);
         aliases.entrySet().removeIf(entry -> entry.getValue() == loader);
         legacyLoaders.remove(loader);
     }

@@ -34,6 +34,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 @Mixin(ServerGamePacketListenerImpl.class)
+@SuppressWarnings({"deprecation"})
 public abstract class ServerGamePacketListenerImplMixin {
 
     @Shadow
@@ -548,7 +549,6 @@ public abstract class ServerGamePacketListenerImplMixin {
         net.minecraft.world.phys.BlockHitResult blockHit = lunararc$clipForUseItem();
         boolean cancelled;
         org.bukkit.event.block.Action action;
-        boolean eventCancelled = false;
         org.bukkit.event.Event.Result useItemInHandResult = org.bukkit.event.Event.Result.DEFAULT;
 
         if (blockHit == null) {
@@ -559,7 +559,6 @@ public abstract class ServerGamePacketListenerImplMixin {
             if (event != null) {
                 useItemInHandResult = event.useItemInHand();
                 cancelled = useItemInHandResult == org.bukkit.event.Event.Result.DENY;
-                eventCancelled = cancelled;
             } else {
                 cancelled = false;
             }
@@ -570,7 +569,6 @@ public abstract class ServerGamePacketListenerImplMixin {
             action = org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK;
             cancelled = gameMode.lunararc$interactResult();
             useItemInHandResult = cancelled ? org.bukkit.event.Event.Result.DENY : org.bukkit.event.Event.Result.DEFAULT;
-            eventCancelled = cancelled;
         } else {
             action = org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK;
             org.bukkit.event.player.PlayerInteractEvent event =
@@ -580,14 +578,12 @@ public abstract class ServerGamePacketListenerImplMixin {
             if (event != null) {
                 useItemInHandResult = event.useItemInHand();
                 cancelled = useItemInHandResult == org.bukkit.event.Event.Result.DENY;
-                eventCancelled = cancelled;
             } else {
                 cancelled = false;
             }
         }
         gameMode.lunararc$clearFiredInteract();
 
-        boolean continues = !cancelled && !this.player.getItemInHand(hand).isEmpty();
 
 
         if (cancelled) {

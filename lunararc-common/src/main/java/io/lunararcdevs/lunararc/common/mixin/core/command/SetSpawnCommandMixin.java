@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Carries the verified vanilla /spawnpoint cause into PlayerSpawnChangeEvent. */
 @Mixin(SetSpawnCommand.class)
+@SuppressWarnings({"removal"})
 public abstract class SetSpawnCommandMixin {
     @Inject(method = "setSpawn", at = @At("HEAD"), require = 0)
     private static void lunararc$spawnCommandCause(

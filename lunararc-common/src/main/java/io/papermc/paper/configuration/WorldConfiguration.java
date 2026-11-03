@@ -75,6 +75,10 @@ public final class WorldConfiguration {
         public boolean hopperDisableMoveEvent;
         public boolean nerfPigmenFromNetherPortals;
         public boolean armorStandTick = true;
+        public boolean perPlayerMobSpawns = true;
+        public boolean disableCreeperLingeringEffect;
+        public boolean disableChestCatDetection;
+        public boolean disablePlayerCrits;
         public boolean piglinsGuardChests = true;
         public boolean pillagerPatrolsDisabled;
         public double pillagerPatrolSpawnChance = 0.2;

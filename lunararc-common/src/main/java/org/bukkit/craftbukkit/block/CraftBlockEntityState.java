@@ -16,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
 
-@SuppressWarnings({"unchecked", "deprecation"})
+@SuppressWarnings({"unchecked"})
 public class CraftBlockEntityState<T extends BlockEntity> extends CraftBlockState implements TileState {
     public static boolean DISABLE_SNAPSHOT = false;
 

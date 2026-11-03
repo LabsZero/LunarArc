@@ -2,7 +2,6 @@ package io.papermc.paper;
 
 import io.lunararcdevs.lunararc.common.server.LunarArcVersionInfo;
 
-import io.papermc.paper.ServerBuildInfo;
 import net.kyori.adventure.key.Key;
 import org.jetbrains.annotations.NotNull;
 

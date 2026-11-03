@@ -18,6 +18,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 
+@SuppressWarnings({"removal"})
 public class SimplePluginManager implements PluginManager {
     private final Server server;
     private final SimpleCommandMap commandMap;

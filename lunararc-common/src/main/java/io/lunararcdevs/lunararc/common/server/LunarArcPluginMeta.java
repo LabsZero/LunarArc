@@ -108,7 +108,7 @@ public class LunarArcPluginMeta implements PluginMeta {
         return stringListFromDescription("getLibraries", "getPluginLibraries");
     }
 
-    @SuppressWarnings("unchecked")
+    
     private @NotNull List<String> stringListFromDescription(String... methods) {
         for (String methodName : methods) {
             try {

@@ -31,6 +31,7 @@ import java.util.jar.JarFile;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+@SuppressWarnings({"deprecation", "removal", "resource"})
 public class SpigotPluginProvider implements PluginProvider<JavaPlugin>, ProviderStatusHolder, DependencyContextHolder {
 
     public static final PluginTypeFactory<SpigotPluginProvider, PluginDescriptionFile> FACTORY = new SpigotPluginProviderFactory();
@@ -67,7 +68,7 @@ public class SpigotPluginProvider implements PluginProvider<JavaPlugin>, Provide
 
             final File parentFile = server.getPluginsFolder(); // Paper
             final File dataFolder = new File(parentFile, this.description.getName());
-            @SuppressWarnings("deprecation") final File oldDataFolder = new File(parentFile, this.description.getRawName());
+            final File oldDataFolder = new File(parentFile, this.description.getRawName());
 
             // Found old data folder
             if (dataFolder.equals(oldDataFolder)) {

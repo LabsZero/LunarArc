@@ -61,6 +61,10 @@ public final class PaperVersionFetcher implements VersionFetcher {
                 return latestVersionMessage(currentVersion);
             }
 
+            if (isSnapshot(currentVersion)) {
+                return Component.text(TranslationManager.get("version.newer", currentVersion), NamedTextColor.AQUA);
+            }
+
             if (release.behind() < 0 && isNewerThan(currentVersion, release)) {
                 return Component.text(TranslationManager.get("version.newer", currentVersion), NamedTextColor.AQUA);
             }
@@ -122,6 +126,10 @@ public final class PaperVersionFetcher implements VersionFetcher {
     private static String stringValue(JsonObject object, String key) {
         JsonElement value = object.get(key);
         return value == null || value.isJsonNull() ? "" : value.getAsString();
+    }
+
+    public static boolean isSnapshot(String version) {
+        return version != null && version.toUpperCase(Locale.ROOT).contains("SNAPSHOT");
     }
 
     static boolean isNewerThan(String current, Release release) {

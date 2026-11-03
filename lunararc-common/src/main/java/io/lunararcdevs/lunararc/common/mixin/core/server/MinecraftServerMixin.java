@@ -44,6 +44,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 
 @Mixin(value = MinecraftServer.class, priority = Integer.MAX_VALUE)
+@SuppressWarnings({"deprecation"})
 public abstract class MinecraftServerMixin implements MinecraftServerBridge, CommandSourceBridge {
 
     @Unique

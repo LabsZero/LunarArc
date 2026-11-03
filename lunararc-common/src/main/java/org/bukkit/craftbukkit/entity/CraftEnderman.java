@@ -11,6 +11,7 @@ import org.bukkit.craftbukkit.util.CraftMagicNumbers;
 import org.bukkit.entity.Enderman;
 import org.bukkit.material.MaterialData;
 
+@SuppressWarnings({"deprecation", "removal"})
 public final class CraftEnderman extends CraftMonster implements Enderman {
     public CraftEnderman(CraftServer server, net.minecraft.world.entity.monster.EnderMan entity) { super(server, entity); }
     @Override public net.minecraft.world.entity.monster.EnderMan getHandle() { return (net.minecraft.world.entity.monster.EnderMan) this.entity; }

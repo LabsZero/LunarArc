@@ -36,6 +36,7 @@ processResources {
     inputs.property 'paper_build',   libs.versions.paper.build.get()
     inputs.property 'data_version',  libs.versions.data.version.get()
     inputs.property 'build_name',    libs.versions.build.name.get()
+    inputs.property 'git_branch',    rootProject.ext.gitBranch
 
     filesMatching('lunararc-launcher.properties') {
         expand(
@@ -52,7 +53,8 @@ processResources {
             quiltInstaller: libs.versions.quilt.installer.get(),
             paperBuild:    libs.versions.paper.build.get(),
             dataVersion:   libs.versions.data.version.get(),
-            buildName:     libs.versions.build.name.get()
+            buildName:     libs.versions.build.name.get(),
+            gitBranch:     rootProject.ext.gitBranch
         )
     }
 }

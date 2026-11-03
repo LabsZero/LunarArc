@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+@SuppressWarnings({"deprecation"})
 public class PluginInitializerManager {
 
     private static final Logger LOGGER = org.slf4j.LoggerFactory.getLogger(PluginInitializerManager.class);
@@ -102,7 +103,7 @@ public class PluginInitializerManager {
 
         io.papermc.paper.plugin.util.EntrypointUtil.registerProvidersFromSource(io.papermc.paper.plugin.provider.source.DirectoryProviderSource.INSTANCE, pluginSystem.pluginDirectoryPath());
 
-        @SuppressWarnings("unchecked")
+        
         java.util.List<Path> files = lunararc$readFileListOption(optionSet, "add-plugin").stream().map(File::toPath).toList();
         io.papermc.paper.plugin.util.EntrypointUtil.registerProvidersFromSource(io.papermc.paper.plugin.provider.source.PluginFlagProviderSource.INSTANCE, files);
     }

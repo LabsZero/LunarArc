@@ -1,6 +1,7 @@
 package org.apache.maven.repository.internal;
 
 
+@SuppressWarnings({"deprecation"})
 public final class MavenRepositorySystemUtils {
     private MavenRepositorySystemUtils() {}
 

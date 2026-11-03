@@ -80,6 +80,7 @@ import org.bukkit.event.player.PlayerVelocityEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.util.Vector;
 
+@SuppressWarnings({"deprecation", "removal"})
 public final class LunarArcPaperEvents {
     private LunarArcPaperEvents() {}
 

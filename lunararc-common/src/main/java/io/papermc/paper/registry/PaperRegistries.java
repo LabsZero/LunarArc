@@ -7,7 +7,7 @@ public final class PaperRegistries {
     private PaperRegistries() {
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"rawtypes"})
     public static <T> ResourceKey registryToNms(RegistryKey<T> key) {
         return ResourceKey.createRegistryKey(ResourceLocation.parse(key.key().asString()));
     }

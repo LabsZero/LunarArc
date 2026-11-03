@@ -24,6 +24,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 @org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
+@SuppressWarnings({"deprecation", "rawtypes", "redundantSuperinterface", "removal", "unchecked"})
 public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damageable, org.bukkit.inventory.meta.Repairable {
 
     public boolean hasDestroyableKeys() { return !destroyableKeys.isEmpty(); }
@@ -292,7 +293,7 @@ public class CraftItemMeta implements ItemMeta, org.bukkit.inventory.meta.Damage
         }
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    
     private void applyUnhandledComponents(ItemStack nms) {
         for (Map.Entry<net.minecraft.core.component.DataComponentType<?>, Optional<?>> entry : unhandledDataComponents.entrySet()) {
             try {

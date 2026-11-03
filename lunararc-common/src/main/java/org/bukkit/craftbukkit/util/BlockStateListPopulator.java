@@ -28,6 +28,7 @@ import org.bukkit.craftbukkit.block.CraftBlockState;
  * Virtual WorldGenLevel used by Bukkit tree-generation overloads.
  * Reads observe captured writes; writes never touch the real ServerLevel until replayed.
  */
+@SuppressWarnings({"deprecation", "unchecked"})
 public final class BlockStateListPopulator extends DummyGeneratorAccess {
     private final LevelAccessor world;
     private final LinkedHashMap<BlockPos, CapturedBlock> blocks = new LinkedHashMap<>();

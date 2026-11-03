@@ -5,6 +5,7 @@ import org.bukkit.persistence.PersistentDataAdapterContext;
 import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
+@SuppressWarnings({"deprecation"})
 public final class DeprecatedItemTagType<P,C> implements PersistentDataType<P,C> {
     private final ItemTagType<P,C> delegate;
     public DeprecatedItemTagType(ItemTagType<P,C> delegate) { this.delegate = delegate; }

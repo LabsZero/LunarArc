@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Level.class)
+@SuppressWarnings({"resource"})
 public abstract class LevelMixin implements io.lunararcdevs.lunararc.common.bridge.LevelBridge {
 
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("LunarArc/LevelMixin");

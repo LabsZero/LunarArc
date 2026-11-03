@@ -16,4 +16,6 @@ public interface ServerPlayerDeathBridge {
 
     java.util.List<net.minecraft.world.item.ItemStack> lunararc$getDeathInventoryState();
     void lunararc$setDeathInventoryState(java.util.List<net.minecraft.world.item.ItemStack> state);
+
+    boolean lunararc$dropDeathItems(Runnable dropAll);
 }

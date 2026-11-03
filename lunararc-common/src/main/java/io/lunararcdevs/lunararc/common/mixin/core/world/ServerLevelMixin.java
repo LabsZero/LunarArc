@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ServerLevel.class)
+@SuppressWarnings({"resource"})
 public abstract class ServerLevelMixin implements ServerLevelBridge {
 
     @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "tickPrecipitation", at = @At(value = "INVOKE",

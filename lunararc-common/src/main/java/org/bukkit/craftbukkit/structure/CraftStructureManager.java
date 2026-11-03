@@ -35,7 +35,7 @@ public final class CraftStructureManager implements StructureManager {
         this.handle = server.getStructureManager();
     }
 
-    @SuppressWarnings("unchecked")
+    
     private Map<ResourceLocation, Optional<StructureTemplate>> repository() {
         return ((StructureTemplateManagerAccessBridge) (Object) handle).lunararc$getStructureRepository();
     }

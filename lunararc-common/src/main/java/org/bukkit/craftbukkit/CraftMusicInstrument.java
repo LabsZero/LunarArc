@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Objects;
 
+@SuppressWarnings({"removal"})
 public final class CraftMusicInstrument extends MusicInstrument implements org.bukkit.craftbukkit.util.Handleable<Instrument> {
     private final NamespacedKey key;
     private final Instrument handle;

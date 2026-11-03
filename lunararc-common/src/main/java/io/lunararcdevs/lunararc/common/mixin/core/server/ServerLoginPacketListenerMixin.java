@@ -35,9 +35,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadLocalRandom;
 
 @Mixin(value = ServerLoginPacketListenerImpl.class, priority = 500)
+@SuppressWarnings({"deprecation"})
 public abstract class ServerLoginPacketListenerMixin implements ServerLoginPacketListenerBridge {
 
     @Shadow @Final MinecraftServer server;

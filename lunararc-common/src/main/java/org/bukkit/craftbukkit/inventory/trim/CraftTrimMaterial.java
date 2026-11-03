@@ -8,6 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Objects;
 
 /** Concrete trim material backed by the active dynamic Minecraft registry. */
+@SuppressWarnings({"deprecation"})
 public final class CraftTrimMaterial implements TrimMaterial, org.bukkit.craftbukkit.util.Handleable<net.minecraft.world.item.armortrim.TrimMaterial> {
     private final NamespacedKey key;
     private final net.minecraft.world.item.armortrim.TrimMaterial handle;

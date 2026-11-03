@@ -12,6 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 
+@SuppressWarnings({"removal"})
 public class CraftInventoryView implements InventoryView {
     private final org.bukkit.craftbukkit.entity.CraftPlayer player;
     private final AbstractContainerMenu handle;

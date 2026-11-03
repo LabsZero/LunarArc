@@ -22,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Bukkit leash-to-fence cancellation around the real LeadItem leash assignment. */
 @Mixin(LeadItem.class)
+@SuppressWarnings({"deprecation"})
 public abstract class LeadItemMixin {
     @Unique private static final ThreadLocal<InteractionHand> lunararc$hand =
             ThreadLocal.withInitial(() -> InteractionHand.MAIN_HAND);

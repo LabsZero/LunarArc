@@ -68,7 +68,7 @@ public abstract class FoodDataMixin implements FoodDataBridge {
             int delta = net.minecraft.util.Mth.clamp(event.getFoodLevel(), 0, 20) - this.foodLevel;
             ((FoodData) (Object) this).eat(delta, food.saturation());
         }
-        if (owner instanceof net.minecraft.server.level.ServerPlayer serverPlayer
+        if (owner instanceof net.minecraft.server.level.ServerPlayer
                 && ((EntityBridge) owner).lunararc$getBukkitEntity() instanceof org.bukkit.craftbukkit.entity.CraftPlayer craftPlayer) {
             craftPlayer.sendHealthUpdate();
         }

@@ -7,8 +7,6 @@ import org.bukkit.event.EventException;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.*;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.File;
@@ -19,11 +17,11 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 
+@SuppressWarnings({"deprecation", "removal"})
 public class LunarArcPluginLoader implements PluginLoader {
     private final Server server;
     private final Yaml yaml = new Yaml();
     private final Pattern[] fileFilters = new Pattern[] { Pattern.compile("\\.jar$") };
-    private static final Logger logger = LoggerFactory.getLogger("LunarArc");
     private final LunarArcPluginClassSpace classSpace = new LunarArcPluginClassSpace();
 
     public LunarArcPluginLoader(Server server) {
@@ -136,7 +134,6 @@ public class LunarArcPluginLoader implements PluginLoader {
 
                     Map<String, Object> map = yaml.load(stream);
                     String name = map.getOrDefault("name", "").toString();
-                    String version = map.getOrDefault("version", "").toString();
                     String main = map.getOrDefault("main-class", map.getOrDefault("main", "")).toString();
 
                     if (name.isEmpty() || main.isEmpty()) {
@@ -157,7 +154,7 @@ public class LunarArcPluginLoader implements PluginLoader {
         }
     }
 
-    @SuppressWarnings("unchecked")
+    
     private static void translatePaperDependencies(Map<String, Object> target, Object dependenciesValue) {
         if (!(dependenciesValue instanceof Map<?, ?> dependencies)) return;
         Object serverValue = dependencies.get("server");

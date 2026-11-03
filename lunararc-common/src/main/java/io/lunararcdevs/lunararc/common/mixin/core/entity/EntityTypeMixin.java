@@ -19,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * before the entity is actually added to the ServerLevel.
  */
 @Mixin(EntityType.class)
+@SuppressWarnings({"deprecation"})
 public abstract class EntityTypeMixin<T extends Entity> {
     @Inject(
             method = "create(Lnet/minecraft/server/level/ServerLevel;Ljava/util/function/Consumer;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/MobSpawnType;ZZ)Lnet/minecraft/world/entity/Entity;",

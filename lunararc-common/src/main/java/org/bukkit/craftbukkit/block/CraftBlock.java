@@ -34,6 +34,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 
+@SuppressWarnings({"deprecation", "removal"})
 public class CraftBlock implements Block {
     private final ServerLevel world;
     private final BlockPos position;
@@ -78,7 +79,7 @@ public class CraftBlock implements Block {
         return new CraftSoundGroup(nmsState().getSoundType());
     }
 
-    @SuppressWarnings("deprecation")
+    
     public @NotNull com.destroystokyo.paper.block.BlockSoundGroup getSoundGroup() {
         return new CraftSoundGroup(nmsState().getSoundType());
     }

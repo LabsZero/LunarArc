@@ -30,21 +30,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
+@SuppressWarnings({"deprecation", "removal"})
 public class PaperPluginManagerImpl implements PluginManager, DependencyContext {
 
     final PaperPluginInstanceManager instanceManager;
     final PaperEventManager paperEventManager;
     PermissionManager permissionManager;
 
-    // --- LunarArc addition, not present in real Paper ---
-    // Real Paper's registerInterface throws UnsupportedOperationException — the modern
-    // provider-based system replaces legacy PluginLoader registration entirely. LunarArc's own
-    // CraftServer still calls registerInterface(LunarArcPluginLoader.class) at boot expecting it
-    // to actually work, so this implements the real, long-stable classic Bukkit
-    // SimplePluginManager.registerInterface behavior instead: reflectively construct the loader
-    // via its (Server) constructor and index it by the file-pattern(s) it declares.
-    // getRegisteredLoader(...) lets other code (e.g. SpigotPluginProvider) retrieve the same
-    // shared instance rather than constructing an independent one with its own class-space.
     private final Map<Pattern, PluginLoader> fileAssociations = new ConcurrentHashMap<>();
 
     public PaperPluginManagerImpl(Server server, CommandMap commandMap, @Nullable SimplePluginManager permissionManager) {
@@ -54,19 +46,11 @@ public class PaperPluginManagerImpl implements PluginManager, DependencyContext 
         if (permissionManager == null) {
             this.permissionManager = new NormalPaperPermissionManager();
         } else {
-            this.permissionManager = new StupidSPMPermissionManagerWrapper(permissionManager); // TODO: See comment when SimplePermissionManager is removed
+            this.permissionManager = new StupidSPMPermissionManagerWrapper(permissionManager);
         }
     }
 
-    // REMOVE THIS WHEN SimplePluginManager is removed.
-    // Just cast and use Bukkit.getServer().getPluginManager()
     public static PaperPluginManagerImpl getInstance() {
-        // Real Paper reads a package-visible `paperPluginManager` field directly on CraftServer.
-        // LunarArc's CraftServer.getPluginManager() deliberately returns its SimplePluginManager
-        // (matching real Bukkit's public API contract - see CraftServer), not this class, so
-        // casting that return value here always threw ClassCastException. SimplePluginManager
-        // itself holds the real PaperPluginManagerImpl singleton (CraftServer wires it via
-        // setInternalManager in its constructor) and exposes it via getInternalManager().
         return ((SimplePluginManager) Bukkit.getServer().getPluginManager()).getInternalManager();
     }
 
@@ -299,13 +283,6 @@ public class PaperPluginManagerImpl implements PluginManager, DependencyContext 
         return instanceManager.getDependencyGraph();
     }
 
-    // --- LunarArc addition, not present in real Paper ---
-    // Real Paper's PaperPluginInstanceManager loads plugins via the dependency-graph-based
-    // strategy ported into entrypoint/dependency + entrypoint/strategy, which already produces
-    // a correctly dependency-ordered plugin list — so enabling in that list's order, filtered by
-    // load-order type, is sufficient here without re-deriving dependency order by hand.
-    // Preserved because CraftServer's existing boot sequence (enablePlugins(STARTUP) then
-    // enablePlugins(POSTWORLD)) calls this by name.
     public void enablePlugins() {
         enablePlugins(null);
     }

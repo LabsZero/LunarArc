@@ -1,9 +1,7 @@
 package io.lunararcdevs.lunararc.common.mixin.core.redstone;
 
-import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import com.llamalad7.mixinextras.sugar.Local;
 import io.lunararcdevs.lunararc.common.event.LunarArcPaperEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;

@@ -22,7 +22,7 @@ import java.util.Objects;
  * generator state, but every stored block is a real NMS BlockState rather than
  * a fabricated Bukkit value.
  */
-@SuppressWarnings("deprecation")
+@SuppressWarnings({"deprecation", "removal"})
 public final class CraftChunkData implements ChunkGenerator.ChunkData {
     private final int minHeight;
     private final int maxHeight;

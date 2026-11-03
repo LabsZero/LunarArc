@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+@SuppressWarnings({"deprecation"})
 public final class LunarArcAntiXrayEngine {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LunarArcAntiXrayEngine.class);

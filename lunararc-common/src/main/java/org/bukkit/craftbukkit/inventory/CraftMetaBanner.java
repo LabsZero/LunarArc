@@ -19,6 +19,7 @@ import org.bukkit.inventory.meta.BannerMeta;
 
 /** Concrete banner metadata over Minecraft 1.21.1 BANNER_PATTERNS. */
 @org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
+@SuppressWarnings({"deprecation"})
 public final class CraftMetaBanner extends CraftItemMeta implements BannerMeta {
     public static final int ARBITRARY_LIMIT = 20;
     private List<Pattern> patterns = new ArrayList<>();

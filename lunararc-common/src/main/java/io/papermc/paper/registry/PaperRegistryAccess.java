@@ -4,8 +4,6 @@ import io.lunararcdevs.lunararc.common.server.LunarArcBukkitRegistry;
 import io.lunararcdevs.lunararc.common.server.LunarArcMissingAdapterException;
 import io.lunararcdevs.lunararc.common.server.LunarArcRegistryEntries;
 
-import io.papermc.paper.registry.RegistryAccess;
-import io.papermc.paper.registry.RegistryKey;
 import org.bukkit.Keyed;
 import org.bukkit.Registry;
 import org.jetbrains.annotations.NotNull;
@@ -152,7 +150,7 @@ public final class PaperRegistryAccess implements RegistryAccess {
     }
 
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    
     private static Registry<? extends Keyed> createMenuTypeRegistry(Class<? extends Keyed> type) {
         net.minecraft.core.Registry<net.minecraft.world.inventory.MenuType<?>> nms =
                 net.minecraft.core.registries.BuiltInRegistries.MENU;
@@ -183,7 +181,7 @@ public final class PaperRegistryAccess implements RegistryAccess {
         };
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    
     private static Registry<? extends Keyed> createMinecraftTypeRegistry(Class<? extends Keyed> type, boolean itemRegistry) {
         return LunarArcBukkitRegistry.lazy(() -> {
             java.util.List<Keyed> values = new java.util.ArrayList<>();
@@ -207,7 +205,7 @@ public final class PaperRegistryAccess implements RegistryAccess {
     }
 
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    
     private static Registry<? extends Keyed> createPotionEffectTypeRegistry(Class<?> apiType) {
         return LunarArcBukkitRegistry.lazy(() -> {
             java.util.List<Keyed> values = new java.util.ArrayList<>();

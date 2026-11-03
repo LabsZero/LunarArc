@@ -11,6 +11,7 @@ import org.bukkit.map.MapCursorCollection;
 import org.bukkit.map.MapFont;
 import org.bukkit.map.MapPalette;
 
+@SuppressWarnings({"deprecation", "removal"})
 public final class CraftMapCanvas implements MapCanvas {
     private final byte[] buffer = new byte[128 * 128];
     private final CraftMapView view;

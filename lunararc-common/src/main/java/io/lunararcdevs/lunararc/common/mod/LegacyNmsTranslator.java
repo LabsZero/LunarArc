@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+@SuppressWarnings({"deprecation"})
 public final class LegacyNmsTranslator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc");

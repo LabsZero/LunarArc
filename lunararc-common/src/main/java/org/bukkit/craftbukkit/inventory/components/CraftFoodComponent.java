@@ -19,6 +19,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 
+@SuppressWarnings({"deprecation"})
 public final class CraftFoodComponent implements FoodComponent {
     private FoodProperties handle;
 

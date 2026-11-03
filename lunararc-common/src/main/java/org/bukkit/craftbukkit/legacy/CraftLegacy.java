@@ -26,6 +26,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 @Deprecated
+@SuppressWarnings({"removal"})
 public final class CraftLegacy {
     private static final Map<MaterialData, BlockState> MATERIAL_TO_STATE = new HashMap<>(4096);
     private static final Map<BlockState, MaterialData> STATE_TO_MATERIAL = new HashMap<>(4096);
@@ -37,15 +38,18 @@ public final class CraftLegacy {
     private CraftLegacy() {
     }
 
+    @Deprecated
     public static Material toLegacy(Material material) {
         if (material == null || material.isLegacy()) return material;
         return toLegacyData(material).getItemType();
     }
 
+    @Deprecated
     public static MaterialData toLegacyData(Material material) {
         return toLegacyData(material, false);
     }
 
+    @Deprecated
     public static MaterialData toLegacyData(Material material, boolean itemPriority) {
         Objects.requireNonNull(material, "material");
         if (material.isLegacy()) throw new IllegalArgumentException("toLegacy on legacy Material: " + material);
@@ -70,6 +74,7 @@ public final class CraftLegacy {
         return mapped != null ? mapped : new MaterialData(Material.LEGACY_AIR);
     }
 
+    @Deprecated
     public static BlockState fromLegacyData(Material material, byte data) {
         Objects.requireNonNull(material, "material");
         if (!material.isLegacy()) throw new IllegalArgumentException("fromLegacyData on modern Material: " + material);
@@ -81,6 +86,7 @@ public final class CraftLegacy {
     }
 
 
+    @Deprecated
     public static Item fromLegacyData(Material material, short data) {
         Objects.requireNonNull(material, "material");
         if (!material.isLegacy()) throw new IllegalArgumentException("fromLegacyData on modern Material: " + material);
@@ -93,6 +99,7 @@ public final class CraftLegacy {
         return block != null ? block.asItem() : Items.AIR;
     }
 
+    @Deprecated
     public static MaterialData toLegacy(BlockState state) {
         Objects.requireNonNull(state, "state");
         MaterialData mapped = STATE_TO_MATERIAL.get(state);
@@ -100,23 +107,28 @@ public final class CraftLegacy {
         return mapped != null ? mapped : new MaterialData(Material.LEGACY_AIR);
     }
 
+    @Deprecated
     public static byte toLegacyData(BlockState state) {
         return toLegacy(state).getData();
     }
 
+    @Deprecated
     public static Material toLegacyMaterial(BlockState state) {
         return toLegacy(state).getItemType();
     }
 
+    @Deprecated
     public static Material fromLegacy(Material material) {
         if (material == null || !material.isLegacy()) return material;
         return fromLegacy(new MaterialData(material), false);
     }
 
+    @Deprecated
     public static Material fromLegacy(MaterialData materialData) {
         return fromLegacy(materialData, false);
     }
 
+    @Deprecated
     public static Material fromLegacy(MaterialData materialData, boolean itemPriority) {
         Objects.requireNonNull(materialData, "materialData");
         Material material = materialData.getItemType();
@@ -143,42 +155,50 @@ public final class CraftLegacy {
     }
 
 
+    @Deprecated
     public static Material[] values() {
         Material[] values = Material.values();
         return java.util.Arrays.copyOfRange(values, Material.LEGACY_AIR.ordinal(), values.length);
     }
 
+    @Deprecated
     public static Material valueOf(String name) {
         Objects.requireNonNull(name, "name");
         return Material.valueOf(name.startsWith("LEGACY_") ? name : "LEGACY_" + name);
     }
 
+    @Deprecated
     public static Material getMaterial(String name) {
         Objects.requireNonNull(name, "name");
         return Material.getMaterial(name.startsWith("LEGACY_") ? name : "LEGACY_" + name);
     }
 
+    @Deprecated
     public static Material matchMaterial(String name) {
         Objects.requireNonNull(name, "name");
         return Material.matchMaterial(name.startsWith("LEGACY_") ? name : "LEGACY_" + name);
     }
 
+    @Deprecated
     public static int ordinal(Material material) {
         Objects.requireNonNull(material, "material");
         if (!material.isLegacy()) throw new IllegalArgumentException("ordinal on modern Material: " + material);
         return material.ordinal() - Material.LEGACY_AIR.ordinal();
     }
 
+    @Deprecated
     public static String name(Material material) {
         Objects.requireNonNull(material, "material");
         if (!material.isLegacy()) throw new IllegalArgumentException("name on modern Material: " + material);
         return material.name().substring("LEGACY_".length());
     }
 
+    @Deprecated
     public static String toString(Material material) {
         return name(material);
     }
 
+    @Deprecated
     public static void init() {
     }
 

@@ -139,6 +139,10 @@ public final class PaperConfigurations {
         tuning.creativeArrowDespawnRate = lenientRate(config, "entities.spawning.creative-arrow-despawn-rate");
         tuning.hopperDisableMoveEvent = lenientBool(config, "hopper.disable-move-event", false);
         tuning.armorStandTick = lenientBool(config, "entities.armor-stands.tick", true);
+        tuning.perPlayerMobSpawns = lenientBool(config, "entities.spawning.per-player-mob-spawns", true);
+        tuning.disableCreeperLingeringEffect = lenientBool(config, "entities.behavior.disable-creeper-lingering-effect", false);
+        tuning.disableChestCatDetection = lenientBool(config, "entities.behavior.disable-chest-cat-detection", false);
+        tuning.disablePlayerCrits = lenientBool(config, "entities.behavior.disable-player-crits", false);
         tuning.piglinsGuardChests = lenientBool(config, "entities.behavior.piglins-guard-chests", true);
         tuning.pillagerPatrolsDisabled = lenientBool(config, "entities.behavior.pillager-patrols.disable", false);
         tuning.pillagerPatrolSpawnChance = lenientDouble(config, "entities.behavior.pillager-patrols.spawn-chance", 0.2);

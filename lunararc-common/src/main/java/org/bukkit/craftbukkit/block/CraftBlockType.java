@@ -22,6 +22,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+@SuppressWarnings({"deprecation"})
 public final class CraftBlockType<B extends BlockData> implements BlockType.Typed<B> {
     private final NamespacedKey key;
     private final Block handle;

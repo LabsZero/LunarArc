@@ -28,6 +28,7 @@ public final class LunarArcServer {
         }
         platformName = name;
         modClassLoader = loader;
+        io.lunararcdevs.lunararc.common.server.LunarArcModPluginBridge.install(loader);
         // Mod-loading (and the incompatible-mod screening that follows this call in every
         // platform's mod constructor) happens well before MinecraftServer exists, so this is
         // the earliest point lunararc.conf can be read - relying solely on MinecraftServerMixin's

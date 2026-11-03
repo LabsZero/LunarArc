@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Objects;
 
+@SuppressWarnings({"deprecation"})
 public final class CraftStructure extends Structure {
     private final NamespacedKey key;
     private final net.minecraft.world.level.levelgen.structure.Structure handle;

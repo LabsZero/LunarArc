@@ -4,6 +4,8 @@ import cpw.mods.jarhandling.JarContents;
 import cpw.mods.jarhandling.JarContentsBuilder;
 import cpw.mods.jarhandling.SecureJar;
 import cpw.mods.jarhandling.impl.JarContentsImpl;
+import cpw.mods.niofs.union.UnionFileSystem;
+import cpw.mods.niofs.union.UnionPathFilter;
 import io.lunararcdevs.lunararc.api.Unsafe;
 import net.neoforged.fml.loading.moddiscovery.readers.JarModsDotTomlModFileReader;
 import net.neoforged.neoforgespi.locating.IModFile;
@@ -27,6 +29,8 @@ public final class LunarArcModFileReader_NeoForge implements IModFileReader {
     private static final String SERVICES = "META-INF/services/";
     private static final VarHandle PACKAGES = cacheHandle("packages", Set.class);
     private static final VarHandle PROVIDERS = cacheHandle("providers", List.class);
+    private static final VarHandle FILESYSTEM = fieldHandle(JarContentsImpl.class, "filesystem", UnionFileSystem.class);
+    private static final java.lang.reflect.Field PATH_FILTER = pathFilterField();
 
     private final Set<String> libraryPackages = collectLibraryPackages();
     private final Set<String> reported = ConcurrentHashMap.newKeySet();
@@ -38,6 +42,40 @@ public final class LunarArcModFileReader_NeoForge implements IModFileReader {
         } catch (ReflectiveOperationException unavailable) {
             LOGGER.warn("Could not access FML's jar contents cache; nested libraries that clash with LunarArc's own cannot be adjusted", unavailable);
             return null;
+        }
+    }
+
+    private static VarHandle fieldHandle(Class<?> owner, String field, Class<?> type) {
+        try {
+            return Unsafe.lookup().findVarHandle(owner, field, type);
+        } catch (ReflectiveOperationException unavailable) {
+            return null;
+        }
+    }
+
+    private static java.lang.reflect.Field pathFilterField() {
+        try {
+            return UnionFileSystem.class.getDeclaredField("pathFilter");
+        } catch (ReflectiveOperationException unavailable) {
+            return null;
+        }
+    }
+
+    private static boolean isModuleDescriptor(String entry) {
+        String normalized = stripLeadingSlash(entry);
+        return normalized.equals("module-info.class") || normalized.matches("META-INF/versions/\\d+/module-info\\.class");
+    }
+
+    private static void hideModuleDescriptor(JarContentsImpl impl) {
+        if (FILESYSTEM == null || PATH_FILTER == null) return;
+        try {
+            UnionFileSystem filesystem = (UnionFileSystem) FILESYSTEM.get(impl);
+            long offset = Unsafe.objectFieldOffset(PATH_FILTER);
+            UnionPathFilter existing = (UnionPathFilter) Unsafe.getObject(filesystem, offset);
+            UnionPathFilter replacement = (entry, base) -> !isModuleDescriptor(entry) && (existing == null || existing.test(entry, base));
+            Unsafe.putObject(filesystem, offset, replacement);
+        } catch (Throwable failure) {
+            LOGGER.warn("Could not hide the module descriptor of a library that clashes with LunarArc's own", failure);
         }
     }
 
@@ -139,6 +177,7 @@ public final class LunarArcModFileReader_NeoForge implements IModFileReader {
                     .filter(provider -> provider.providers().stream().noneMatch(implementation -> clashing.contains(packageOfClass(implementation))))
                     .toList();
             PROVIDERS.set(impl, providers);
+            hideModuleDescriptor(impl);
             return true;
         } catch (Throwable failure) {
             LOGGER.warn("Could not adjust the packages of a library that clashes with LunarArc's own", failure);

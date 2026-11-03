@@ -8,6 +8,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.messaging.StandardMessenger;
 
 /** Shared Bukkit plugin-channel policy; loader modules only own native registration/transport. */
+@SuppressWarnings({"deprecation"})
 public final class LunarArcPluginChannelPolicy {
     private LunarArcPluginChannelPolicy() {}
 

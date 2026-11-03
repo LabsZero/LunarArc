@@ -12,6 +12,7 @@ import org.bukkit.potion.PotionType;
 import java.util.List;
 import java.util.Objects;
 
+@SuppressWarnings({"deprecation"})
 public final class CraftPotionType implements PotionType.InternalPotionData {
     private final NamespacedKey key;
     private final Potion handle;

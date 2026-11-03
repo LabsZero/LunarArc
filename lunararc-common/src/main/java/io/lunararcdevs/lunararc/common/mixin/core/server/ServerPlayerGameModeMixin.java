@@ -22,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ServerPlayerGameMode.class)
+@SuppressWarnings({"deprecation"})
 public abstract class ServerPlayerGameModeMixin implements ServerPlayerGameModeBridge {
 
     @Shadow

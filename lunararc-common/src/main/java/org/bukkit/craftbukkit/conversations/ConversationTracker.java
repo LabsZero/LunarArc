@@ -7,6 +7,7 @@ import org.bukkit.conversations.Conversation;
 import org.bukkit.conversations.ConversationAbandonedEvent;
 import org.bukkit.conversations.ManuallyAbandonedConversationCanceller;
 
+@SuppressWarnings({"deprecation"})
 public final class ConversationTracker {
     private LinkedList<Conversation> conversationQueue = new LinkedList<>();
 

@@ -16,7 +16,7 @@ import org.bukkit.profile.PlayerProfile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-@SuppressWarnings({"rawtypes", "deprecation"})
+@SuppressWarnings({"deprecation", "rawtypes", "unchecked"})
 public final class CraftProfileBanList implements org.bukkit.ban.ProfileBanList {
     private final UserBanList list;
     public CraftProfileBanList(UserBanList list) { this.list = java.util.Objects.requireNonNull(list, "list"); }

@@ -8,7 +8,7 @@ import org.bukkit.persistence.PersistentDataContainer;
 
 import java.util.Objects;
 
-@SuppressWarnings("unchecked")
+@SuppressWarnings({"deprecation", "unchecked"})
 public final class DeprecatedCustomTagContainer implements CustomItemTagContainer {
     private final PersistentDataContainer wrapped;
     public DeprecatedCustomTagContainer(PersistentDataContainer wrapped) { this.wrapped = Objects.requireNonNull(wrapped, "wrapped"); }

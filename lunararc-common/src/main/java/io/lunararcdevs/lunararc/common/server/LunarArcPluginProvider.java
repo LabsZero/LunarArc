@@ -8,6 +8,7 @@ import org.bukkit.plugin.java.PluginClassLoader;
 import java.io.File;
 import java.io.IOException;
 
+@SuppressWarnings({"deprecation"})
 public final class LunarArcPluginProvider implements AutoCloseable {
     private final LunarArcPluginLoader loader;
     private final File source;

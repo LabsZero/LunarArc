@@ -34,6 +34,7 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
+@SuppressWarnings({"deprecation"})
 public final class CraftLimitedRegion implements LimitedRegion {
     private final WeakReference<WorldGenLevel> weakAccess;
     private final int centerChunkX;

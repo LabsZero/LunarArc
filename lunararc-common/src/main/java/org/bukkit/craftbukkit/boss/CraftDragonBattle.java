@@ -1,7 +1,6 @@
 package org.bukkit.craftbukkit.boss;
 
 import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
-import org.bukkit.craftbukkit.boss.CraftBossBar;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;

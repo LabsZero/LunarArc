@@ -86,6 +86,7 @@ public final class PluginClassLoader extends URLClassLoader
                 ? io.lunararcdevs.lunararc.common.server.LunarArcPaperPluginSupport.joinedDependencies(file)
                 : java.util.Set.of();
         this.pluginLoader.getClassSpace().register(this, description, this.paperPlugin);
+        io.lunararcdevs.lunararc.common.server.LunarArcModPluginBridge.register(this);
         this.group = io.papermc.paper.plugin.provider.classloader.PaperClassLoaderStorage.instance()
                 .registerSpigotGroup(this);
     }

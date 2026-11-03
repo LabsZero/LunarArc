@@ -19,6 +19,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
 
+@SuppressWarnings({"removal"})
 public abstract class CraftHumanEntity extends CraftLivingEntity {
 
 
@@ -101,7 +102,7 @@ public abstract class CraftHumanEntity extends CraftLivingEntity {
     @Override
     public void registerAttribute(@NotNull Attribute attribute) { super.registerAttribute(attribute); }
 
-    @SuppressWarnings({"deprecation", "removal"})
+    
     public void openSign(@NotNull org.bukkit.block.Sign sign) {
         this.openSign(sign, org.bukkit.block.sign.Side.FRONT);
     }
@@ -129,7 +130,7 @@ public abstract class CraftHumanEntity extends CraftLivingEntity {
         }
 
         if (org.bukkit.event.player.PlayerSignOpenEvent.getHandlerList().getRegisteredListeners().length > 0) {
-            @SuppressWarnings({"deprecation", "removal"})
+            
             org.bukkit.event.player.PlayerSignOpenEvent legacyEvent =
                     new org.bukkit.event.player.PlayerSignOpenEvent(
                             craftPlayer, sign, side,

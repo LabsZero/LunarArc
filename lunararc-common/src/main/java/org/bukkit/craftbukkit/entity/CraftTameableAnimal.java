@@ -7,6 +7,7 @@ import org.bukkit.entity.AnimalTamer;
 import org.bukkit.entity.Creature;
 import org.bukkit.entity.Tameable;
 
+@SuppressWarnings({"redundantSuperinterface"})
 public class CraftTameableAnimal extends CraftAnimals implements Tameable, Creature {
     public CraftTameableAnimal(CraftServer server, TamableAnimal entity) { super(server, entity); }
 

@@ -31,6 +31,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 
+@SuppressWarnings({"deprecation", "rawtypes"})
 public class CraftBlockData implements BlockData {
     private BlockState state;
     private Set<String> parsedProperties;
@@ -87,7 +88,7 @@ public class CraftBlockData implements BlockData {
         return fromVanilla(value, bukkitClass);
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    
     protected <A extends Enum<A>> Set<A> getValues(EnumProperty<?> property, Class<A> bukkitClass) {
         LinkedHashSet<A> result = new LinkedHashSet<>();
         for (Object value : property.getPossibleValues()) {
@@ -96,7 +97,7 @@ public class CraftBlockData implements BlockData {
         return Collections.unmodifiableSet(result);
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    @SuppressWarnings({"unchecked"})
     protected <A extends Enum<A>> void set(EnumProperty<?> property, A value) {
         this.parsedProperties = null;
         Enum<?> vanilla = toVanilla(value, (Class) property.getValueClass());
@@ -370,7 +371,7 @@ public class CraftBlockData implements BlockData {
         return BuiltInRegistries.BLOCK.get(key);
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    @SuppressWarnings({"unchecked"})
     private static BlockState setPropertyValue(BlockState state, Property property, String rawValue, ResourceLocation key) {
         java.util.Optional value = property.getValue(rawValue);
         if (value.isEmpty()) {
@@ -402,7 +403,7 @@ public class CraftBlockData implements BlockData {
         return sb.append(']').toString();
     }
 
-    @SuppressWarnings("unchecked")
+    
     private static <T extends Comparable<T>> String getPropertyValueString(
             net.minecraft.world.level.block.state.BlockState state,
             net.minecraft.world.level.block.state.properties.Property<T> prop) {
@@ -427,7 +428,7 @@ public class CraftBlockData implements BlockData {
         return out.append(']').toString();
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    @SuppressWarnings({"unchecked"})
     private static String getPropertyValueStringUnchecked(BlockState state, Property property) {
         Comparable value = state.getValue(property);
         return property.getName(value);
@@ -446,7 +447,7 @@ public class CraftBlockData implements BlockData {
         return true;
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    @SuppressWarnings({"unchecked"})
     private static boolean propertyEquals(BlockState first, BlockState second, Property property) {
         return Objects.equals(first.getValue(property), second.getValue(property));
     }
@@ -479,7 +480,7 @@ public class CraftBlockData implements BlockData {
         target.state = copied;
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"unchecked"})
     private static BlockState copyProperty(BlockState source, BlockState target,
             net.minecraft.world.level.block.state.properties.Property property) {
         if (!target.hasProperty(property)) return target;
@@ -640,7 +641,7 @@ public class CraftBlockData implements BlockData {
         return copy;
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"unchecked"})
     public java.util.Map<String, String> toStates() {
         java.util.Map<String, String> states = new java.util.HashMap<>();
 

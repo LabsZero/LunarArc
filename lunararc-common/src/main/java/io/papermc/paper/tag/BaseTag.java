@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+@SuppressWarnings({"rawtypes", "unchecked"})
 public abstract class BaseTag<T extends Keyed, C extends BaseTag<T, C>> implements Tag<T> {
 
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("LunarArc");

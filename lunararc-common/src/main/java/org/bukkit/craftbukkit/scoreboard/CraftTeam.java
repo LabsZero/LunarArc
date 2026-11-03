@@ -12,6 +12,7 @@ import org.bukkit.craftbukkit.util.CraftChatMessage;
 import org.bukkit.scoreboard.NameTagVisibility;
 import org.bukkit.scoreboard.Team;
 
+@SuppressWarnings({"deprecation"})
 final class CraftTeam extends CraftScoreboardComponent implements Team {
     private final PlayerTeam team;
 

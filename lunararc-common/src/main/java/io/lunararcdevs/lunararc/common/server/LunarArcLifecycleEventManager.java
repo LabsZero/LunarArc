@@ -24,7 +24,7 @@ public final class LunarArcLifecycleEventManager<O extends LifecycleEventOwner> 
     }
 
     @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"unchecked"})
     public void registerEventHandler(LifecycleEventHandlerConfiguration<? super O> handlerConfiguration) {
         Objects.requireNonNull(handlerConfiguration, "handlerConfiguration");
         if (!this.registrationCheck.getAsBoolean()) {

@@ -28,7 +28,6 @@ import org.bukkit.plugin.messaging.Messenger;
 import org.bukkit.plugin.messaging.StandardMessenger;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.scoreboard.ScoreboardManager;
 import org.bukkit.structure.StructureManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -44,6 +43,7 @@ import java.util.logging.Logger;
 import io.lunararcdevs.lunararc.common.server.LunarArcLogger;
 import io.papermc.paper.configuration.FeatureFlagConfig;
 
+@SuppressWarnings({"deprecation", "rawtypes", "removal"})
 public class CraftServer implements Server {
     private volatile org.bukkit.craftbukkit.util.CraftIconCache serverIcon;
     private final org.bukkit.potion.PotionBrewer potionBrewer;
@@ -97,13 +97,13 @@ public class CraftServer implements Server {
             org.spigotmc.RestartCommand.restart();
         }
 
-        @SuppressWarnings("deprecation")
+        
         @Override
         public void broadcast(net.md_5.bungee.api.chat.BaseComponent component) {
             for (Player player : getOnlinePlayers()) player.spigot().sendMessage(component);
         }
 
-        @SuppressWarnings("deprecation")
+        
         @Override
         public void broadcast(net.md_5.bungee.api.chat.BaseComponent... components) {
             for (Player player : getOnlinePlayers()) player.spigot().sendMessage(components);
@@ -455,22 +455,19 @@ public class CraftServer implements Server {
     private final Map<String, World> worlds = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<UUID, World> worldCache = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>, CraftWorld> worldByDimension = new java.util.concurrent.ConcurrentHashMap<>();
-    // Tracks which dimensions have already had WorldInitEvent/WorldLoadEvent fired, so the
-    // boot-time firing loop (MinecraftServerMixin.lunararc$afterWorldLoad) and the
-    // plugin-initiated createWorld() path below never double-fire for the same dimension
-    // regardless of which one reaches it first. Public: accessed from MinecraftServerMixin,
-    // a different package.
     public final java.util.Set<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>> worldLoadEventFired =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    private final Map<net.minecraft.server.level.ServerLevel, CraftWorld> transientWorlds = new java.util.WeakHashMap<>();
+
     private CraftWorld craftWorld(net.minecraft.server.level.ServerLevel level) {
-        // Fast path: an already-registered world needs no index maintenance. This is not a
-        // micro-optimisation for its own sake - every chunk decoration looks its world up here,
-        // on the worldgen threads, and the registration block below touches four maps and used
-        // to hash a UUID out of the dimension name each time. Bulk terrain generation, such as a
-        // random-teleport search walking far chunks, ran all of that per chunk.
         CraftWorld existing = worldByDimension.get(level.dimension());
-        if (existing != null) return existing;
+        if (existing != null) {
+            if (existing.getHandle() == level) return existing;
+            synchronized (transientWorlds) {
+                return transientWorlds.computeIfAbsent(level, CraftWorld::new);
+            }
+        }
 
         CraftWorld craft = worldByDimension.computeIfAbsent(level.dimension(), ignored -> new CraftWorld(level));
         worldCache.putIfAbsent(craft.getUID(), craft);
@@ -1473,15 +1470,6 @@ public class CraftServer implements Server {
                 .lunararc$isTickingWorlds();
     }
 
-    private Object invokeNoArg(Object target, String methodName) {
-        if (target == null) return null;
-        try {
-            return target.getClass().getMethod(methodName).invoke(target);
-        } catch (ReflectiveOperationException ignored) {
-            return null;
-        }
-    }
-
     @Override
     public boolean isResourcePackRequired() {
         return this.getServer().isResourcePackRequired();
@@ -1746,7 +1734,7 @@ public class CraftServer implements Server {
     @Override
     public @NotNull CommandSender createCommandSender(
             @NotNull Consumer<? super net.kyori.adventure.text.Component> feedback) {
-        return new org.bukkit.craftbukkit.command.FeedbackForwardingSender(feedback, this);
+        return new io.papermc.paper.commands.FeedbackForwardingSender(feedback, this);
     }
 
     @Override
@@ -2157,17 +2145,6 @@ public class CraftServer implements Server {
         Objects.requireNonNull(world, "world");
         return new org.bukkit.craftbukkit.generator.CraftChunkData(
                 world.getMinHeight(), world.getMaxHeight());
-    }
-
-    private static long chunkDataKey(int x, int y, int z) {
-        return ((long) (x & 15) << 40) | ((long) (z & 15) << 32) | (y & 0xffffffffL);
-    }
-
-    private static org.bukkit.block.data.BlockData chunkDataBlockData(Object value) {
-        if (value instanceof org.bukkit.block.data.BlockData data) return data;
-        if (value instanceof Material material) return Bukkit.createBlockData(material);
-        if (value instanceof String text) return Bukkit.createBlockData(text);
-        return null;
     }
 
     @Override
@@ -2675,7 +2652,7 @@ public class CraftServer implements Server {
 
     @Override
     @Deprecated
-    @SuppressWarnings("deprecation")
+    
     public @NotNull ItemStack createExplorerMap(@NotNull World world, @NotNull Location location,
             @NotNull org.bukkit.StructureType structureType) {
         return createExplorerMap(world, location, structureType, 100, true);
@@ -2683,7 +2660,7 @@ public class CraftServer implements Server {
 
     @Override
     @Deprecated
-    @SuppressWarnings("deprecation")
+    
     public @NotNull ItemStack createExplorerMap(@NotNull World world, @NotNull Location location,
             @NotNull org.bukkit.StructureType structureType, int radius, boolean findUnexplored) {
         Objects.requireNonNull(world, "world");

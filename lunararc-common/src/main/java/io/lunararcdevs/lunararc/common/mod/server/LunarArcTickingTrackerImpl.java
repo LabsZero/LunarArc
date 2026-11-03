@@ -61,7 +61,7 @@ public final class LunarArcTickingTrackerImpl implements LunarArcTickingTracker 
     @Override
     public @Nullable TileState getTickingBlockEntity() {
         Object src = CURRENT.get();
-        if (!(src instanceof BlockEntity be)) return null;
+        if (!(src instanceof BlockEntity)) return null;
         Block block = getTickingBlock();
         if (!(block instanceof org.bukkit.craftbukkit.block.CraftBlock cb)) return null;
         return (TileState) cb.getState();

@@ -54,10 +54,11 @@ public class Launcher {
             String projectVersion = versions.getProperty("version", "unknown");
             String buildName = versions.getProperty("buildName", "unknown");
 
-            ConsoleUI.printLogo(minecraftVersion);
+            ConsoleUI.printLogo(buildName == null || buildName.isBlank() || buildName.equals("unknown")
+                   ? minecraftVersion : minecraftVersion + " (" + buildName + ")");
 
             checkEula();
-            UpdateChecker.Handle updates = UpdateChecker.begin(projectVersion, buildName);
+            UpdateChecker.Handle updates = UpdateChecker.begin(projectVersion, buildName, versions.getProperty("gitBranch", "unknown"));
 
             ConsoleUI.printStep("step.initializing");
             LibraryExtractor.extractLibraries();

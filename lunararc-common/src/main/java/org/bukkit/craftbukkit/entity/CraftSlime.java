@@ -1,6 +1,7 @@
 package org.bukkit.craftbukkit.entity;
 import io.lunararcdevs.lunararc.common.bridge.entity.SlimeBridge;
 import org.bukkit.craftbukkit.CraftServer;
+@SuppressWarnings({"redundantSuperinterface"})
 public class CraftSlime extends CraftMob implements org.bukkit.entity.Slime, org.bukkit.entity.Enemy {
     public CraftSlime(CraftServer server, net.minecraft.world.entity.monster.Slime entity) { super(server, entity); }
     @Override public net.minecraft.world.entity.monster.Slime getHandle() { return (net.minecraft.world.entity.monster.Slime) entity; }

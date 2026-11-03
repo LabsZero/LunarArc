@@ -15,6 +15,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.projectiles.ProjectileSource;
 import org.jetbrains.annotations.Nullable;
 
+@SuppressWarnings({"deprecation"})
 public class CraftAbstractArrow extends CraftProjectile implements org.bukkit.entity.AbstractArrow {
     public CraftAbstractArrow(CraftServer server, AbstractArrow entity) {
         super(server, entity);

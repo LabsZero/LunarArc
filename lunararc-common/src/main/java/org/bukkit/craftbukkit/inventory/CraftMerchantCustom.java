@@ -15,6 +15,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /** Concrete custom merchant backed by a real vanilla Merchant implementation. */
+@SuppressWarnings({"redundantSuperinterface"})
 public final class CraftMerchantCustom implements Merchant, org.bukkit.craftbukkit.inventory.CraftMerchant {
     private final MinecraftMerchant merchant;
 
@@ -29,6 +30,7 @@ public final class CraftMerchantCustom implements Merchant, org.bukkit.craftbukk
 
     public net.minecraft.world.item.trading.Merchant getHandle() { return merchant; }
     @Override public net.minecraft.world.item.trading.Merchant getMerchant() { return merchant; }
+    public Component getTitle() { return merchant.getScoreboardDisplayName(); }
 
     @Override public @NotNull List<MerchantRecipe> getRecipes() {
         return merchant.getOffers().stream().map(CraftMerchantRecipe::new).map(MerchantRecipe.class::cast).toList();

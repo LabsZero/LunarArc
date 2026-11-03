@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 
+@SuppressWarnings({"deprecation"})
 public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
     private static final Logger LOGGER = LoggerFactory.getLogger("LunarArc/Remapper");
 
@@ -867,10 +868,6 @@ public class LunarArcRemapper extends org.objectweb.asm.commons.Remapper {
         if (existing != null) return existing;
         if (cache.size() >= DYNAMIC_CACHE_LIMIT) return mapping.apply(key);
         return cache.computeIfAbsent(key, mapping);
-    }
-
-    private static boolean isNmsRuntimeClass(Class<?> runtimeOwner) {
-        return runtimeOwner != null && runtimeOwner.getName().startsWith("net.minecraft.");
     }
 
     private String resolveRuntimeMember(Class<?> runtimeOwner, String spigotName, boolean method) {

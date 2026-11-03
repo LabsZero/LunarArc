@@ -36,13 +36,13 @@ public final class UpdateChecker {
         }
     }
 
-    public static Handle begin(String currentVersion, String buildName) {
+    public static Handle begin(String currentVersion, String buildName, String branch) {
         if (!updatesEnabled()) return new Handle(null, null);
         if (isLocalBuild(currentVersion)) {
             System.out.println(TranslationManager.get("update.local_build", currentVersion));
             return new Handle(null, null);
         }
-        Thread thread = new Thread(() -> probe(currentVersion, buildName), "LunarArc-update-check");
+        Thread thread = new Thread(() -> probe(currentVersion, buildName, branch), "LunarArc-update-check");
         thread.setDaemon(true);
         thread.start();
         return new Handle(thread, currentVersion);
@@ -52,7 +52,6 @@ public final class UpdateChecker {
         return currentVersion != null && currentVersion.endsWith("+local");
     }
 
-    /** A running check, and the means to report whatever it found. */
     public static final class Handle {
         private final Thread thread;
         private final String currentVersion;
@@ -118,7 +117,7 @@ public final class UpdateChecker {
         return enableUpdates;
     }
 
-    private static void probe(String currentVersion, String buildName) {
+    private static void probe(String currentVersion, String buildName, String branch) {
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) URI.create(API_URL).toURL().openConnection();
@@ -157,10 +156,15 @@ public final class UpdateChecker {
                 String normalizedReleaseName = normalize(name);
                 String normalizedTarget = normalize(targetCommitish);
 
-                boolean isMatch = normalizedBuildName.isBlank()
-                        || normalizedTagName.contains(normalizedBuildName)
-                        || normalizedReleaseName.contains(normalizedBuildName)
-                        || normalizedTarget.contains(normalizedBuildName);
+                boolean isMatch;
+                if (branchKnown(branch)) {
+                    isMatch = normalizedTarget.equals(normalize(branch));
+                } else {
+                    isMatch = normalizedBuildName.isBlank()
+                            || normalizedTagName.contains(normalizedBuildName)
+                            || normalizedReleaseName.contains(normalizedBuildName)
+                            || normalizedTarget.contains(normalizedBuildName);
+                }
 
                 if (!isMatch) {
                     continue;
@@ -170,7 +174,9 @@ public final class UpdateChecker {
                 if (!sameVersion(currentVersion, tagName, name, buildName)) {
                     LATEST_VERSION = tagName;
                     UPDATE_URL = htmlUrl;
-                    if (!alreadyReported(currentVersion, tagName)) {
+                    if (currentVersion != null && currentVersion.toUpperCase(java.util.Locale.ROOT).contains("SNAPSHOT")) {
+                        say(TranslationManager.get("version.newer", currentVersion));
+                    } else if (!alreadyReported(currentVersion, tagName)) {
                         say(TranslationManager.get("update.available", buildName, tagName, currentVersion));
                         say(TranslationManager.get("update.download", htmlUrl));
                     }
@@ -192,6 +198,12 @@ public final class UpdateChecker {
                 connection.disconnect();
             }
         }
+    }
+
+    private static boolean branchKnown(String branch) {
+        if (branch == null) return false;
+        String value = branch.trim();
+        return !value.isEmpty() && !value.equalsIgnoreCase("unknown") && !value.equals("HEAD") && !value.contains("${");
     }
 
     private static String stringValue(JsonObject object, String key) {

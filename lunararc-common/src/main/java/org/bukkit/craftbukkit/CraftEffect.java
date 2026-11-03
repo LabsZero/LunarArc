@@ -10,6 +10,7 @@ import org.bukkit.Material;
 import org.bukkit.block.BlockFace;
 
 
+@SuppressWarnings({"removal"})
 public final class CraftEffect {
     private CraftEffect() {
     }

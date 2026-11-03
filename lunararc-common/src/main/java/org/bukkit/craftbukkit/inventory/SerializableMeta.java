@@ -15,6 +15,7 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.meta.ItemMeta;
 
 @SerializableAs("ItemMeta")
+@SuppressWarnings({"deprecation"})
 public final class SerializableMeta implements ConfigurationSerializable {
     private static final String[] LEGACY_TYPES = {
             "CraftItemMeta", "CraftMetaItem", "CraftMetaArmor", "CraftMetaBanner", "CraftMetaBook", "CraftMetaBookSigned",

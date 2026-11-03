@@ -19,6 +19,7 @@ import org.bukkit.entity.EntityType;
 
 import java.util.Optional;
 
+@SuppressWarnings({"removal"})
 public final class CraftRegistry {
     private CraftRegistry() {}
 

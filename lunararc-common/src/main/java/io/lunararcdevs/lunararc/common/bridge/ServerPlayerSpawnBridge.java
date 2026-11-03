@@ -5,6 +5,7 @@ package io.lunararcdevs.lunararc.common.bridge;
  * ServerPlayer#setRespawnPosition call. This is deliberately state-only; NMS
  * remains responsible for storing and validating the actual respawn point.
  */
+@SuppressWarnings({"removal"})
 public interface ServerPlayerSpawnBridge {
     void lunararc$pushSpawnChangeCause(org.bukkit.event.player.PlayerSpawnChangeEvent.Cause cause);
 }

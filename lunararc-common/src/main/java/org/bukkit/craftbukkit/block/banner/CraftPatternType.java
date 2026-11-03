@@ -9,7 +9,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
-@SuppressWarnings("removal")
+@SuppressWarnings({"deprecation", "removal"})
 public final class CraftPatternType implements PatternType, org.bukkit.craftbukkit.util.Handleable<BannerPattern> {
     private static final AtomicInteger NEXT_ORDINAL = new AtomicInteger();
     private final NamespacedKey key;

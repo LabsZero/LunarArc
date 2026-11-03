@@ -20,7 +20,6 @@ import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.PluginCommandYamlParser;
-import org.bukkit.craftbukkit.util.CraftMagicNumbers;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.event.server.PluginEnableEvent;
@@ -338,7 +337,6 @@ class PaperPluginInstanceManager {
 
     }
 
-    // TODO: Implement event part in future patch (paper patch move up, this patch is lower)
     private void handlePluginException(String msg, Throwable ex, Plugin plugin) {
         Bukkit.getServer().getLogger().log(Level.SEVERE, msg, ex);
         this.pluginManager.callEvent(new com.destroystokyo.paper.event.server.ServerExceptionEvent(new com.destroystokyo.paper.exception.ServerPluginEnableDisableException(msg, ex, plugin)));

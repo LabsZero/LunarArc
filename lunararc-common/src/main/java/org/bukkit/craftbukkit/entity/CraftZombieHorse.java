@@ -1,5 +1,6 @@
 package org.bukkit.craftbukkit.entity;
 import org.bukkit.craftbukkit.CraftServer;
+@SuppressWarnings({"deprecation"})
 public final class CraftZombieHorse extends CraftAbstractHorse implements org.bukkit.entity.ZombieHorse {
     public CraftZombieHorse(CraftServer server, net.minecraft.world.entity.animal.horse.ZombieHorse entity) { super(server, entity); }
     @Override public net.minecraft.world.entity.animal.horse.ZombieHorse getHandle() { return (net.minecraft.world.entity.animal.horse.ZombieHorse) entity; }

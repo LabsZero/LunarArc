@@ -12,6 +12,7 @@ import org.bukkit.plugin.messaging.StandardMessenger;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
+@SuppressWarnings({"deprecation"})
 public interface ServerCommonPacketListenerBridge {
     boolean DISABLE_CHANNEL_LIMIT = System.getProperty("paper.disableChannelLimit") != null;
 

@@ -21,6 +21,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.jetbrains.annotations.NotNull;
 
+@SuppressWarnings({"deprecation", "redundantSuperinterface", "removal"})
 public final class CraftThrownPotion extends CraftThrowableProjectile implements ThrownPotion, SplashPotion, LingeringPotion {
     public CraftThrownPotion(CraftServer server, net.minecraft.world.entity.projectile.ThrownPotion entity) {
         super(server, entity);

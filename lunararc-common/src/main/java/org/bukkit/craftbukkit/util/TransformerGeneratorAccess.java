@@ -41,6 +41,7 @@ import net.minecraft.world.ticks.TickPriority;
 import org.bukkit.craftbukkit.block.CraftBlockEntityState;
 import org.bukkit.craftbukkit.block.CraftBlockState;
 
+@SuppressWarnings({"deprecation"})
 public final class TransformerGeneratorAccess extends DummyGeneratorAccess {
     private final WorldGenLevel handle;
     private final CraftStructureTransformer structureTransformer;

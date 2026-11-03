@@ -19,6 +19,7 @@ import net.minecraft.network.chat.contents.PlainTextContents;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import org.bukkit.ChatColor;
 
+@SuppressWarnings({"deprecation"})
 public final class CraftChatMessage {
     private static final Pattern LINK_PATTERN = Pattern.compile(
             "((?:(?:https?):\\/\\/)?(?:[-\\w_\\.]{2,}\\.[a-z]{2,4}.*?(?=[\\.\\?!,;:]?(?:["

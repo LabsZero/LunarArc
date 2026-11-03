@@ -26,6 +26,7 @@ import org.jetbrains.annotations.NotNull;
  * threw immediately - so any paper-plugin.yml plugin declaring a bootstrapper: class failed to
  * load entirely, not merely skipped its bootstrap phase.
  */
+@SuppressWarnings({"hiding"})
 class RuntimePluginEntrypointHandler<T extends ProviderStorage<JavaPlugin>> implements EntrypointHandler {
 
     private final T providerStorage;

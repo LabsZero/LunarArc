@@ -255,11 +255,7 @@ public final class LunarArcPluginFixManager {
     }
 
     public static String normalizeEssentialsItemName(String itemName) {
-        long start = System.nanoTime();
-        try {
-            return normalizeEssentialsItemName0(itemName);
-        } finally {
-        }
+        return normalizeEssentialsItemName0(itemName);
     }
 
     private static String normalizeEssentialsItemName0(String itemName) {
@@ -276,11 +272,7 @@ public final class LunarArcPluginFixManager {
     }
 
     public static org.bukkit.Material resolveEssentialsMaterial(org.bukkit.Material material, String itemName) {
-        long start = System.nanoTime();
-        try {
-            return resolveEssentialsMaterial0(material, itemName);
-        } finally {
-        }
+        return resolveEssentialsMaterial0(material, itemName);
     }
 
     private static org.bukkit.Material resolveEssentialsMaterial0(org.bukkit.Material material, String itemName) {

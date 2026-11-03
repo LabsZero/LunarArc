@@ -21,6 +21,7 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
 import org.jetbrains.annotations.Nullable;
 
+@SuppressWarnings({"deprecation", "removal"})
 public class CraftArrow extends CraftAbstractArrow implements Arrow {
     private static final int NO_EFFECT_COLOR = -1;
 

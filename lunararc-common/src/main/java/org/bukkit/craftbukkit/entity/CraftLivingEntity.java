@@ -56,6 +56,7 @@ import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+@SuppressWarnings({"deprecation", "removal", "unchecked"})
 public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     private final @Nullable CraftEntityEquipment equipment;
 
@@ -163,11 +164,11 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     // real Paper's own CraftLivingEntity implements exactly the same four members. Suppressed
     // per-method rather than by disabling the javac `removal` lint for the whole build, so a
     // genuinely accidental use of a deprecated-for-removal API elsewhere still gets flagged.
-    @SuppressWarnings("removal")
+    
     @Override public @Nullable Block getTargetBlock(int maxDistance, com.destroystokyo.paper.block.TargetBlockInfo.@NotNull FluidMode fluidMode) {
         return getTargetBlockExact(maxDistance, paperFluidMode(fluidMode));
     }
-    @SuppressWarnings("removal")
+    
     @Override public @Nullable org.bukkit.block.BlockFace getTargetBlockFace(int maxDistance, com.destroystokyo.paper.block.TargetBlockInfo.@NotNull FluidMode fluidMode) {
         return getTargetBlockFace(maxDistance, paperFluidMode(fluidMode));
     }
@@ -175,7 +176,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         RayTraceResult result = rayTraceBlocks(maxDistance, fluidMode);
         return result == null ? null : result.getHitBlockFace();
     }
-    @SuppressWarnings("removal")
+    
     @Override public @Nullable com.destroystokyo.paper.block.TargetBlockInfo getTargetBlockInfo(int maxDistance, com.destroystokyo.paper.block.TargetBlockInfo.@NotNull FluidMode fluidMode) {
         RayTraceResult result = rayTraceBlocks(maxDistance, paperFluidMode(fluidMode));
         if (result == null || result.getHitBlock() == null || result.getHitBlockFace() == null) return null;
@@ -200,7 +201,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
         return blockHit.getHitPosition().distanceSquared(eye) < entityHit.getHitPosition().distanceSquared(eye) ? null : entityHit;
     }
 
-    @SuppressWarnings("removal")
+    
     private static FluidCollisionMode paperFluidMode(com.destroystokyo.paper.block.TargetBlockInfo.FluidMode mode) {
         return switch (mode) {
             case ALWAYS -> FluidCollisionMode.ALWAYS;
@@ -562,7 +563,7 @@ public class CraftLivingEntity extends CraftEntity implements LivingEntity {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
+    
     public <T extends Projectile> @NotNull T launchProjectile(
             @NotNull Class<? extends T> projectile,
             @Nullable Vector velocity,

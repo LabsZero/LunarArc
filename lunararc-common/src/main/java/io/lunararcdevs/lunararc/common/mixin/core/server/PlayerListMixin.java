@@ -39,6 +39,7 @@ import java.net.SocketAddress;
 import java.util.List;
 
 @Mixin(PlayerList.class)
+@SuppressWarnings({"deprecation"})
 public abstract class PlayerListMixin implements PlayerListBridge {
 
     @Unique private net.minecraft.world.level.portal.DimensionTransition lunararc$lastRespawnTransition;

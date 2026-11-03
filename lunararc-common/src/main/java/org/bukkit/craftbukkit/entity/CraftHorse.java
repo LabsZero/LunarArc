@@ -6,6 +6,7 @@ import org.bukkit.craftbukkit.inventory.CraftInventoryHorse;
 import org.bukkit.entity.Horse;
 import org.bukkit.inventory.HorseInventory;
 
+@SuppressWarnings({"deprecation"})
 public final class CraftHorse extends CraftAbstractHorse implements Horse {
     public CraftHorse(CraftServer server, net.minecraft.world.entity.animal.horse.Horse entity) { super(server, entity); }
     @Override public net.minecraft.world.entity.animal.horse.Horse getHandle() { return (net.minecraft.world.entity.animal.horse.Horse) entity; }

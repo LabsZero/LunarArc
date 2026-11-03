@@ -11,7 +11,8 @@ import java.util.Locale;
 import java.util.Objects;
 
 
-@SuppressWarnings("deprecation")
+
+@SuppressWarnings({"removal"})
 public final class CraftSoundGroup implements SoundGroup, com.destroystokyo.paper.block.BlockSoundGroup {
     private final SoundType handle;
 

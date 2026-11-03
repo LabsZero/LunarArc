@@ -74,7 +74,8 @@ public final class CraftEntitySnapshot implements EntitySnapshot {
             return null;
         }
         return net.minecraft.world.entity.EntityType.by(tag)
-                .map(org.bukkit.craftbukkit.entity.CraftEntityType::minecraftToBukkit)
+                .map(type -> net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(type))
+                .map(io.lunararcdevs.lunararc.common.server.LunarArcDynamicBukkitEnums::entityType)
                 .map(type -> create(tag, type))
                 .orElse(null);
     }

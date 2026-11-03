@@ -4,6 +4,7 @@ import io.lunararcdevs.lunararc.common.bridge.entity.SkeletonBridge;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.entity.Skeleton;
 
+@SuppressWarnings({"deprecation"})
 public final class CraftSkeleton extends CraftAbstractSkeleton implements Skeleton {
     public CraftSkeleton(CraftServer server, net.minecraft.world.entity.monster.Skeleton entity) { super(server, entity); }
     @Override public net.minecraft.world.entity.monster.Skeleton getHandle() { return (net.minecraft.world.entity.monster.Skeleton) this.entity; }

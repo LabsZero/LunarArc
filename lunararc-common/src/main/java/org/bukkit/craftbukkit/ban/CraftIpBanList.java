@@ -13,7 +13,7 @@ import org.bukkit.BanEntry;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-@SuppressWarnings({"rawtypes", "deprecation"})
+@SuppressWarnings({"rawtypes", "unchecked"})
 public final class CraftIpBanList implements org.bukkit.ban.IpBanList {
     private final IpBanList list;
 

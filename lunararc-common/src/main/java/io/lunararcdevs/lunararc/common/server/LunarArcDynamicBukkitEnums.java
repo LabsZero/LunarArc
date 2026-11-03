@@ -351,7 +351,7 @@ public final class LunarArcDynamicBukkitEnums {
         Unsafe.putBoolean(target, Unsafe.objectFieldOffset(field), value);
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    @SuppressWarnings({"unchecked"})
     private static void putStaticMap(Class<?> owner, String fieldName, Object key, Object value) {
         try {
             Field field = owner.getDeclaredField(fieldName);

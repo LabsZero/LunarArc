@@ -3,6 +3,7 @@ package org.bukkit.craftbukkit.util;
 import org.bukkit.Material;
 import org.bukkit.material.MaterialData;
 
+@SuppressWarnings({"deprecation", "removal"})
 public final class CraftLegacy {
     private static final int LEGACY_START = Material.LEGACY_AIR.ordinal();
     private static final int LEGACY_COUNT = countLegacy();

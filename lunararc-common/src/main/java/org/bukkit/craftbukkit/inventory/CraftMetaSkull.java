@@ -19,6 +19,7 @@ import org.jetbrains.annotations.Nullable;
 
 /** Concrete player-head metadata over Minecraft 1.21.1 PROFILE / NOTE_BLOCK_SOUND components. */
 @org.bukkit.configuration.serialization.DelegateDeserialization(SerializableMeta.class)
+@SuppressWarnings({"deprecation"})
 public final class CraftMetaSkull extends CraftItemMeta implements SkullMeta {
     private static final int MAX_OWNER_LENGTH = 16;
     private ResolvableProfile profile;

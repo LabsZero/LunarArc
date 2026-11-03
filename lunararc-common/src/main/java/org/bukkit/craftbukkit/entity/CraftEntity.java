@@ -3,11 +3,9 @@ package org.bukkit.craftbukkit.entity;
 import net.minecraft.world.entity.Entity;
 import io.lunararcdevs.lunararc.common.bridge.EntityBridge;
 import io.lunararcdevs.lunararc.common.bridge.ServerLevelBridge;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Server;
 import org.bukkit.World;
-import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.bukkit.craftbukkit.CraftServer;
@@ -23,6 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 
+@SuppressWarnings({"deprecation", "unlikely-arg-type"})
 public abstract class CraftEntity implements org.bukkit.entity.Entity {
     protected final CraftServer server;
     protected final Entity entity;
@@ -437,7 +436,7 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
         java.util.Objects.requireNonNull(location, "location");
         java.util.Objects.requireNonNull(cause, "cause");
         if (entity.isVehicle() || entity.isRemoved()) return false;
-        if (!(location.getWorld() instanceof org.bukkit.craftbukkit.CraftWorld targetWorld)) {
+        if (!(location.getWorld() instanceof org.bukkit.craftbukkit.CraftWorld)) {
             throw new IllegalArgumentException("Teleport destination must be a LunarArc CraftWorld");
         }
 

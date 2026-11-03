@@ -1,6 +1,5 @@
 package io.lunararcdevs.lunararc.common.mod.util.remapper.patcher;
 
-import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.tree.ClassNode;
 
 public interface PluginPatcher {

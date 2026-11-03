@@ -24,6 +24,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityMixin implements LivingEntityBridge {
+    public org.bukkit.craftbukkit.entity.CraftLivingEntity getBukkitLivingEntity() {
+        return (org.bukkit.craftbukkit.entity.CraftLivingEntity) ((io.lunararcdevs.lunararc.common.bridge.EntityBridge) this).lunararc$getBukkitEntity();
+    }
+
     @org.spongepowered.asm.mixin.Shadow @org.spongepowered.asm.mixin.Final private static net.minecraft.network.syncher.EntityDataAccessor<Integer> DATA_ARROW_COUNT_ID;
     @org.spongepowered.asm.mixin.Shadow @org.spongepowered.asm.mixin.Final private static int LIVING_ENTITY_FLAG_SPIN_ATTACK;
     @org.spongepowered.asm.mixin.Shadow private static byte entityEventForEquipmentBreak(net.minecraft.world.entity.EquipmentSlot slot) { throw new AssertionError(); }

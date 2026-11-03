@@ -97,17 +97,19 @@ public abstract class LevelChunkMixin implements io.lunararcdevs.lunararc.common
 
         org.bukkit.craftbukkit.CraftWorld world = lunararc$craftWorld();
         if (world == null) return;
-        org.bukkit.Chunk chunk = new org.bukkit.craftbukkit.CraftChunk((LevelChunk) (Object) this, world);
-        if (wantsLoad) {
-            org.bukkit.Bukkit.getPluginManager().callEvent(
-                    new org.bukkit.event.world.ChunkLoadEvent(chunk, isNewChunk));
+        LevelChunk self = (LevelChunk) (Object) this;
+        LevelChunk previous = io.lunararcdevs.lunararc.common.event.LunarArcLoadingChunk.enter(self);
+        try {
+            org.bukkit.Chunk chunk = new org.bukkit.craftbukkit.CraftChunk(self, world);
+            if (wantsLoad) {
+                org.bukkit.Bukkit.getPluginManager().callEvent(
+                        new org.bukkit.event.world.ChunkLoadEvent(chunk, isNewChunk));
+            }
+            if (wantsPopulate) {
+                org.bukkit.Bukkit.getPluginManager().callEvent(new org.bukkit.event.world.ChunkPopulateEvent(chunk));
+            }
+        } finally {
+            io.lunararcdevs.lunararc.common.event.LunarArcLoadingChunk.leave(previous);
         }
-
-        if (!wantsPopulate) return;
-
-        // Bukkit BlockPopulators are already executed at the real generation-decoration
-        // boundary by LunarArcChunkPopulators. The first live LevelChunk load owns only
-        // the provenance-sensitive lifecycle events, otherwise populators would run twice.
-        org.bukkit.Bukkit.getPluginManager().callEvent(new org.bukkit.event.world.ChunkPopulateEvent(chunk));
     }
 }

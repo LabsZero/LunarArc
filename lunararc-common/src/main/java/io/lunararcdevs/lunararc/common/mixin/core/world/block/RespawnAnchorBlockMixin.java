@@ -17,6 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Carries the verified 1.21.1 respawn-anchor cause into PlayerSpawnChangeEvent. */
 @Mixin(RespawnAnchorBlock.class)
+@SuppressWarnings({"removal"})
 public abstract class RespawnAnchorBlockMixin {
     @Inject(
             method = "useWithoutItem",

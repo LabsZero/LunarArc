@@ -48,7 +48,7 @@ public abstract class DedicatedServerMixin {
         if (routed.isEmpty()) return;
 
         try {
-            boolean handled = craftServer.dispatchCommand(console, routed);
+            craftServer.dispatchCommand(console, routed);
         } catch (Exception failure) {
             craftServer.getLogger().log(java.util.logging.Level.WARNING,
                     "Unexpected exception while parsing console command \"" + routed + '"', failure);

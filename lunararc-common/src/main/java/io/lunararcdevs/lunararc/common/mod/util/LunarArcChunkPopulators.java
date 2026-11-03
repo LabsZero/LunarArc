@@ -12,6 +12,7 @@ import org.bukkit.generator.BlockPopulator;
 import java.util.List;
 
 /** Runs Bukkit block populators against the actual population-time WorldGenLevel. */
+@SuppressWarnings({"deprecation"})
 public final class LunarArcChunkPopulators {
     private LunarArcChunkPopulators() {}
 

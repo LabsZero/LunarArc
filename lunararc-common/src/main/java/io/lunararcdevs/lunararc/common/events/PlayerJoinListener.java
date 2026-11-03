@@ -58,6 +58,10 @@ public final class PlayerJoinListener {
     private static void notifyPlayer(Player player, PaperVersionFetcher.Release release) {
         if (!player.isOnline()) return;
         player.sendMessage(Component.text("[LunarArc]", NamedTextColor.AQUA, TextDecoration.BOLD));
+        if (PaperVersionFetcher.isSnapshot(LunarArcVersionInfo.lunarArcVersion())) {
+            player.sendMessage(Component.text(TranslationManager.get("version.newer", LunarArcVersionInfo.lunarArcVersion().replaceFirst("\\+.*$", "")), NamedTextColor.AQUA));
+            return;
+        }
         player.sendMessage(Component.text(TranslationManager.get("ingame.update.available"), NamedTextColor.YELLOW));
         player.sendMessage(Component.text(TranslationManager.get("ingame.update.current"), NamedTextColor.GRAY)
                 .append(Component.text(LunarArcVersionInfo.lunarArcVersion().replaceFirst("\\+.*$", ""), NamedTextColor.YELLOW))

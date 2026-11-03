@@ -24,11 +24,12 @@ import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 
+@SuppressWarnings({"deprecation", "removal"})
 public class CraftEventFactory {
     public static net.minecraft.world.level.block.state.BlockState damagingBlockState;
     public static net.minecraft.core.BlockPos damagingBlockPos;
 
-    @SuppressWarnings("deprecation")
+    
     public static EntityDamageEvent callEntityDamageEvent(LivingEntity entity, DamageSource source, float damage) {
         DamageCause cause = damageCause(source);
 
@@ -40,14 +41,17 @@ public class CraftEventFactory {
         org.bukkit.entity.Entity damager = bukkitSource.getDirectEntity();
         if (damager == null) damager = bukkitSource.getCausingEntity();
 
-        net.minecraft.world.level.block.state.BlockState blockState = damagingBlockState;
         net.minecraft.core.BlockPos blockPos = damagingBlockPos;
         damagingBlockState = null;
         damagingBlockPos = null;
         EntityDamageEvent event;
         if (damager != null) {
+            java.util.Map<EntityDamageEvent.DamageModifier, Double> modifiers = new java.util.EnumMap<>(EntityDamageEvent.DamageModifier.class);
+            modifiers.put(EntityDamageEvent.DamageModifier.BASE, (double) damage);
+            java.util.Map<EntityDamageEvent.DamageModifier, com.google.common.base.Function<? super Double, Double>> functions = new java.util.EnumMap<>(EntityDamageEvent.DamageModifier.class);
+            functions.put(EntityDamageEvent.DamageModifier.BASE, com.google.common.base.Functions.constant(-0.0));
             event = new org.bukkit.event.entity.EntityDamageByEntityEvent(
-                    damager, bukkitEntity, cause, bukkitSource, (double) damage);
+                    damager, bukkitEntity, cause, bukkitSource, modifiers, functions, isPlayerCrit(source, entity));
         } else if (blockPos != null && entity.level() instanceof net.minecraft.server.level.ServerLevel level) {
             org.bukkit.block.Block block = CraftBlock.at(level, blockPos);
             event = new org.bukkit.event.entity.EntityDamageByBlockEvent(block,
@@ -58,6 +62,20 @@ public class CraftEventFactory {
         }
         Bukkit.getPluginManager().callEvent(event);
         return event;
+    }
+
+    private static boolean isPlayerCrit(DamageSource source, LivingEntity target) {
+        if (!(source.getDirectEntity() instanceof net.minecraft.world.entity.player.Player player) || source.getDirectEntity() != source.getEntity()) return false;
+        if (!source.is(net.minecraft.world.damagesource.DamageTypes.PLAYER_ATTACK)) return false;
+        return !io.lunararcdevs.lunararc.common.server.LunarArcServerSettings.tuning(player.level()).disablePlayerCrits
+                && player.getAttackStrengthScale(0.5F) > 0.9F
+                && player.fallDistance > 0.0F
+                && !player.onGround()
+                && !player.onClimbable()
+                && !player.isInWater()
+                && !player.hasEffect(net.minecraft.world.effect.MobEffects.BLINDNESS)
+                && !player.isPassenger()
+                && !player.isSprinting();
     }
 
     private static DamageCause damageCause(DamageSource source) {
@@ -307,7 +325,7 @@ public class CraftEventFactory {
         java.util.Set<org.bukkit.entity.Player> recipients = new java.util.HashSet<>(
                 (java.util.Collection<? extends org.bukkit.entity.Player>)
                         org.bukkit.Bukkit.getOnlinePlayers());
-        @SuppressWarnings("deprecation")
+        
         var event = new org.bukkit.event.player.AsyncPlayerChatEvent(false, bukkitPlayer, message, recipients);
         Bukkit.getPluginManager().callEvent(event);
         return event;

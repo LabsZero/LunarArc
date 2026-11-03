@@ -7,6 +7,7 @@ import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.craftbukkit.entity.CraftHumanEntity;
 
+@SuppressWarnings({"unlikely-arg-type"})
 public final class PaperInventoryCustomHolderContainer implements Container {
     private final InventoryHolder owner;
     private final Container delegate;

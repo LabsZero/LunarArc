@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PrimaryLevelData.class)
+@SuppressWarnings({"deprecation"})
 public abstract class PrimaryLevelDataWeatherMixin {
     @Shadow private boolean raining;
     @Shadow private boolean thundering;

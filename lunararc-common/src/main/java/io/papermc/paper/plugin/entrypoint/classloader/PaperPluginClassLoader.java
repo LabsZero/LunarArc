@@ -3,7 +3,6 @@ package io.papermc.paper.plugin.entrypoint.classloader;
 import io.papermc.paper.plugin.configuration.PluginMeta;
 import io.papermc.paper.plugin.provider.entrypoint.DependencyContext;
 import io.papermc.paper.plugin.provider.classloader.ConfiguredPluginClassLoader;
-import io.papermc.paper.plugin.entrypoint.classloader.group.PaperPluginClassLoaderStorage;
 import io.papermc.paper.plugin.provider.classloader.PaperClassLoaderStorage;
 import io.papermc.paper.plugin.provider.classloader.PluginClassLoaderGroup;
 import io.papermc.paper.plugin.provider.configuration.PaperPluginMeta;
