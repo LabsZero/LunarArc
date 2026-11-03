@@ -15,7 +15,7 @@ body:
       label: I have tried that...
       description: Please confirm the following to avoid invalid feedback
       options:
-        - label: I am using the latest [LunarArc build](https:
+        - label: I am using the latest [LunarArc build](https://github.com/LunarArcDevs/LunarArc/actions)
           required: true
         - label: I have searched existing Issues and found no duplicates
           required: true
